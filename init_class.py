@@ -14,6 +14,7 @@ class InitFile:
 
         self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
                                 header_rows = self.header_rows, converters = {'*': [int, float, bool, str]})
+        return self
 
     def save(self):
 
@@ -55,6 +56,8 @@ class Init_lcs(InitFile):
                     break
         
         self.save()
+
+        return self
 
 
     def add_lc_file(self):
@@ -123,6 +126,8 @@ class Init_rv(InitFile):
                     break
         
         self.save()
+
+        return self
 
 
     def add_rv_file(self):
@@ -238,6 +243,8 @@ class Init_star(InitFile):
         
         self.save()
 
+        return self
+
     
 class Init_ld(InitFile):
 
@@ -266,6 +273,8 @@ class Init_ld(InitFile):
                     break
         
         self.save()
+
+        return self
 
 
     def add_ld_params(self):
@@ -310,6 +319,8 @@ class Init_planets(InitFile):
                 break
 
         self.save()
+
+        return self
 
 
     def add_planet(self):
@@ -407,6 +418,8 @@ class Init_ttvs(InitFile):
                 break
         
         self.save()
+        
+        return self
 
 
     def add_transit_times(self):

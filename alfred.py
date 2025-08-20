@@ -36,27 +36,32 @@ class ExoSystem:
     def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt', init_rv = 'init_rv.txt', init_ld = 'init_ld.txt'):
 
         self.direc = direc
+        self.init_planets = init_planets
+        self.init_star = init_star
+        self.init_lcs = init_lcs
+        self.init_rv = init_rv
+        self.init_ld = init_ld
 
-        tab_planets = Table.read(self.direc + init_planets, format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name', 'unit'])
-        tab_star = Table.read(self.direc + init_star, format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name', 'unit'])
-        tab_lcs = Table.read(self.direc + init_lcs, format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name', 'unit'])
-        tab_rv = Table.read(self.direc + init_rv, format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
-        tab_ld = Table.read(self.direc + init_ld, format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
+        tab_planets = Init_planets(self.direc, self.init_planets).from_file().table
+        tab_star = Init_star(self.direc, self.init_star).from_file().table
+        tab_lcs = Init_lcs(self.direc, self.init_lcs).from_file().table
+        tab_rv = Init_rv(self.direc, self.init_rv).from_file().table
+        tab_ld = Init_planets(self.direc, self.init_planets).from_file().table
 
 
         #which to fit
 
-        self.is_transit = np.array([x == 'True' for x in tab_planets['Transiting']])
+        self.is_transit = np.array(tab_planets['Transiting'])
         self.nt = int(np.sum(self.is_transit))
         self.n = len(self.is_transit)
 
-        self.is_rv = np.array([x == 'True' for x in tab_planets['RV Signal']])
+        self.is_rv = np.array(tab_planets['RV Signal'])
         self.nr = int(np.sum(self.is_rv))
 
-        self.fit_ttv = np.array([x == 'True' for x in tab_planets['Fit TTVs']])
+        self.fit_ttv = np.array(tab_planets['Fit TTVs'])
         self.nttv = int(np.sum(self.fit_ttv))
 
-        self.fit_ecc = np.array([x == 'True' for x in tab_planets['Fit Ecc']])
+        self.fit_ecc = np.array(tab_planets['Fit Ecc'])
         self.ne = int(np.sum(self.fit_ecc))
 
 
@@ -1140,9 +1145,11 @@ class ExoSystem:
 
         if not os.path.exists(self.direc+'init_ttvs.txt'):
 
-            Init_ttvs(self.direc).create()
+            tab = Init_ttvs(self.direc).create().table
 
-        tab = Table.read(self.direc+'init_ttvs.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
+        else:
+
+            tab = Init_ttvs(self.direc).from_file().table
 
         self.ttvs0 = {int(col): np.array(tab[col])[~np.isnan(tab[col])] for col in tab.columns}
 
