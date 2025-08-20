@@ -25,7 +25,7 @@ class InitFile:
 
 
 
-class init_lcs(InitFile):
+class Init_lcs(InitFile):
 
     def __init__(self, direc, name = 'init_lcs.txt'):
 
@@ -94,7 +94,7 @@ class init_lcs(InitFile):
         self.table.add_row(row)
 
 
-class init_rv(InitFile):
+class Init_rv(InitFile):
 
     def __init__(self, direc, name = 'init_rv.txt'):
 
@@ -155,7 +155,7 @@ class init_rv(InitFile):
         self.table.add_row(row)
 
 
-class init_star(InitFile):
+class Init_star(InitFile):
 
     def __init__(self, direc, name = 'init_star.txt'):
 
@@ -238,7 +238,7 @@ class init_star(InitFile):
         self.save()
 
     
-class init_ld(InitFile):
+class Init_ld(InitFile):
 
     def __init__(self, direc, name = 'init_ld.txt'):
 
@@ -282,7 +282,7 @@ class init_ld(InitFile):
         row.append(filt)
 
 
-class init_planets(InitFile):
+class Init_planets(InitFile):
 
     def __init__(self, direc, name = 'init_planets.txt'):
 
@@ -381,7 +381,7 @@ class init_planets(InitFile):
         self.table.add_row(row)
 
 
-class init_ttvs(InitFile):
+class Init_ttvs(InitFile):
 
     def __init__(self, direc, name = 'init_ttvs.txt'):
 
