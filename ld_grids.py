@@ -67,3 +67,4 @@ def load_ld_grid(filter_name: str):
     interpu2 = LinearNDInterpolator(grid['coords'], grid['u2'])
 
     return interpu1, interpu2
+
