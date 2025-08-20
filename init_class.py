@@ -1,6 +1,7 @@
 import numpy as np
 from astropy.table import Table
 import shutil
+import os
 
 class InitFile:
 
@@ -430,3 +431,115 @@ class Init_ttvs(InitFile):
             col += [np.nan]*(len(self.table)-n)
 
         self.table.add_column(col, name = num)
+
+
+
+def create_folder(direc: str):
+    """Creates a new folder for an exoplanet system to fit with this code. Helps you make the initialization file.
+
+    ### Parameters
+    1. dir : str
+        - The absolute path to the new directory to create the folder for this system.
+    """
+
+    if os.path.exists(direc):
+
+        x = input('Folder already exists. Continue anyway? y/n ')
+
+        if x.lower() != 'y':
+            return
+        
+    else:
+
+        os.mkdir(direc)
+
+
+    if not os.path.exists(direc+'/Masks'):
+        os.mkdir(direc+'/Masks')
+
+    if not os.path.exists(direc+'/Plots'):
+        os.mkdir(direc+'/Plots')
+
+    if not os.path.exists(direc+'/Results'):
+        os.mkdir(direc+'/Results')
+
+    if not os.path.exists(direc+'/Output'):
+        os.mkdir(direc+'/Output')
+
+
+    alt_name = input('What is the HD ID or TIC ID of the star? ')
+    with open(direc+'/'+alt_name+'.txt', 'w') as file: pass
+
+    x = input('Do you have the light curve files already? y/n ')
+
+    if x.lower() == 'y':
+
+        Init_lcs(direc).create()
+
+        Init_ld(direc).create()
+
+    else:
+
+        Init_lcs(direc).create(empty = True)
+
+        Init_ld(direc).create(empty = True)
+
+        _ = input('Once you have these, run the function create_init_lcs and then create_init_ld. Press any key to continue.')
+
+
+    x = input('Do you have RV files already? y/n ')
+
+    if x.lower() == 'y':
+
+        Init_rv(direc).create()
+
+    else:
+
+        Init_rv(direc).create(empty = True)
+
+        _ = input('Once you have these, run the function create_init_rv. Press any key to continue.')
+
+    
+    Init_star(direc).create()
+
+    Init_planets(direc).create()
+
+
+def create_init_lcs(direc: str):
+
+    init = Init_lcs(direc)
+    init.create()
+
+    return init
+
+
+def create_init_ld(direc: str):
+
+    init = Init_ld(direc)
+    init.create()
+
+    return init
+
+
+def create_init_rv(direc: str):
+
+    init = Init_rv(direc)
+    init.create()
+
+    return init
+
+
+def create_init_star(direc: str):
+
+    init = Init_star(direc)
+    init.create()
+
+    return init
+
+
+def create_init_planets(direc: str):
+
+    init = Init_planets(direc)
+    init.create()
+
+    return init
