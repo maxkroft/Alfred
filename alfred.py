@@ -33,7 +33,7 @@ arr5 = c_double * 5
 class ExoSystem:
 
 
-    def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt', init_rv = 'init_rv.txt', init_ld = 'init_ld.txt'):
+    def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt', init_rv = 'init_rv.txt', init_ld = 'init_ld.txt', init_ttvs = 'init_ttvs.txt'):
 
         self.direc = direc
         self.init_planets = init_planets
@@ -41,6 +41,7 @@ class ExoSystem:
         self.init_lcs = init_lcs
         self.init_rv = init_rv
         self.init_ld = init_ld
+        self.init_ttvs = init_ttvs
 
         tab_planets = Init_planets(self.direc, self.init_planets).from_file().table
         tab_star = Init_star(self.direc, self.init_star).from_file().table
@@ -242,7 +243,7 @@ class ExoSystem:
 
                 msscale = 1e3 if tab_rv['m/s or km/s'][i] == 'km/s' else 1
                 
-                tr0 = np.array(rvdata[tab_rv['Time Col'][i]]) - 2450000
+                tr0 = np.array(rvdata[tab_rv['Time Col'][i]]) + tab_rv['Time Offset'][i] - 2450000
                 rv0 =  np.array(rvdata[tab_rv['RV Col'][i]]) * msscale
                 rv0 = rv0 - (np.max(rv0)+np.min(rv0))/2
                 rverr0 = np.array(rvdata[tab_rv['Err Col'][i]]) * tab_rv['Err Scale'][i] * msscale
@@ -373,7 +374,7 @@ class ExoSystem:
 
 
         if np.any(self.fit_ttv) and self.fit_transit:
-            self.init_ttvs()
+            self.initialize_ttvs(name = self.init_ttvs)
 
         if self.density_prior:
             
@@ -1141,9 +1142,9 @@ class ExoSystem:
                     os.remove(self.direc+'multinest chains/'+filename)
 
 
-    def init_ttvs(self):
+    def initialize_ttvs(self, name):
 
-        if not os.path.exists(self.direc+'init_ttvs.txt'):
+        if not os.path.exists(self.direc+'/'+name):
 
             tab = Init_ttvs(self.direc).create().table
 
@@ -1481,7 +1482,7 @@ class ExoSystem:
         self.fm = {}
 
         if np.any(self.fit_ttv):
-            self.init_ttvs()
+            self.initialize_ttvs(name = self.init_ttvs)
 
         fit_rv = False
 
@@ -1812,7 +1813,7 @@ class ExoSystem:
     def plot_lc_phase(self, name):
 
         if np.any(self.fit_ttv):
-            self.init_ttvs()
+            self.initialize_ttvs(name = self.init_ttvs)
 
         for i in range(len(self.lcnames)):
 
@@ -2177,8 +2178,7 @@ class ExoSystem:
 
     def plot_ttvs(self, name):
 
-        if self.nttv > 0:
-            self.init_ttvs()
+        self.initialize_ttvs(name = self.init_ttvs)
 
         fig, ax = plt.subplots(self.nttv, figsize = (14, 6*self.nttv), sharex = True, layout = 'constrained')
 

@@ -104,13 +104,14 @@ class Init_rv(InitFile):
 
         super().__init__(direc, name)
 
-        self.header_rows = ['name']
+        self.header_rows = ['name', 'unit']
 
 
     def create(self, empty = False):
 
-        self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Err Scale','m/s or km/s'],
-                           dtype = [str,str,str,str,str,float,str])
+        self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
+                           units = [None, None, None, None, None, 'BJD', None, None],
+                           dtype = [str,str,str,str,str,int,float,str])
 
         if not empty:
 
@@ -150,6 +151,9 @@ class Init_rv(InitFile):
 
         rverrcol = input('Column header for the RV error data: ')
         row.append(rverrcol)
+
+        toffset = input('Time offset from BJD (in days), for example 2457000 is common for TESS: ')
+        row.append(toffset)
 
         row.append(1.0)
 
