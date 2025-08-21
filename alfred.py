@@ -2118,7 +2118,6 @@ class ExoSystem:
 
             if j == 0:
                 ax['c{0}'.format(j)].set_ylabel('RV [m/s]', fontsize = 20)
-                ax['c{0}'.format(j)].set_yticks(ticks = [-5,0,5], labels = [-5,0,5])
 
             else:
                 ax['c{0}'.format(j)].sharey(ax['c0'])
