@@ -500,6 +500,9 @@ class ExoSystem:
 
             self.masks = [np.ones(len(self.tt[i]), dtype = bool) for i in range(len(self.tt))]
         
+        if self.fit_transit:
+            print('Starting sigma clipping of lightcurves.')
+
         for i in range(10):
 
             res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(keys, x)}, *args)[0], [self.x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
@@ -751,14 +754,16 @@ class ExoSystem:
 
         sampler = emcee.EnsembleSampler(nwalkers = nwalk, ndim = len(x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
 
+        print('Running MCMC burn-in.')
         #burn in
         state = sampler.run_mcmc(pos, nburn, progress = 'notebook')
         sampler.reset()
 
+        print('Running MCMC sampling.')
         #run
         sampler.run_mcmc(state, nrun, progress = 'notebook')
 
-        print(sampler.get_autocorr_time(quiet = True))
+        # print(sampler.get_autocorr_time(quiet = True))
 
         self.samples = sampler.get_chain()
 
@@ -1477,6 +1482,8 @@ class ExoSystem:
 
     def gen_lcs(self, name, lc_supersample_size = 600):
 
+        print('Generating light curves for plots.')
+
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
         self.fm = {}
@@ -1552,6 +1559,8 @@ class ExoSystem:
         for i in range(len(self.lcnames)):
 
             sec = self.lcnames[i]
+
+            print(sec+':')
 
             ld = np.array(self.ld[self.filters[i]])
 
@@ -1927,6 +1936,8 @@ class ExoSystem:
 
     def gen_rv(self, name):
 
+        print('Generating RV models for plots.')
+
         n = len(self.res['log_like'])
 
         pars = []
@@ -2277,6 +2288,8 @@ class ExoSystem:
 
 
     def calc_gelman_rubin(self):
+
+        print('Gelman-Rubin Statistics:')
 
         for k, v in self.parnames.items():
 
