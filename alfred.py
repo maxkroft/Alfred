@@ -767,7 +767,7 @@ class ExoSystem:
 
         if save_samples:
 
-            pickle.dump({'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes_full}, open(self.direc+'Results/'+name+'_samples.p', 'wb'))
+            pickle.dump({'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes_full}, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
 
         self.calc_gelman_rubin()
 
@@ -791,7 +791,7 @@ class ExoSystem:
 
         self.res['log_like'] = self.log_likes
 
-        pickle.dump(self.res, open(self.direc+'Results/'+name+'_res.p', 'wb'))
+        pickle.dump(self.res, open(self.direc+'Output/'+name+'_res.p', 'wb'))
 
         self.dres = {}
 
@@ -934,7 +934,7 @@ class ExoSystem:
             self.dres['Tstar'] = T
 
 
-        pickle.dump(self.dres, open(self.direc+'Results/'+name+'_dres.p', 'wb'))
+        pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
 
         out = []
@@ -945,7 +945,7 @@ class ExoSystem:
 
 
         tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
-        tab.write(self.direc+'Output/'+name+'.txt', format = 'ascii.fixed_width', overwrite = True)
+        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width', overwrite = True)
 
         
         self.plot_pl_chains(name)
@@ -996,7 +996,7 @@ class ExoSystem:
             self.magfit = np.median(mags, axis = 0)
             self.magfiterr = np.diff(np.percentile(mags, [16,50,84], axis = 0), axis = 0)
 
-            pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Results/'+name+'_magfit.p', 'wb'))
+            pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
 
             self.plot_sed_fit(name)
 
@@ -1029,10 +1029,10 @@ class ExoSystem:
             self.dres[x] = np.array(mod.derived_samples[x])
             out.append([x, np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
 
-        pickle.dump(self.dres, open(self.direc+'Results/'+name+'_dres.p', 'wb'))
+        pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
         tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
-        tab.write(self.direc+'Output/'+name+'.txt', format = 'ascii.fixed_width', overwrite = True)
+        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width', overwrite = True)
 
 
         fig = mod.corner_observed()
@@ -1060,17 +1060,17 @@ class ExoSystem:
         self.magfit = np.array([np.median(self.dres[x]) for x in maglist])
         self.magfiterr = np.diff(np.percentile([self.dres[x] for x in maglist], [16,50,84], axis = 1), axis = 0)
 
-        pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Results/'+name+'_magfit.p', 'wb'))
+        pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
 
         self.plot_sed_fit(name)
 
 
     def load_results(self, name):
     
-        if os.path.exists(self.direc+'Results/'+name+'_res.p'):
-            self.res = pickle.load(open(self.direc+'Results/'+name+'_res.p', 'rb'))
+        if os.path.exists(self.direc+'Output/'+name+'_res.p'):
+            self.res = pickle.load(open(self.direc+'Output/'+name+'_res.p', 'rb'))
 
-        self.dres = pickle.load(open(self.direc+'Results/'+name+'_dres.p', 'rb'))
+        self.dres = pickle.load(open(self.direc+'Output/'+name+'_dres.p', 'rb'))
 
         if os.path.exists(self.direc+'Masks/'+name+'_masks.p'):
             
@@ -1084,12 +1084,12 @@ class ExoSystem:
         
     def load_lcs(self, name):
 
-        self.fm = pickle.load(open(self.direc+'Results/'+name+'_fm.p', 'rb'))
+        self.fm = pickle.load(open(self.direc+'Output/'+name+'_fm.p', 'rb'))
 
 
     def load_rv(self, name):
 
-        self.rvm = pickle.load(open(self.direc+'Results/'+name+'_rvm.p', 'rb'))
+        self.rvm = pickle.load(open(self.direc+'Output/'+name+'_rvm.p', 'rb'))
 
 
     def load_magfit(self, name):
@@ -1101,7 +1101,7 @@ class ExoSystem:
 
     def load_samples(self, name):
 
-            z = pickle.load(open(self.direc+'Results/'+name+'_samples.p', 'rb'))
+            z = pickle.load(open(self.direc+'Output/'+name+'_samples.p', 'rb'))
             self.parnames = z['parnames']
             self.samples = z['samples']
             self.log_likes_full = z['log_like']
@@ -1115,26 +1115,26 @@ class ExoSystem:
         if os.path.isdir(self.direc+'Plots/'+name):
             shutil.rmtree(self.direc+'Plots/'+name)
 
-        if os.path.exists(self.direc+'Results/'+name+'_res.p'):
-            os.remove(self.direc+'Results/'+name+'_res.p')
+        if os.path.exists(self.direc+'Output/'+name+'_res.p'):
+            os.remove(self.direc+'Output/'+name+'_res.p')
 
-        if os.path.exists(self.direc+'Results/'+name+'_dres.p'):
-            os.remove(self.direc+'Results/'+name+'_dres.p')
+        if os.path.exists(self.direc+'Output/'+name+'_dres.p'):
+            os.remove(self.direc+'Output/'+name+'_dres.p')
 
-        if os.path.exists(self.direc+'Results/'+name+'_fm.p'):
-            os.remove(self.direc+'Results/'+name+'_fm.p')
+        if os.path.exists(self.direc+'Output/'+name+'_fm.p'):
+            os.remove(self.direc+'Output/'+name+'_fm.p')
 
-        if os.path.exists(self.direc+'Results/'+name+'_rvm.p'):
-            os.remove(self.direc+'Results/'+name+'_rvm.p')
+        if os.path.exists(self.direc+'Output/'+name+'_rvm.p'):
+            os.remove(self.direc+'Output/'+name+'_rvm.p')
 
-        if os.path.exists(self.direc+'Results/'+name+'_samples.p'):
-            os.remove(self.direc+'Results/'+name+'_samples.p')
+        if os.path.exists(self.direc+'Output/'+name+'_samples.p'):
+            os.remove(self.direc+'Output/'+name+'_samples.p')
 
-        if os.path.exists(self.direc+'Results/'+name+'_magfit.p'):
-            os.remove(self.direc+'Results/'+name+'_magfit.p')
+        if os.path.exists(self.direc+'Output/'+name+'_magfit.p'):
+            os.remove(self.direc+'Output/'+name+'_magfit.p')
 
-        if os.path.exists(self.direc+'Output/'+name+'.txt'):
-            os.remove(self.direc+'Output/'+name+'.txt')
+        if os.path.exists(self.direc+'Results/'+name+'.txt'):
+            os.remove(self.direc+'Results/'+name+'.txt')
 
         if os.path.exists(self.direc+'multinest chains/'+name+'-.txt'):
             for filename in os.listdir(self.direc+'multinest chains/'):
@@ -1736,7 +1736,7 @@ class ExoSystem:
 
             self.fm[sec] = z
 
-        pickle.dump(self.fm, open(self.direc+'Results/'+name+'_fm.p', 'wb'))
+        pickle.dump(self.fm, open(self.direc+'Output/'+name+'_fm.p', 'wb'))
 
 
     def plot_det_lc(self, name):
@@ -2020,7 +2020,7 @@ class ExoSystem:
 
         self.rvm = {'rvm': rvm, 'bkg': bkg, 'rvallplot': rvallplot, 'rvallplot_err': rvallplot_err, 'rvmplot': rvmplot, 'bkgplot': bkgplot, 'rvmphase': rvmphase, 'rvmphase_err': rvmphase_err, 'trplot': trplot, 'trphase': trphase}
 
-        pickle.dump(self.rvm, open(self.direc+'Results/'+name+'_rvm.p', 'wb'))
+        pickle.dump(self.rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
 
     
     def plot_rv(self, name):
