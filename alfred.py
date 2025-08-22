@@ -1,13 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import batman
-from init_class import *
-from ld_grids import *
 import emcee
 import corner
 from scipy.optimize import minimize
 from scipy.stats import linregress
-from scipy.interpolate import LinearNDInterpolator
 from astropy.table import Table
 from astropy.io import fits
 from astropy import units as u
@@ -21,6 +18,9 @@ from tqdm.notebook import tqdm
 import os
 import shutil
 from ctypes import c_double, c_int, CDLL
+
+from init_class import *
+from ld_grids import *
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('TKAgg')
