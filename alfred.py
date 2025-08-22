@@ -162,6 +162,8 @@ class ExoSystem:
             
         self.filters = np.array(tab_lcs['Filter'])
 
+        self.detrend = np.array(tab_lcs['Detrend'])
+
         for filt in self.filters:
             if filt not in self.ld.keys():
                 raise AttributeError('{0} in light curve initialization does not have limb darkening specified.'.format(filt))
@@ -272,7 +274,7 @@ class ExoSystem:
 
 
     def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, star_run = None,
-            save_samples = False, sigma_clip = 5, detrend = True, gp_rho_bound = None, density_prior = False, rv_bkg_order = 0, timing_priors = None,
+            save_samples = False, sigma_clip = 5, gp_rho_bound = None, density_prior = False, rv_bkg_order = 0, timing_priors = None,
             lc_supersample_size = 600):
 
         if not fit_transit and not fit_rv and not fit_star:
@@ -290,7 +292,6 @@ class ExoSystem:
             self.fit_star_only(name)
             return
 
-        self.detrend = detrend
         self.rv_bkg_order = rv_bkg_order
         self.gp_rho_bound = gp_rho_bound
         self.density_prior = density_prior
@@ -464,7 +465,7 @@ class ExoSystem:
 
                 self.x0['mean {0}'.format(self.lcnames[i])] = 1.0
 
-                if self.detrend:
+                if self.detrend[i]:
 
                     self.x0['log(rho_gp) {0}'.format(self.lcnames[i])] = np.max([1, self.gp_rho_bound]) if self.gp_rho_bound is not None else 1
                     self.x0['log(sigma_gp) {0}'.format(self.lcnames[i])] = np.log(np.std(self.f[i]))
@@ -617,7 +618,7 @@ class ExoSystem:
 
                 gpf = 0
 
-                if self.detrend:
+                if self.detrend[j]:
 
                     gp = set_gp_params(np.exp(x['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(x['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[j])
 
@@ -632,11 +633,11 @@ class ExoSystem:
                 c = np.sum(~mask)
                 clipped += c
 
-                fig, ax = plt.subplots(3 if self.detrend else 2, sharex = True)
+                fig, ax = plt.subplots(3 if self.detrend[j] else 2, sharex = True)
 
                 z = 0
 
-                if self.detrend:
+                if self.detrend[j]:
 
                     z = 1
 
@@ -959,7 +960,7 @@ class ExoSystem:
 
             self.plot_ttv_chains(name)
 
-        if self.detrend and self.fit_transit:
+        if np.any(self.detrend) and self.fit_transit:
 
             self.plot_det_chains(name)
 
@@ -979,9 +980,7 @@ class ExoSystem:
 
             self.gen_lcs(name, lc_supersample_size)
 
-            if self.detrend:
-
-                self.plot_det_lc(name)
+            self.plot_full_lc(name)
 
             self.plot_lc_phase(name)
 
@@ -1333,12 +1332,17 @@ class ExoSystem:
 
     def plot_det_chains(self, name):
 
-        fig, ax = plt.subplots(len(self.tt), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
+        fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
         if len(self.tt) == 1:
             ax = np.array([ax])
 
-        for i in range(len(self.tt)):
+        for j in range(len(self.tt)):
+
+            if not self.detrend[j]:
+                continue
+
+            i = np.sum(self.detrend[:j])
 
             ax[i][0].set_ylabel('{0}'.format(self.lcnames[i]))
 
@@ -1748,36 +1752,44 @@ class ExoSystem:
         pickle.dump(self.fm, open(self.direc+'Output/'+name+'_fm.p', 'wb'))
 
 
-    def plot_det_lc(self, name):
+    def plot_full_lc(self, name):
         
         for i in range(len(self.lcnames)):
 
             sec = self.lcnames[i]
 
             alpha = 0.1
-            if self.exptimes[i] == 1800/60/60/24:
+            if self.exptimes[i] >= 1000/60/60/24:
                 alpha = 0.3
 
-            fig, ax = plt.subplot_mosaic([['a'],['a'],['b'],['b'],['c']], figsize = (14,10), layout = 'constrained')
+            if self.detrend[i]:
+                mosaic = [['a'],['a'],['b'],['b'],['c']]
+            else:
+                mosaic = [['b'],['b'],['c']]
+
+            fig, ax = plt.subplot_mosaic(mosaic, figsize = (14,10), layout = 'constrained')
 
             fm = self.fm[sec]['fm']
             fm_err = self.fm[sec]['fm_err']
-            gpf = self.fm[sec]['gpf']
-            gpf_err = self.fm[sec]['gpf_err']
             mean = np.median(self.res['mean {0}'.format(sec)])
 
-            ax['a'].errorbar(self.tt[i], self.f[i], yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
-            ax['a'].plot(self.tt[i], gpf + mean, color = 'green', label = 'GP Model', zorder = 3, linewidth = 2)
-            ax['a'].fill_between(self.tt[i], gpf_err[0]+mean, gpf_err[1]+mean, color = 'green', edgecolor = 'none', alpha = 0.5, zorder = 2)
+            if self.detrend[i]:
 
-            ax['a'].text(0.01, 0.99, 'Raw', fontsize = 20, ha = 'left', va = 'top', transform = ax['a'].transAxes)
+                gpf = self.fm[sec]['gpf']
+                gpf_err = self.fm[sec]['gpf_err']
 
-            ax['a'].tick_params(axis = 'both', labelsize = 15)
-            ax['a'].set_yticks(ticks = ax['a'].get_yticks(), labels = np.round((np.array(ax['a'].get_yticks())-1)*1000, 1))
-            ax['a'].legend(fontsize = 15)
-            ax['a'].set_title(str(sec), fontsize = 20)
+                ax['a'].errorbar(self.tt[i], self.f[i], yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                ax['a'].plot(self.tt[i], gpf + mean, color = 'green', label = 'GP Model', zorder = 3, linewidth = 2)
+                ax['a'].fill_between(self.tt[i], gpf_err[0]+mean, gpf_err[1]+mean, color = 'green', edgecolor = 'none', alpha = 0.5, zorder = 2)
 
-            ax['b'].errorbar(self.tt[i], self.f[i] - gpf, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                ax['a'].text(0.01, 0.99, 'Raw', fontsize = 20, ha = 'left', va = 'top', transform = ax['a'].transAxes)
+
+                ax['a'].tick_params(axis = 'both', labelsize = 15)
+                ax['a'].set_yticks(ticks = ax['a'].get_yticks(), labels = np.round((np.array(ax['a'].get_yticks())-1)*1000, 1))
+                ax['a'].legend(fontsize = 15)
+                ax['a'].set_title(str(sec), fontsize = 20)
+
+            ax['b'].errorbar(self.tt[i], self.f[i] - (gpf if self.detrend[i] else 0), yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
             for j in range(self.n):
 
@@ -1795,7 +1807,7 @@ class ExoSystem:
             ax['b'].legend(fontsize = 15)
             ax['b'].sharey(ax['a'])
 
-            mod = np.sum(fm, axis = 0) + mean + gpf
+            mod = np.sum(fm, axis = 0) + mean + (gpf if self.detrend[i] else 0)
             ax['c'].errorbar(self.tt[i], self.f[i] - mod, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
             ax['c'].axhline(0, color = 'red', lw = 1, zorder = 2)
 
@@ -2502,10 +2514,13 @@ def log_like(par: dict, exs: ExoSystem):
             return -np.inf, [], []
 
 
-    if exs.fit_transit and exs.detrend and exs.gp_rho_bound is not None:        
+    if exs.fit_transit and np.any(exs.detrend) and exs.gp_rho_bound is not None:        
 
         #check gp rhos
         for i in range(len(exs.tt)):
+
+            if not exs.detrend[i]:
+                continue
 
             if par['log(rho_gp) {0}'.format(exs.lcnames[i])] < exs.gp_rho_bound:
                 return -np.inf, [], []
@@ -2656,7 +2671,7 @@ def log_like(par: dict, exs: ExoSystem):
 
                     fm += lightCurve(tpars[k], exs.tt[i], ld, exs.exptimes[i], exs.supersamples[i])
 
-            if exs.detrend:
+            if exs.detrend[i]:
 
                 resid = exs.f[i] - fm
 

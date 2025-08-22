@@ -38,9 +38,9 @@ class Init_lcs(InitFile):
 
     def create(self, empty = False):
 
-        self.table = Table(names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter'], 
-                           units = [None,None,None,None,None,None,'BJD',None,'s',None],
-                           dtype = [str,str,str,str,str,str,int,float,float,str])
+        self.table = Table(names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter','Detrend'], 
+                           units = [None,None,None,None,None,None,'BJD',None,'s',None,None],
+                           dtype = [str,str,str,str,str,str,int,float,float,str,bool])
 
         if not empty:
 
@@ -94,6 +94,9 @@ class Init_lcs(InitFile):
 
         filter = input('Filter or bandpass for this data (e.g. TESS, Kepler, V): ')
         row.append(filter)
+
+        detrend = input('Detrend this lightcurve? True or False ').lower() == 'true'
+        row.append(detrend)
 
         self.table.add_row(row)
 
@@ -410,7 +413,7 @@ class Init_ttvs(InitFile):
 
         self.table = Table()
 
-        input('Creating light curve initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+        input('Creating ttv initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
 
         while True:
 
