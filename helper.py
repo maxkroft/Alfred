@@ -133,8 +133,6 @@ def lnGauss(data, model, err):
 
 def log_like(par: dict, exs: ExoSystem):
 
-    logalist = []
-
     #check params
     for i in range(exs.n):
     
@@ -148,15 +146,6 @@ def log_like(par: dict, exs: ExoSystem):
             if not 0 <= par['ror {0}'.format(i+1)] <= 1:
                 return -np.inf, [], []
             
-            if not exs.fit_star:
-                logalist.append(par['log(a/rs) {0}'.format(i+1)])
-            
-                
-        if exs.is_rv[i] and exs.fit_rv:
-                
-            #check k
-            if par['log(K) {0}'.format(i+1)] < 0:
-                return -np.inf, [], []
             
         if exs.fit_ecc[i]:
 
@@ -164,12 +153,6 @@ def log_like(par: dict, exs: ExoSystem):
             if par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2 > 0.9:
                 return -np.inf, [], []
             
-    
-    #check a
-    if exs.fit_transit and not exs.fit_star:
-        logadiff = np.diff(np.array(logalist)[exs.transitsortorder])
-        if np.any(logadiff <= 0):
-            return -np.inf, [], []
 
 
     if exs.fit_transit and np.any(exs.detrend) and exs.gp_rho_bound is not None:        
