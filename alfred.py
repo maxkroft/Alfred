@@ -224,7 +224,9 @@ class ExoSystem:
             self.f.append(np.array(f0))
             self.ferr.append(np.array(ferr0 * self.lc_err_scale[i]))
 
-
+        self.tt_orig = self.tt.deepcopy()
+        self.f_orig = self.f.deepcopy()
+        self.ferr_orig = self.ferr.deepcopy()
 
         #rv files
 
@@ -502,6 +504,10 @@ class ExoSystem:
             nwalk = len(keys) * 2
 
         if self.fit_transit:
+
+            self.tt = self.tt_orig.deepcopy()
+            self.f = self.f_orig.deepcopy()
+            self.ferr = self.ferr_orig.deepcopy()
 
             self.masks = [np.ones(len(self.tt[i]), dtype = bool) for i in range(len(self.tt))]
         
@@ -1080,15 +1086,24 @@ class ExoSystem:
 
 
     def load_results(self, name):
+
+        if os.path.exists(self.direc+'/Output/'+name+'_dres.p'):
+            self.dres = pickle.load(open(self.direc+'/Output/'+name+'_dres.p', 'rb'))
+        
+        else:
+            print('No run named {0}.'.format(name))
+            return
     
-        if os.path.exists(self.direc+'Output/'+name+'_res.p'):
-            self.res = pickle.load(open(self.direc+'Output/'+name+'_res.p', 'rb'))
+        if os.path.exists(self.direc+'/Output/'+name+'_res.p'):
+            self.res = pickle.load(open(self.direc+'/Output/'+name+'_res.p', 'rb'))
 
-        self.dres = pickle.load(open(self.direc+'Output/'+name+'_dres.p', 'rb'))
-
-        if os.path.exists(self.direc+'Masks/'+name+'_masks.p'):
+        if os.path.exists(self.direc+'/Masks/'+name+'_masks.p'):
             
-            self.masks = pickle.load(open(self.direc+'Masks/'+name+'_masks.p', 'rb'))
+            self.masks = pickle.load(open(self.direc+'/Masks/'+name+'_masks.p', 'rb'))
+
+            self.tt = self.tt_orig.deepcopy()
+            self.f = self.f_orig.deepcopy()
+            self.ferr = self.ferr_orig.deepcopy()
 
             for i in range(len(self.tt)):
                 self.tt[i] = self.tt[i][self.masks[i]]
