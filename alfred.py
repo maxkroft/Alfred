@@ -464,7 +464,7 @@ class ExoSystem:
             
             for i in range(len(self.tt)):
 
-                self.x0['mean {0}'.format(self.lcnames[i])] = 1.0
+                self.x0['F0 {0}'.format(self.lcnames[i])] = 1.0
 
                 if self.detrend[i]:
 
@@ -571,7 +571,7 @@ class ExoSystem:
 
             for j in range(len(self.tt)):
 
-                mean = x['mean {0}'.format(self.lcnames[j])]
+                mean = x['F0 {0}'.format(self.lcnames[j])]
 
                 fm = mean
 
@@ -713,7 +713,7 @@ class ExoSystem:
                 z[j] = 0.9 * z[j] / np.abs(z[j])
                 pos.append(z)
 
-            if 'mean' in k:
+            if 'F0' in k:
                 pos.append(np.random.normal(x[k], 0.001, nwalk))
 
             if 'trend' in k:
@@ -1213,7 +1213,7 @@ class ExoSystem:
 
         fit_transit = False
 
-        if 'mean {0}'.format(self.lcnames[0]) in self.res:
+        if 'F0 {0}'.format(self.lcnames[0]) in self.res:
 
             fit_transit = True
 
@@ -1374,7 +1374,7 @@ class ExoSystem:
 
             ax[i][0].set_ylabel('{0}'.format(self.lcnames[i]))
 
-            v = self.parnames['mean {0}'.format(self.lcnames[i])]
+            v = self.parnames['F0 {0}'.format(self.lcnames[i])]
             ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
             v = self.parnames['log(rho_gp) {0}'.format(self.lcnames[i])]
@@ -1383,7 +1383,7 @@ class ExoSystem:
             v = self.parnames['log(sigma_gp) {0}'.format(self.lcnames[i])]
             ax[i][2].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
-        ax[0][0].set_title('mean')
+        ax[0][0].set_title('F0')
         ax[0][1].set_title('log(rho_gp)')
         ax[0][2].set_title('log(sigma_gp)')
 
@@ -1429,7 +1429,7 @@ class ExoSystem:
 
         fit_transit = False
 
-        if 'mean {0}'.format(self.lcnames[0]) in self.res:
+        if 'F0 {0}'.format(self.lcnames[0]) in self.res:
 
             fit_transit = True
 
@@ -1662,7 +1662,7 @@ class ExoSystem:
                     tcs.append(np.median(self.res['Tc {0}'.format(j+1)]))
 
 
-            mean = self.res['mean {0}'.format(sec)]
+            mean = self.res['F0 {0}'.format(sec)]
 
             ttphase = np.linspace(-0.5, 0.5, 1000)
             phaseexp = 1/1000
@@ -1819,7 +1819,7 @@ class ExoSystem:
 
             fm = self.fm[sec]['fm']
             fm_err = self.fm[sec]['fm_err']
-            mean = np.median(self.res['mean {0}'.format(sec)])
+            mean = np.median(self.res['F0 {0}'.format(sec)])
 
             if self.detrend[i]:
 
@@ -1908,7 +1908,7 @@ class ExoSystem:
 
             fig, ax = plt.subplot_mosaic(mos, figsize = (14,6*self.nt), sharex = True, layout = 'constrained')
 
-            mean = np.median(self.res['mean {0}'.format(sec)])
+            mean = np.median(self.res['F0 {0}'.format(sec)])
 
             for j in range(self.n):
 
@@ -2335,7 +2335,7 @@ class ExoSystem:
 
             sec = self.lcnames[i]
 
-            fm = np.sum(self.fm[sec]['fm'], axis = 0) + np.median(self.res['mean {0}'.format(sec)])
+            fm = np.sum(self.fm[sec]['fm'], axis = 0) + np.median(self.res['F0 {0}'.format(sec)])
 
             if 'gpf' in self.fm[sec]:
                 fm += self.fm[sec]['gpf']
