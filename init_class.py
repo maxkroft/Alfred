@@ -453,6 +453,172 @@ class Init_ttvs(InitFile):
         self.table.add_column(col, name = num)
 
 
+class Init_priors(InitFile):
+
+    def __init__(self, direc, name = 'init_priors.txt'):
+
+        super().__init__(direc, name)
+
+        self.header_rows = ['name']
+
+        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT',
+                             'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'trend', 'offset',
+                             'ms', 'rs', 'rhos', 'age', 'AV']
+        
+        self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT']
+        self.lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
+        self.ld_vars = ['u1', 'u2']
+        self.rv_vars = ['trend', 'offset']
+        self.star_vars = ['ms', 'rs', 'rhos', 'age', 'AV']
+        
+        self.var_descriptions = ['natural log of the planet period in days',
+                                 'planet period in days',
+                                 'planet time of conjunction in BJD - 2450000',
+                                 'planet radius to stellar radius ratio',
+                                 'natural log of planet semi-major axis to stellar radius ratio',
+                                 'planet semi-major axis to stellar radius ratio',
+                                 'cosine of the planet orbital inclination',
+                                 'planet orbital inclination in radians',
+                                 'natural log of the planet RV semi-amplitude in m/s',
+                                 'planet RV semi-amplitude in m/s',
+                                 'square root of planet eccentricity times cosine of planet argument of periastron',
+                                 'square root of planet eccentricity times sine of planet argument of periastron',
+                                 'planet eccentricity',
+                                 'planet argument of periastron in radians',
+                                 'individual planet transit time (for fitting TTVs) in BJD - 2450000',
+                                 'lightcurve baseline flux value',
+                                 'natural log of the light curve gaussian process period',
+                                 'light curve gaussian process period',
+                                 'natural log of the light curve gaussian process standard deviation',
+                                 'light curve gaussian process standard deviation',
+                                 'quadratic limb darkening linear term',
+                                 'quadratic limb darkening non-linear term',
+                                 'RV data background trend in m/s, m/s per day (slope term), or m/s per day^2 (quadratic term)',
+                                 'RV offset in m/s (only used for second data set and on when there are multiple RV data sets)',
+                                 'stellar mass in solar masses',
+                                 'stellar radius in solar radii',
+                                 'mean stellar density in g/cm^3',
+                                 'stellar age in Gyr',
+                                 'V band extinction in mags']
+        
+    
+    def var_help(self):
+
+        for i in range(len(self.var_descriptions)):
+
+            print(self.allowed_vars[i], '-', self.var_descriptions[i])
+
+    
+    def create(self):
+
+        self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
+            dtype = [str, str, float, float])
+
+        input('Creating prior initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+
+        while True:
+
+            self.add_prior()
+
+            x = input('More priors? y/n ')
+                
+            if x.lower() != 'y':
+                break
+
+        self.save()
+
+        return self
+    
+
+    def add_prior(self):
+
+        row = []
+
+        while True:
+
+            var = input('Variable name. Type "help" to see a list of variables.')
+
+            if var.lower() == 'help':
+
+                self.var_help()
+
+            elif var not in self.allowed_vars:
+
+                input('Variable is not recognized. Enter to try again.')
+
+            else:
+                
+                break
+
+        
+        if var in self.planet_vars:
+
+            num = input('Planet number to apply to apply this prior to (planets are 1-indexed starting at top of init_planets file). Enter x to apply this prior to all planets.')
+
+            if var == 'TT':
+
+                tnum = input('Transit number of planet {0} to apply this prior to (1-indexed in time order).'.format(num))
+
+                num += ' '
+                num += tnum
+
+            var += ' '
+            var += num
+
+        elif var in self.lc_vars:
+
+            lc = input('Light curve nickname to apply this prior to. Enter x to apply this prior to all light curves.')
+
+            var += ' '
+            var += lc
+
+        elif var in self.ld_vars:
+
+            filt = input('Filter to apply this prior to. Enter x to apply this prior to all filters.')
+
+            var += ' '
+            var += filt
+
+        elif var in self.rv_vars:
+
+            rv = input('RV dataset nickname to apply this prior to. Enter x to apply this prior to all RV datasets.')
+
+            var += ' '
+            var += rv
+
+        row.append(var)
+
+        while True:
+            
+            priortype = input('Prior type to use for {0}. U for uniform, G for Gaussian.'.format(var)).upper()
+
+            if priortype not in ['U', 'G']:
+
+                input('Prior type is not recognized. Enter to try again.')
+
+            else:
+
+                break
+
+        row.append(priortype)
+
+        if priortype == 'U':
+
+            p1 = input('Lower bound of uniform prior for {0}.'.format(var))
+            p2 = input('Upper bound of uniform prior for {0}.'.format(var))
+
+        elif priortype == 'G':
+
+            p1 = input('Mean of Gaussian prior for {0}.'.format(var))
+            p2 = input('Standard deviation of Gaussian prior for {0}.'.format(var))
+
+        row.append(p1)
+        row.append(p2)
+
+        self.table.add_row(row)
+
+
+
 
 def create_folder(direc: str):
     """Creates a new folder for an exoplanet system to fit with this code. Helps you make the initialization file.

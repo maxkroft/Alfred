@@ -1176,7 +1176,7 @@ class ExoSystem:
 
             tab = Init_ttvs(self.direc).from_file().table
 
-        self.ttvs0 = {int(col): np.array(tab[col])[~np.isnan(tab[col])] for col in tab.columns}
+        self.ttvs0 = {int(col): np.sort(np.array(tab[col])[~np.isnan(tab[col])]) for col in tab.columns}
 
         self.ttvsectors = {}
         self.ttvi = {}
