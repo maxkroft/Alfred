@@ -164,6 +164,8 @@ class ExoSystem:
 
         self.detrend = np.array(tab_lcs['Detrend'])
 
+        self.lc_err_scale = np.array(tab_lcs['Err Scale'])
+
         for filt in self.filters:
             if filt not in self.ld.keys():
                 raise AttributeError('{0} in light curve initialization does not have limb darkening specified.'.format(filt))
@@ -220,7 +222,7 @@ class ExoSystem:
 
             self.tt.append(np.array(tt0)+tab_lcs['Time Offset'][i]-2450000)
             self.f.append(np.array(f0))
-            self.ferr.append(np.array(ferr0 * tab_lcs['Err Scale'][i]))
+            self.ferr.append(np.array(ferr0 * self.lc_err_scale[i]))
 
 
 
@@ -229,6 +231,8 @@ class ExoSystem:
         self.rvfiles = np.array(tab_rv['File'])
 
         self.rvnames = np.array(tab_rv['Nickname'])
+
+        self.rv_err_scale = np.array(tab_rv['Err Scale'])
 
         self.tr = []
         self.rv = []
@@ -248,7 +252,7 @@ class ExoSystem:
                 tr0 = np.array(rvdata[tab_rv['Time Col'][i]]) + tab_rv['Time Offset'][i] - 2450000
                 rv0 =  np.array(rvdata[tab_rv['RV Col'][i]]) * msscale
                 rv0 = rv0 - (np.max(rv0)+np.min(rv0))/2
-                rverr0 = np.array(rvdata[tab_rv['Err Col'][i]]) * tab_rv['Err Scale'][i] * msscale
+                rverr0 = np.array(rvdata[tab_rv['Err Col'][i]]) * self.rv_err_scale[i] * msscale
 
                 self.tr.append(tr0)
                 self.rv.append(rv0)
@@ -275,7 +279,7 @@ class ExoSystem:
 
     def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, star_run = None,
             save_samples = False, sigma_clip = 5, gp_rho_bound = None, density_prior = False, rv_bkg_order = 0, timing_priors = None,
-            lc_supersample_size = 600):
+            lc_supersample_size = 600, show_plots = True):
 
         if not fit_transit and not fit_rv and not fit_star:
             print('You need to fit something!')
@@ -416,7 +420,7 @@ class ExoSystem:
 
                 j = np.sum(self.is_rv[:i])
 
-                self.x0['log(k) {0}'.format(i+1)] = np.log(self.k[j])
+                self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[j])
 
             if self.fit_ecc[i]:
 
@@ -537,7 +541,7 @@ class ExoSystem:
                         if self.fit_ecc[j]:
                             e = x['secw {0}'.format(j+1)]**2 + x['sesw {0}'.format(j+1)]**2
 
-                        mp = calc_m_from_k(p, np.exp(x['log(k) {0}'.format(j+1)]), e, np.arccos(x['cos(i) {0}'.format(j+1)]), mstar)
+                        mp = calc_m_from_k(p, np.exp(x['log(K) {0}'.format(j+1)]), e, np.arccos(x['cos(i) {0}'.format(j+1)]), mstar)
 
                     else:
 
@@ -699,7 +703,7 @@ class ExoSystem:
             if 'cos(i)' in k:
                 pos.append(np.abs(np.random.normal(x[k], 0.001, nwalk)))
 
-            if 'log(k)' in k:
+            if 'log(K)' in k:
                 pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01, nwalk)))
 
             if 'secw' in k or 'sesw' in k:
@@ -877,8 +881,8 @@ class ExoSystem:
 
             if self.is_rv[i] and self.fit_rv:
 
-                k = np.exp(self.res['log(k) {0}'.format(i+1)])
-                self.dres['k {0}'.format(i+1)] = k
+                k = np.exp(self.res['log(K) {0}'.format(i+1)])
+                self.dres['K {0}'.format(i+1)] = k
 
                 if self.is_transit[i] and self.fit_transit:
 
@@ -954,25 +958,25 @@ class ExoSystem:
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width', overwrite = True)
 
         
-        self.plot_pl_chains(name)
+        self.plot_pl_chains(name, show_plot = show_plots)
 
         if self.nttv > 0 and self.fit_transit:
 
-            self.plot_ttv_chains(name)
+            self.plot_ttv_chains(name, show_plot = show_plots)
 
         if np.any(self.detrend) and self.fit_transit:
 
-            self.plot_det_chains(name)
+            self.plot_det_chains(name, show_plot = show_plots)
 
         if self.fit_star:
 
-            self.plot_star_chains(name)
+            self.plot_star_chains(name, show_plot = show_plots)
 
-        self.plot_pl_corner(name)
+        self.plot_pl_corner(name, show_plot = show_plots)
 
         if self.fit_star:
 
-            self.plot_star_corner(name)
+            self.plot_star_corner(name, show_plot = show_plots)
 
         self.plot_big_corner(name)
 
@@ -980,19 +984,19 @@ class ExoSystem:
 
             self.gen_lcs(name, lc_supersample_size)
 
-            self.plot_full_lc(name)
+            self.plot_full_lc(name, show_plot = show_plots)
 
-            self.plot_lc_phase(name)
+            self.plot_lc_phase(name, show_plot = show_plots)
 
         if self.fit_rv:
 
             self.gen_rv(name)
 
-            self.plot_rv(name)
+            self.plot_rv(name, show_plot = show_plots)
 
         if self.nttv > 0 and self.fit_transit:
 
-            self.plot_ttvs(name)
+            self.plot_ttvs(name, show_plot = show_plots)
 
         if self.fit_star:
 
@@ -1002,7 +1006,7 @@ class ExoSystem:
 
             pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
 
-            self.plot_sed_fit(name)
+            self.plot_sed_fit(name, show_plot = show_plots)
 
 
     def fit_star_only(self, name):
@@ -1183,7 +1187,7 @@ class ExoSystem:
                             break
 
 
-    def plot_pl_chains(self, name):
+    def plot_pl_chains(self, name, show_plot = True):
 
         fit_rv = False
 
@@ -1262,7 +1266,7 @@ class ExoSystem:
 
             if self.is_rv[i] and fit_rv:
 
-                v = self.parnames['log(k) {0}'.format(i+1)]
+                v = self.parnames['log(K) {0}'.format(i+1)]
                 ax[2 + (3 if fit_transit else 0) - (1 if fit_star else 0)][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
             if self.fit_ecc[i] and ((self.is_transit[i] and fit_transit) or (self.is_rv[i] and fit_rv)):
@@ -1281,7 +1285,7 @@ class ExoSystem:
                 ax[3][0].set_ylabel('log(a/rs)')
             ax[4 - (1 if fit_star else 0)][0].set_ylabel('cos(i)')
         if fit_rv:
-            ax[2 + (3 if fit_transit else 0) - (1 if fit_star else 0)][0].set_ylabel('log(k)')
+            ax[2 + (3 if fit_transit else 0) - (1 if fit_star else 0)][0].set_ylabel('log(K)')
         ax[2 + (3 if fit_transit else 0) + (1 if fit_rv else 0) - (1 if fit_star else 0)][0].set_ylabel('secw')
         ax[3 + (3 if fit_transit else 0) + (1 if fit_rv else 0) - (1 if fit_star else 0)][0].set_ylabel('sesw')
 
@@ -1289,10 +1293,14 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/pl_chains.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
-    def plot_ttv_chains(self, name):
+    def plot_ttv_chains(self, name, show_plot = True):
 
         n = 0
         for x in self.ttvi:
@@ -1327,10 +1335,14 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/tt_chains.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
-    def plot_det_chains(self, name):
+    def plot_det_chains(self, name, show_plot = True):
 
         fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
@@ -1363,10 +1375,14 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/sec_chains.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
-    def plot_star_chains(self, name):
+    def plot_star_chains(self, name, show_plot = True):
 
         fig, ax = plt.subplots(5, figsize = (7, 12), sharex = True, layout = 'constrained')
 
@@ -1380,10 +1396,14 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/star_chains.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
-    def plot_pl_corner(self, name):
+    def plot_pl_corner(self, name, show_plot = True):
 
         fit_rv = False
 
@@ -1431,7 +1451,7 @@ class ExoSystem:
 
             if self.is_rv[i] and fit_rv:
 
-                labels.append('log(k) {0}'.format(i+1))
+                labels.append('log(K) {0}'.format(i+1))
 
             if self.fit_ecc[i] and ((self.is_transit[i] and fit_transit) or (self.is_rv[i] and fit_rv)):
 
@@ -1451,10 +1471,14 @@ class ExoSystem:
 
             fig.savefig(self.direc+'Plots/'+name+'/p{0}_corner.png'.format(i+1))
 
-            plt.show()
+            if show_plot:
+                plt.show()
+
+            else:
+                plt.close()
 
 
-    def plot_star_corner(self, name):
+    def plot_star_corner(self, name, show_plot = True):
 
         labels = ['eep','age','feh','distance','AV']
         j = [self.parnames[x] for x in labels]
@@ -1467,10 +1491,14 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/star_corner.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
-    def plot_big_corner(self, name):
+    def plot_big_corner(self, name, show_plot = False):
 
         keys = list(self.res.keys())
         keys.remove('log_like')
@@ -1481,7 +1509,11 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/bigcorner.png')
 
-        plt.close()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
     def gen_lcs(self, name, lc_supersample_size = 600):
@@ -1550,7 +1582,7 @@ class ExoSystem:
                     if self.fit_ecc[j]:
                         e = self.res['secw {0}'.format(j+1)]**2 + self.res['sesw {0}'.format(j+1)]**2
 
-                    mp = calc_m_from_k(p, np.exp(self.res['log(k) {0}'.format(j+1)]), e, np.arccos(self.res['cos(i) {0}'.format(j+1)]), mstar)
+                    mp = calc_m_from_k(p, np.exp(self.res['log(K) {0}'.format(j+1)]), e, np.arccos(self.res['cos(i) {0}'.format(j+1)]), mstar)
 
                 else:
 
@@ -1752,7 +1784,7 @@ class ExoSystem:
         pickle.dump(self.fm, open(self.direc+'Output/'+name+'_fm.p', 'wb'))
 
 
-    def plot_full_lc(self, name):
+    def plot_full_lc(self, name, show_plot = True):
         
         for i in range(len(self.lcnames)):
 
@@ -1828,10 +1860,14 @@ class ExoSystem:
 
             fig.savefig(self.direc+'Plots/'+name+'/transit_det_{0}.png'.format(sec))
 
-            plt.show()
+            if show_plot:
+                plt.show()
+
+            else:
+                plt.close()
 
 
-    def plot_lc_phase(self, name):
+    def plot_lc_phase(self, name, show_plot = True):
 
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs)
@@ -1943,7 +1979,11 @@ class ExoSystem:
 
             fig.savefig(self.direc+'/Plots/'+name+'/transits_{0}.png'.format(sec))
 
-            plt.show()
+            if show_plot:
+                plt.show()
+
+            else:
+                plt.close()
 
 
     def gen_rv(self, name):
@@ -2046,7 +2086,7 @@ class ExoSystem:
         pickle.dump(self.rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
 
     
-    def plot_rv(self, name):
+    def plot_rv(self, name, show_plot = True):
 
         mos = [['a' for i in range(self.nr)], ['a' for i in range(self.nr)], ['b' for i in range(self.nr)], ['c{0}'.format(i) for i in range(self.nr)], ['c{0}'.format(i) for i in range(self.nr)], ['d{0}'.format(i) for i in range(self.nr)]]
 
@@ -2172,10 +2212,14 @@ class ExoSystem:
         
         fig.savefig(self.direc+'Plots/'+name+'/rv.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
-    def plot_sed_fit(self, name):
+    def plot_sed_fit(self, name, show_plot = True):
 
         fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14, 12), layout = 'constrained', sharex = True)
 
@@ -2195,10 +2239,14 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/sed.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
-    def plot_ttvs(self, name):
+    def plot_ttvs(self, name, show_plot = True):
 
         self.initialize_ttvs(name = self.init_ttvs)
 
@@ -2238,7 +2286,11 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/ttvs.png')
 
-        plt.show()
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
 
 
     def calc_rv_bic(self):
@@ -2276,7 +2328,7 @@ class ExoSystem:
 
             mederr = np.median(self.ferr[i])
 
-            print(sec, 'std', resstd, 'median err', mederr, 'scale', resstd / mederr)
+            print(sec, 'std', resstd, 'median err', mederr, 'std / median err', resstd / mederr, 'new err scale', resstd/mederr*self.lc_err_scale[i])
 
 
     def calc_rv_err_scale(self):
@@ -2296,7 +2348,7 @@ class ExoSystem:
 
             mederr = np.median(self.rverr[j])
 
-            print(str(self.rvnames[i]), 'std', resstd, 'median err', mederr, 'scale', resstd / mederr)
+            print(self.rvnames[i], 'std', resstd, 'median err', mederr, 'std / median err', resstd / mederr, 'new err scale', resstd/mederr*self.rv_err_scale[i])
 
 
     def calc_gelman_rubin(self):
@@ -2450,12 +2502,12 @@ def get_rv_params(par, i, p = None, tc = None):
         p = np.exp(par['log(P) {0}'.format(i)])
         tc = par['Tc {0}'.format(i)]
 
-    shape = np.shape(par['log(k) {0}'.format(i)])
+    shape = np.shape(par['log(K) {0}'.format(i)])
 
     e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
     w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) if 'secw {0}'.format(i) in par else np.full(shape, np.pi/2)
 
-    k = np.exp(par['log(k) {0}'.format(i)])
+    k = np.exp(par['log(K) {0}'.format(i)])
 
     return np.array([p, tc, k, e, w])
 
@@ -2497,7 +2549,7 @@ def log_like(par: dict, exs: ExoSystem):
         if exs.is_rv[i] and exs.fit_rv:
                 
             #check k
-            if par['log(k) {0}'.format(i+1)] < 0:
+            if par['log(K) {0}'.format(i+1)] < 0:
                 return -np.inf, [], []
             
         if exs.fit_ecc[i]:
@@ -2577,7 +2629,7 @@ def log_like(par: dict, exs: ExoSystem):
                 if exs.fit_ecc[i]:
                     e = par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2
 
-                mp = calc_m_from_k(p, np.exp(par['log(k) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)
+                mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)
 
             else:
 
