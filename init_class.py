@@ -493,7 +493,7 @@ class Init_priors(InitFile):
                                  'light curve gaussian process standard deviation',
                                  'quadratic limb darkening linear term',
                                  'quadratic limb darkening non-linear term',
-                                 'RV data background trend in m/s, m/s per day (slope term), or m/s per day^2 (quadratic term)',
+                                 'RV data background trend in m/s (flat term), m/s per day (linear term), or m/s per day^2 (quadratic term)',
                                  'RV offset in m/s (only used for second data set and on when there are multiple RV data sets)',
                                  'stellar mass in solar masses',
                                  'stellar radius in solar radii',
@@ -579,12 +579,19 @@ class Init_priors(InitFile):
             var += ' '
             var += filt
 
-        elif var in self.rv_vars:
+        elif var == 'offset':
 
             rv = input('RV dataset nickname to apply this prior to. Enter x to apply this prior to all RV datasets.')
 
             var += ' '
             var += rv
+
+        elif var == 'trend':
+
+            trend = input('Trend term order to apply this prior to. 0 (flat component), 1 (linear component), or 2 (quadratic component).')
+
+            var += ' '
+            var += trend
 
         row.append(var)
 
