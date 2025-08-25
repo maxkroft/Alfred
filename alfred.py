@@ -815,6 +815,12 @@ class ExoSystem:
             self.dres['Tstar'] = T
             self.dres['loggstar'] = logg
 
+            interp_input = np.array([T, logg, self.res['feh']]).T
+
+            for filt in np.unique(self.filters):
+
+                self.dres['u1 {0}'.format(filt)] = self.ldgrids[filt][0](interp_input)
+                self.dres['u2 {0}'.format(filt)] = self.ldgrids[filt][1](interp_input)
 
         else:
 
