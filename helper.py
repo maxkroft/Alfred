@@ -362,7 +362,7 @@ def log_like(par: dict, exs: ExoSystem):
 
             j = np.sum(exs.is_transit[:i])
 
-            rho = 0.01891566 * tpars[j][3]**3 / tpars[j][0]**2
+            rho = 0.018916375 * tpars[j][3]**3 / tpars[j][0]**2
 
             like += lnGauss(exs.rhos, rho, exs.rhoserr)
 

@@ -461,15 +461,15 @@ class Init_priors(InitFile):
 
         self.header_rows = ['name']
 
-        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT',
+        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'trend', 'offset',
-                             'ms', 'rs', 'rhos', 'age', 'AV']
+                             'mstar', 'rstar', 'rhostar', 'age', 'AV']
         
-        self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT']
+        self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT']
         self.lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         self.ld_vars = ['u1', 'u2']
         self.rv_vars = ['trend', 'offset']
-        self.star_vars = ['ms', 'rs', 'rhos', 'age', 'AV']
+        self.star_vars = ['mstar', 'rstar', 'rhostar', 'age', 'AV']
         
         self.var_descriptions = ['natural log of the planet period in days',
                                  'planet period in days',
@@ -477,6 +477,7 @@ class Init_priors(InitFile):
                                  'planet radius to stellar radius ratio',
                                  'natural log of planet semi-major axis to stellar radius ratio',
                                  'planet semi-major axis to stellar radius ratio',
+                                 'implied stellar density from planet transit in g/cm^3',
                                  'cosine of the planet orbital inclination',
                                  'planet orbital inclination in radians',
                                  'natural log of the planet RV semi-amplitude in m/s',

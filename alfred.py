@@ -28,21 +28,27 @@ np.set_printoptions(legacy='1.25')
 class ExoSystem:
 
 
-    def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt', init_rv = 'init_rv.txt', init_ld = 'init_ld.txt', init_ttvs = 'init_ttvs.txt'):
+    def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt', init_rv = 'init_rv.txt', init_ld = 'init_ld.txt', init_priors = 'init_priors.txt', init_ttvs = 'init_ttvs.txt'):
 
         self.direc = direc
-        self.init_planets = init_planets
-        self.init_star = init_star
-        self.init_lcs = init_lcs
-        self.init_rv = init_rv
-        self.init_ld = init_ld
-        self.init_ttvs = init_ttvs
+        self.init_planets = Init_planets(self.direc, init_planets).from_file()
+        self.init_star = Init_star(self.direc, init_star).from_file()
+        self.init_lcs = Init_lcs(self.direc, init_lcs).from_file()
+        self.init_rv = Init_rv(self.direc, init_rv).from_file()
+        self.init_ld = Init_ld(self.direc, init_ld).from_file()
 
-        tab_planets = Init_planets(self.direc, self.init_planets).from_file().table
-        tab_star = Init_star(self.direc, self.init_star).from_file().table
-        tab_lcs = Init_lcs(self.direc, self.init_lcs).from_file().table
-        tab_rv = Init_rv(self.direc, self.init_rv).from_file().table
-        tab_ld = Init_planets(self.direc, self.init_planets).from_file().table
+        if os.path.exists(self.direc+'/'+self.init_priors):
+            self.init_priors = Init_priors(self.direc, init_priors).from_file()
+        else:
+            self.init_priors = None
+
+        self.init_ttvs_name = init_ttvs
+
+        tab_planets = self.init_planets.table
+        tab_star = self.init_star.table
+        tab_lcs = self.init_lcs.table
+        tab_rv = self.init_rv.table
+        tab_ld = self.init_ld.table
 
 
         #which to fit
@@ -274,8 +280,8 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, star_run = None,
-            save_samples = False, sigma_clip = 5, gp_rho_bound = None, density_prior = False, rv_bkg_order = 0, timing_priors = None,
+    def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, use_priors = False,
+            star_run = None, save_samples = False, sigma_clip = 5, gp_rho_bound = None, density_prior = False, rv_bkg_order = 0, timing_priors = None,
             lc_supersample_size = 600, show_plots = True):
 
         if not fit_transit and not fit_rv and not fit_star:
@@ -301,6 +307,7 @@ class ExoSystem:
         self.fit_transit = fit_transit
         self.fit_rv = fit_rv
         self.fit_star = fit_star
+        self.use_priors = use_priors
         self.timing_priors = {}
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
@@ -376,7 +383,7 @@ class ExoSystem:
 
 
         if np.any(self.fit_ttv) and self.fit_transit:
-            self.initialize_ttvs(name = self.init_ttvs)
+            self.initialize_ttvs(name = self.init_ttvs_name)
 
         if self.density_prior:
             
@@ -928,7 +935,7 @@ class ExoSystem:
 
                 if not self.fit_star:
 
-                    rhos = 0.01891566 * ars**3 / p**2
+                    rhos = 0.018916375 * ars**3 / p**2
                     self.dres['rhos {0}'.format(i+1)] = rhos
 
                 if self.is_rv[i] and self.fit_rv:
@@ -1541,7 +1548,7 @@ class ExoSystem:
         self.fm = {}
 
         if np.any(self.fit_ttv):
-            self.initialize_ttvs(name = self.init_ttvs)
+            self.initialize_ttvs(name = self.init_ttvs_name)
 
         fit_rv = False
 
@@ -1886,7 +1893,7 @@ class ExoSystem:
     def plot_lc_phase(self, name, show_plot = True):
 
         if np.any(self.fit_ttv):
-            self.initialize_ttvs(name = self.init_ttvs)
+            self.initialize_ttvs(name = self.init_ttvs_name)
 
         for i in range(len(self.lcnames)):
 
@@ -2264,7 +2271,7 @@ class ExoSystem:
 
     def plot_ttvs(self, name, show_plot = True):
 
-        self.initialize_ttvs(name = self.init_ttvs)
+        self.initialize_ttvs(name = self.init_ttvs_name)
 
         fig, ax = plt.subplots(self.nttv, figsize = (14, 6*self.nttv), sharex = True, layout = 'constrained')
 

@@ -43,14 +43,14 @@ class Priors:
 
 class AllPriors:
 
-    def __init__(self, tab: Table, x0: dict):
+    def __init__(self, tab: Table, x0: dict, fit_ttv):
 
         self.prior_dict = {}
 
-        searchvars = {'P': 'log(P)', 'a/rs': 'log(a/rs)', 'i': 'cos(i)', 'K': 'log(K)', 'e': 'secw', 'w': 'secw',
+        searchvars = {'P': 'log(P)', 'a/rs': 'log(a/rs)', 'rhos': 'log(a/rs)', 'i': 'cos(i)', 'K': 'log(K)', 'e': 'secw', 'w': 'secw',
                       'rho_gp': 'log(rho_gp)', 'sigma_gp': 'log(sigma_gp)'}
         
-        star_vars = ['ms', 'rs', 'rhos', 'age', 'AV']
+        star_vars = ['mstar', 'rstar', 'rhostar', 'age', 'AV']
 
         for i in range(len(tab)):
 
@@ -68,6 +68,25 @@ class AllPriors:
             fvar = ' '.join([svar]+split[1:])
 
             found = False
+
+            if svar in ['log(P)','Tc'] and np.any(fit_ttv):
+
+                if split[-1] == 'x':
+
+                    for j in range(len(fit_ttv)):
+
+                        if fit_ttv[j] and 'ror {0}'.format(j+1) in x0:
+
+                            found = True
+
+                            self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+                elif fit_ttv[int(split[-1])-1] and 'ror {0}'.format(split[-1]) in x0:
+
+                    found = True
+
+                    self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
 
             if fvar in x0:
 
@@ -118,6 +137,15 @@ class AllPriors:
                 svar = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
                 x = np.exp(par[svar])
+
+                log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'rhos':
+
+                svar1 = ' '.join(['log(P)']+split[1:])
+                svar2 = ' '.join(['log(a/rs)']+split[1:])
+
+                x = 0.018916375 * np.exp(par[svar2])**3 / np.exp(par[svar1])**2
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
