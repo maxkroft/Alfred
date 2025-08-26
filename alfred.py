@@ -19,7 +19,7 @@ import shutil
 from init_class import *
 from ld_grids import *
 from helper import *
-from priors import AllPriors
+from priors import *
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('TKAgg')
@@ -295,6 +295,11 @@ class ExoSystem:
         if not os.path.isdir(self.direc+'Plots/'+name):
             os.mkdir(self.direc+'Plots/'+name)
         
+        self.use_priors = use_priors
+        if self.init_priors is None:
+            print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create().')
+            self.use_priors = False
+
         if not fit_transit and not fit_rv and fit_star:
             self.fit_star_only(name)
             return
@@ -305,10 +310,10 @@ class ExoSystem:
         self.fit_transit = fit_transit
         self.fit_rv = fit_rv
         self.fit_star = fit_star
-        self.use_priors = use_priors
         self.order_a = order_a
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
+
 
         if self.fit_star:
 
@@ -329,6 +334,9 @@ class ExoSystem:
                 props['feh'] = (self.feh, self.feherr)
 
             self.starmod = SingleStarModel(self.misti, name = name, **props)
+
+            if self.use_priors:
+                self.starmod = apply_star_priors(self.init_priors.table, self.starmod)
 
             self.ldgrids = {}
 
@@ -457,12 +465,7 @@ class ExoSystem:
 
         if self.use_priors:
 
-            if self.init_priors is None:
-                print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create().')
-
-            else:
-
-                self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+            self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
 
 
         if nwalk < len(keys) * 2:
@@ -1004,6 +1007,9 @@ class ExoSystem:
 
 
         mod = SingleStarModel(misti, name=name, **props)
+
+        if self.use_priors:
+            mod = apply_star_priors(self.init_priors.table, mod)
         
         mod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
 

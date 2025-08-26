@@ -1,5 +1,7 @@
 import numpy as np
 from astropy.table import Table
+from isochrones import SingleStarModel
+from isochrones.priors import FlatPrior, GaussianPrior
 
 class Priors:
 
@@ -182,3 +184,50 @@ class AllPriors:
                 log_like += self.prior_dict[var].apply_priors(x)
 
         return log_like
+    
+
+
+def apply_star_priors(tab: Table, starmod: SingleStarModel):
+
+    var_convert = {'mstar': lambda x: starmod.set_prior(mass = x),
+                   'rstar': lambda x: starmod.set_prior(radius = x),
+                   'rhostar': lambda x: starmod.set_prior(density = x),
+                   'age': lambda x: starmod.set_prior(age = x),
+                   'AV': lambda x: starmod.set_prior(AV = x)}
+
+    for var in var_convert:
+
+        i = np.where(tab['Variable'] == var)[0]
+
+        if len(i) == 0:
+
+            continue
+
+        elif len(i) == 1:
+
+            if tab['Prior Type'][i] == 'U':
+
+                starprior = FlatPrior((tab['Param 1'][i], tab['Param 2'][i]))
+
+            elif tab['Prior Type'][i] == 'G':
+        
+                starprior = GaussianPrior(tab['Param 1'][i], tab['Param 2'][i])
+
+        elif len(i) > 2 or len(np.unique(tab['Prior Type'][i])) < 2:
+
+            print('Cannot apply multiple priors of same type to {0}.'.format(var))
+            continue
+
+        else:
+
+            j = np.where(tab['Prior Type'][i] == 'U')[0]
+            bounds = (tab['Param 1'][i][j], tab['Param 2'][i][j])
+
+            j = np.where(tab['Prior Type'][i] == 'G')[0]
+            mean, std = tab['Param 1'][i][j], tab['Param 2'][i][j]
+
+            starprior = GaussianPrior(mean, std, bounds = bounds)
+
+        var_convert[var](starprior)
+
+    return starmod
