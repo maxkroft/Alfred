@@ -553,7 +553,7 @@ class Init_priors(InitFile):
         
         if var in self.planet_vars:
 
-            num = input('Planet number to apply to apply this prior to (planets are 1-indexed starting at top of init_planets file). Enter x to apply this prior to all planets.')
+            num = input('Planet number to apply to apply this prior to (planets are 1-indexed starting at top of init_planets file).' + ('' if var == 'TT' else ' Enter x to apply this prior to all planets.'))
 
             if var == 'TT':
 
