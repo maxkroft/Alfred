@@ -4,6 +4,7 @@ import batman
 import os
 from scipy.stats import linregress
 from celerite2 import GaussianProcess, terms
+
 from alfred import ExoSystem
 
 from ctypes import c_double, c_int, CDLL
@@ -133,6 +134,8 @@ def lnGauss(data, model, err):
 
 def log_like(par: dict, exs: ExoSystem):
 
+    logalist = []
+
     #check params
     for i in range(exs.n):
     
@@ -146,6 +149,9 @@ def log_like(par: dict, exs: ExoSystem):
             if not 0 <= par['ror {0}'.format(i+1)] <= 1:
                 return -np.inf, [], []
             
+            if not exs.fit_star:
+                logalist.append(par['log(a/rs) {0}'.format(i+1)])
+            
             
         if exs.fit_ecc[i]:
 
@@ -154,17 +160,12 @@ def log_like(par: dict, exs: ExoSystem):
                 return -np.inf, [], []
             
 
+    #check a order
+    if exs.fit_transit and not exs.fit_star:
+        logadiff = np.diff(np.array(logalist)[exs.transitsortorder])
+        if np.any(logadiff <= 0):
+            return -np.inf, [], []
 
-    if exs.fit_transit and np.any(exs.detrend) and exs.gp_rho_bound is not None:        
-
-        #check gp rhos
-        for i in range(len(exs.tt)):
-
-            if not exs.detrend[i]:
-                continue
-
-            if par['log(rho_gp) {0}'.format(exs.lcnames[i])] < exs.gp_rho_bound:
-                return -np.inf, [], []
 
     #check ld
     if exs.fit_transit and exs.fit_ld:
@@ -234,6 +235,9 @@ def log_like(par: dict, exs: ExoSystem):
     rpars = []
     ps = []
     tcs = []
+    
+    if exs.use_priors:
+        priorpar = par.copy()
 
     for i in range(exs.n):
         
@@ -245,6 +249,10 @@ def log_like(par: dict, exs: ExoSystem):
                 ps.append(pars[0])
                 tcs.append(pars[1])
                 tpars.append(pars)
+
+                if exs.use_priors:
+                    priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
+                    priorpar['Tc {0}'.format(i+1)] = pars[1]
 
                 if exs.is_rv[i] and exs.fit_rv:
 
@@ -262,6 +270,16 @@ def log_like(par: dict, exs: ExoSystem):
 
             rpars.append(get_rv_params(par, i+1))
             
+
+    if exs.use_priors:
+
+        priorlike = exs.allpriors.apply(priorpar)
+
+        if np.isinf(priorlike):
+            return -np.inf, [], []
+        
+        else:
+            like += priorlike
 
 
     if exs.fit_transit:
@@ -351,39 +369,6 @@ def log_like(par: dict, exs: ExoSystem):
 
 
         like += np.sum(lnGauss(exs.rv, rvm, exs.rverr))
-
-
-    if exs.density_prior and exs.fit_transit:
-
-        for i in range(exs.n):
-
-            if not exs.is_transit[i]:
-                continue
-
-            j = np.sum(exs.is_transit[:i])
-
-            rho = 0.018916375 * tpars[j][3]**3 / tpars[j][0]**2
-
-            like += lnGauss(exs.rhos, rho, exs.rhoserr)
-
-
-    if exs.timing_priors is not None:
-
-        for i in range(exs.n):
-
-            if i+1 in exs.timing_priors:
-
-                if exs.is_transit[i] and exs.fit_transit:
-
-                    k = np.sum(exs.is_transit[:i])
-
-                    like += lnGauss(exs.timing_priors[i+1][0][0], tpars[k][0], exs.timing_priors[i+1][0][1]) + lnGauss(exs.timing_priors[i+1][1][0], tpars[k][1], exs.timing_priors[i+1][1][1])
-
-                elif exs.is_rv[i] and exs.fit_rv:
-
-                    k = np.sum(exs.is_rv[:i])
-
-                    like += lnGauss(exs.timing_priors[i+1][0][0], rpars[k][0], exs.timing_priors[i+1][0][1]) + lnGauss(exs.timing_priors[i+1][1][0], rpars[k][1], exs.timing_priors[i+1][1][1])
 
 
 

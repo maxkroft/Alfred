@@ -19,6 +19,7 @@ import shutil
 from init_class import *
 from ld_grids import *
 from helper import *
+from priors import AllPriors
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('TKAgg')
@@ -281,8 +282,7 @@ class ExoSystem:
 
 
     def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, use_priors = False,
-            star_run = None, save_samples = False, sigma_clip = 5, gp_rho_bound = None, density_prior = False, rv_bkg_order = 0, timing_priors = None,
-            lc_supersample_size = 600, show_plots = True):
+            star_run = None, save_samples = False, sigma_clip = 5, rv_bkg_order = 0, lc_supersample_size = 600, show_plots = True):
 
         if not fit_transit and not fit_rv and not fit_star:
             print('You need to fit something!')
@@ -300,21 +300,17 @@ class ExoSystem:
             return
 
         self.rv_bkg_order = rv_bkg_order
-        self.gp_rho_bound = gp_rho_bound
-        self.density_prior = density_prior
         self.sigma_clip = sigma_clip
         self.fit_ld = fit_ld
         self.fit_transit = fit_transit
         self.fit_rv = fit_rv
         self.fit_star = fit_star
         self.use_priors = use_priors
-        self.timing_priors = {}
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
         if self.fit_star:
 
-            self.density_prior = False
             self.fit_ld = False
 
             self.misti = get_ichrone('mist')
@@ -341,54 +337,9 @@ class ExoSystem:
                 self.ldgrids[filt] = [interpu1, interpu2]
 
 
-        if timing_priors is not None:
-
-            if type(timing_priors) == str:
-
-                try:
-                    self.load_results(timing_priors)
-
-                except:
-                    print('timing_priors must either be a name of a previous run, or a dict of the form \\{planet number: [[p,perr],[tc,tcerr]]\\}.')
-                
-                for i in range(self.n):
-
-                    if 'P {0}'.format(i+1) in self.dres:
-
-                        z = [[],[]]
-
-                        z[0].append(np.median(self.dres['P {0}'.format(i+1)]))
-                        z[0].append(np.mean(np.diff(np.percentile(self.dres['P {0}'.format(i+1)], [16,50,84]))))
-
-                        if self.fit_ttv[i]:
-
-                            z[1].append(np.median(self.dres['Tc {0}'.format(i+1)]))
-                            z[1].append(np.mean(np.diff(np.percentile(self.dres['Tc {0}'.format(i+1)], [16,50,84]))))
-
-                        else:
-
-                            z[1].append(np.median(self.res['Tc {0}'.format(i+1)]))
-                            z[1].append(np.mean(np.diff(np.percentile(self.res['Tc {0}'.format(i+1)], [16,50,84]))))
-
-                        self.timing_priors[i+1] = z
-
-            elif type(timing_priors) == dict:
-
-                self.timing_priors = timing_priors
-
-            else:
-
-                print('timing_priors must either be a name of a previous run, or a dict of the form \\{planet number: [[p,perr],[tc,tcerr]]\\}.')
-
-
 
         if np.any(self.fit_ttv) and self.fit_transit:
             self.initialize_ttvs(name = self.init_ttvs_name)
-
-        if self.density_prior:
-            
-            self.rhos = 5.9052719 * self.ms / (4/3 * np.pi * self.rs**3)
-            self.rhoserr = self.rhos * np.sqrt((self.mserr/self.ms)**2 + (3*self.rserr/self.rs)**2)
 
 
         self.x0 = {}
@@ -475,7 +426,7 @@ class ExoSystem:
 
                 if self.detrend[i]:
 
-                    self.x0['log(rho_gp) {0}'.format(self.lcnames[i])] = np.max([1, self.gp_rho_bound]) if self.gp_rho_bound is not None else 1
+                    self.x0['log(rho_gp) {0}'.format(self.lcnames[i])] = 1
                     self.x0['log(sigma_gp) {0}'.format(self.lcnames[i])] = np.log(np.std(self.f[i]))
 
                     kernel = terms.SHOTerm(rho = np.exp(self.x0['log(rho_gp) {0}'.format(self.lcnames[i])]), sigma = np.exp(self.x0['log(sigma_gp) {0}'.format(self.lcnames[i])]), Q = 1/np.sqrt(2))
@@ -501,6 +452,16 @@ class ExoSystem:
                 self.x0['offset {0}'.format(self.rvnames[i])] = 0
 
         keys = list(self.x0.keys())
+
+        if self.use_priors:
+
+            if self.init_priors is None:
+                print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create().')
+
+            else:
+
+                self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+
 
         if nwalk < len(keys) * 2:
             nwalk = len(keys) * 2
