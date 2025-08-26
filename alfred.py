@@ -282,7 +282,7 @@ class ExoSystem:
 
 
     def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, use_priors = False,
-            star_run = None, save_samples = False, sigma_clip = 5, rv_bkg_order = 0, lc_supersample_size = 600, show_plots = True):
+            rv_bkg_order = 0, star_run = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False):
 
         if not fit_transit and not fit_rv and not fit_star:
             print('You need to fit something!')
@@ -306,12 +306,14 @@ class ExoSystem:
         self.fit_rv = fit_rv
         self.fit_star = fit_star
         self.use_priors = use_priors
+        self.order_a = order_a
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
         if self.fit_star:
 
             self.fit_ld = False
+            self.order_a = False
 
             self.misti = get_ichrone('mist')
 
