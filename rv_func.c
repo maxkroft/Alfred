@@ -1,6 +1,8 @@
 #include <math.h>
 #include <stdio.h>
-# define M_PI		3.14159265358979323846
+#ifndef M_PI
+#define M_PI		3.14159265358979323846
+#endif
 
 double main(void){}
 
@@ -11,14 +13,14 @@ double findRoot(double e, double t, double tp, double p){
 
     E = 2*M_PI * ((t - tp) / p);
 
-    for (i=0;i<20;i++){
+    for (i=0;i<100;i++){
 
         f = E - e * sin(E) - 2*M_PI * ((t - tp) / p);
         df = 1 - e * cos(E);
         dx = f/df;
         E -= dx;
 
-        if (fabs(dx) < 1e-8) return E;
+        if (fabs(dx) < 1e-9) return E;
 
     }
 
