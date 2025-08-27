@@ -6,10 +6,7 @@ from scipy.stats import linregress
 from celerite2 import GaussianProcess, terms
 
 from alfred import ExoSystem
-
-from ctypes import c_double, c_int, CDLL
-rv_func = CDLL(os.path.dirname(os.path.realpath(__file__))+'/rv_func.so')
-arr5 = c_double * 5
+from _rv_func import _rvModel
 
 
 def calc_m_from_k(p, k, e, inc, mstar):
@@ -52,23 +49,12 @@ def rvModel(par, t):
 
     #par = [p, tc, k, e, w]
 
-    n = len(t)
-    n2 = c_int(n)
+    par = np.array(par, dtype = float)
+    t = np.array(t, dtype = float)
 
-    par2 = arr5()
-    for i in range(5):
-        par2[i] = par[i]
+    rv = _rvModel(par, t)
 
-    arrn = c_double * n
-    t2 = arrn()
-    for i in range(n):
-        t2[i] = t[i]
-
-    rv = arrn()
-
-    rv_func.rvModel(par2, t2, n2, rv)
-
-    return np.array(rv)
+    return rv
 
 
 def get_transit_params(par, i, ar = None):
