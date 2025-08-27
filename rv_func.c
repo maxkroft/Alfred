@@ -4,9 +4,11 @@
 #define M_PI		3.14159265358979323846
 #endif
 
-double main(void){}
+int main(void){
+    return 0;
+}
 
-double findRoot(double e, double t, double tp, double p){
+double findRoot(const double e, const double t, const double tp, const double p){
 
     int i;
     double f, df, dx, E;
@@ -24,10 +26,12 @@ double findRoot(double e, double t, double tp, double p){
 
     }
 
+    return E;
+
 }
 
 
-void rvModel(double *par, double *t, int n, double *rv){
+void rvModel(const double par[], const double t[], const int n, double rv[]){
     //par = [p, tc, k, e, w]
 
     double fc = M_PI/2 - par[4];
