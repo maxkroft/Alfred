@@ -16,10 +16,10 @@ from tqdm.notebook import tqdm
 import os
 import shutil
 
-from init_class import *
-from ld_grids import *
-from helper import *
-from priors import *
+from alfred.init_class import *
+from alfred.ld_grids import *
+from alfred.helper import *
+from alfred.priors import *
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('TKAgg')

@@ -5,8 +5,8 @@ import os
 from scipy.stats import linregress
 from celerite2 import GaussianProcess, terms
 
-from exosystem import ExoSystem
-from _rv_func import _rvModel
+from alfred.exosystem import ExoSystem
+from alfred._rv_func import _rvModel
 
 
 def calc_m_from_k(p, k, e, inc, mstar):
