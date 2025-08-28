@@ -14,15 +14,15 @@ from astropy import constants
 from astropy.timeseries import LombScargle
 from isochrones import SingleStarModel, get_ichrone
 import pickle
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 import os
+import copy
 import shutil
 
 from alfred._rv_func import _rvModel
 from alfred.init_class import *
 from alfred.ld_grids import *
 from alfred.priors import *
-from alfred import pymultinest_inst
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('TKAgg')
@@ -41,7 +41,7 @@ class ExoSystem:
         self.init_rv = Init_rv(self.direc, init_rv).from_file()
         self.init_ld = Init_ld(self.direc, init_ld).from_file()
 
-        if os.path.exists(self.direc+'/'+self.init_priors):
+        if os.path.exists(self.direc+'/'+init_priors):
             self.init_priors = Init_priors(self.direc, init_priors).from_file()
         else:
             self.init_priors = None
@@ -229,9 +229,9 @@ class ExoSystem:
             self.f.append(np.array(f0))
             self.ferr.append(np.array(ferr0 * self.lc_err_scale[i]))
 
-        self.tt_orig = self.tt.deepcopy()
-        self.f_orig = self.f.deepcopy()
-        self.ferr_orig = self.ferr.deepcopy()
+        self.tt_orig = copy.deepcopy(self.tt)
+        self.f_orig = copy.deepcopy(self.f)
+        self.ferr_orig = copy.deepcopy(self.ferr)
 
         #rv files
 
@@ -287,6 +287,18 @@ class ExoSystem:
     def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, use_priors = False,
             rv_bkg_order = 0, star_run = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False):
 
+        self.nburn = nburn
+        self.nrun = nrun
+        self.nwalk = nwalk
+        self.rv_bkg_order = rv_bkg_order
+        self.sigma_clip = sigma_clip
+        self.fit_ld = fit_ld
+        self.fit_transit = fit_transit
+        self.fit_rv = fit_rv
+        self.fit_star = fit_star
+        self.order_a = order_a
+
+
         if not fit_transit and not fit_rv and not fit_star:
             print('You need to fit something!')
             return
@@ -299,21 +311,14 @@ class ExoSystem:
             os.mkdir(self.direc+'Plots/'+name)
         
         self.use_priors = use_priors
-        if self.init_priors is None:
+        if self.init_priors is None and use_priors:
             print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create().')
             self.use_priors = False
 
         if not fit_transit and not fit_rv and fit_star:
             self.fit_star_only(name)
             return
-
-        self.rv_bkg_order = rv_bkg_order
-        self.sigma_clip = sigma_clip
-        self.fit_ld = fit_ld
-        self.fit_transit = fit_transit
-        self.fit_rv = fit_rv
-        self.fit_star = fit_star
-        self.order_a = order_a
+        
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
@@ -471,14 +476,14 @@ class ExoSystem:
             self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
 
 
-        if nwalk < len(keys) * 2:
-            nwalk = len(keys) * 2
+        if self.nwalk < len(keys) * 2:
+            self.nwalk = len(keys) * 2
 
         if self.fit_transit:
 
-            self.tt = self.tt_orig.deepcopy()
-            self.f = self.f_orig.deepcopy()
-            self.ferr = self.ferr_orig.deepcopy()
+            self.tt = copy.deepcopy(self.tt_orig)
+            self.f = copy.deepcopy(self.f_orig)
+            self.ferr = copy.deepcopy(self.ferr_orig)
 
             self.masks = [np.ones(len(self.tt[i]), dtype = bool) for i in range(len(self.tt))]
         
@@ -663,87 +668,87 @@ class ExoSystem:
             self.parnames[k] = i
 
             if 'log(P)' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.0001, nwalk)))
+                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.0001, self.nwalk)))
 
             if 'Tc' in k:
-                pos.append(np.random.normal(x[k], 0.0001, nwalk))
+                pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
 
             if 'TT' in k:
-                pos.append(np.random.normal(x[k], 0.0001, nwalk))
+                pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
 
             if 'ror' in k:
-                pos.append(np.random.normal(x[k], 0.1*x[k], nwalk))
+                pos.append(np.random.normal(x[k], 0.1*x[k], self.nwalk))
 
             if 'log(a/rs)' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.1, nwalk)))
+                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.1, self.nwalk)))
 
             if 'cos(i)' in k:
-                pos.append(np.abs(np.random.normal(x[k], 0.001, nwalk)))
+                pos.append(np.abs(np.random.normal(x[k], 0.001, self.nwalk)))
 
             if 'log(K)' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01, nwalk)))
+                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01, self.nwalk)))
 
             if 'secw' in k or 'sesw' in k:
-                z = np.random.normal(x[k], 0.01, nwalk)
+                z = np.random.normal(x[k], 0.01, self.nwalk)
                 j = np.where(np.abs(z) > 1)[0]
                 z[j] = 0.9 * z[j] / np.abs(z[j])
                 pos.append(z)
 
             if 'F0' in k:
-                pos.append(np.random.normal(x[k], 0.001, nwalk))
+                pos.append(np.random.normal(x[k], 0.001, self.nwalk))
 
             if 'trend' in k:
                 if '0' in k:
-                    pos.append(np.random.normal(x[k], 0.1, nwalk))
+                    pos.append(np.random.normal(x[k], 0.1, self.nwalk))
                 if '1' in k:
-                    pos.append(np.random.normal(x[k], 0.01, nwalk))
+                    pos.append(np.random.normal(x[k], 0.01, self.nwalk))
                 if '2' in k:
-                    pos.append(np.random.normal(x[k], 0.001, nwalk))
+                    pos.append(np.random.normal(x[k], 0.001, self.nwalk))
 
             if '_gp' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01*np.exp(x[k]), nwalk)))
+                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01*np.exp(x[k]), self.nwalk)))
 
             if 'offset' in k:
-                pos.append(np.random.normal(x[k], 0.1, nwalk))
+                pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
             if k in ['u1','u2']:
-                z = np.abs(np.random.normal(x[k], 0.01, nwalk))
+                z = np.abs(np.random.normal(x[k], 0.01, self.nwalk))
                 j = np.where(z > 1)[0]
                 z[j] = 0.9 * z[j]
                 pos.append(z)
 
             if k == 'eep':
-                pos.append(np.random.normal(x[k], 1, nwalk))
+                pos.append(np.random.normal(x[k], 1, self.nwalk))
 
             if k == 'age':
-                pos.append(np.random.normal(x[k], 0.05, nwalk))
+                pos.append(np.random.normal(x[k], 0.05, self.nwalk))
 
             if k == 'feh':
-                z = np.random.normal(x[k], 0.01, nwalk)
+                z = np.random.normal(x[k], 0.01, self.nwalk)
                 j = np.where(np.abs(z) > 0.5)[0]
                 z[j] = 0.45 * np.sign(z[j])
                 pos.append(z)
 
             if k == 'distance':
-                pos.append(np.random.normal(x[k], 1, nwalk))
+                pos.append(np.random.normal(x[k], 1, self.nwalk))
 
             if k == 'AV':
-                pos.append(np.abs(np.random.normal(x[k], 0.01, nwalk)))
+                pos.append(np.abs(np.random.normal(x[k], 0.01, self.nwalk)))
 
 
         pos = np.transpose(np.array(pos))
 
 
-        sampler = emcee.EnsembleSampler(nwalkers = nwalk, ndim = len(x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
+        sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
 
         print('Running MCMC burn-in.')
         #burn in
-        state = sampler.run_mcmc(pos, nburn, progress = 'notebook')
+        state = sampler.run_mcmc(pos, self.nburn, progress = True)
         sampler.reset()
 
         print('Running MCMC sampling.')
         #run
-        sampler.run_mcmc(state, nrun, progress = 'notebook')
+        sampler.run_mcmc(state, self.nrun, progress = True)
 
         # print(sampler.get_autocorr_time(quiet = True))
 
@@ -932,6 +937,8 @@ class ExoSystem:
 
         out = []
         for x in self.res:
+            if x == 'log_like':
+                continue
             out.append([x, np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
         for x in self.dres:
             out.append([x, np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
@@ -996,7 +1003,6 @@ class ExoSystem:
 
         misti = get_ichrone('mist')
 
-
         props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr),
         'J': (self.Jmag, self.Jmagerr), 'H': (self.Hmag, self.Hmagerr), 'K': (self.Kmag, self.Kmagerr),
         'W1': (self.W1mag, self.W1magerr), 'W2': (self.W2mag, self.W2magerr), 'W3': (self.W3mag, self.W3magerr),
@@ -1008,12 +1014,12 @@ class ExoSystem:
         if not np.isnan(self.feh):
             props['feh'] = (self.feh, self.feherr)
 
-
         mod = SingleStarModel(misti, name=name, **props)
 
         if self.use_priors:
             mod = apply_star_priors(self.init_priors.table, mod)
         
+
         mod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
 
 
@@ -1075,9 +1081,9 @@ class ExoSystem:
             
             self.masks = pickle.load(open(self.direc+'/Masks/'+name+'_masks.p', 'rb'))
 
-            self.tt = self.tt_orig.deepcopy()
-            self.f = self.f_orig.deepcopy()
-            self.ferr = self.ferr_orig.deepcopy()
+            self.tt = copy.deepcopy(self.tt_orig)
+            self.f = copy.deepcopy(self.f_orig)
+            self.ferr = copy.deepcopy(self.ferr_orig)
 
             for i in range(len(self.tt)):
                 self.tt[i] = self.tt[i][self.masks[i]]
@@ -2568,6 +2574,7 @@ def log_like(par: dict, exs: ExoSystem):
             return -np.inf, [], []
 
         starlike = exs.starmod.lnlike([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+        starlike += exs.starmod.lnprior([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
 
         if np.isnan(starlike):
             return -np.inf, [], []
@@ -2754,3 +2761,22 @@ def log_like(par: dict, exs: ExoSystem):
 
 
     return like if not np.isnan(like) else -np.inf, np.array(ps), np.array(tcs)
+
+
+def log_like_staronly(par: dict, exs: ExoSystem):
+
+    #check feh
+    if not -0.5 <= par['feh'] <= 0.5:
+        return -np.inf
+    
+    #check AV
+    if par['AV'] < 0:
+        return -np.inf
+
+    starlike = exs.starmod.lnlike([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+    starlike += exs.starmod.lnprior([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+
+    if np.isnan(starlike):
+        return -np.inf
+    
+    return starlike
