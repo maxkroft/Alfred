@@ -1,0 +1,11 @@
+numpy
+matplotlib
+emcee
+corner
+batman-package
+scipy
+celerite2
+astropy
+tqdm
+isochrones
+svo_filters

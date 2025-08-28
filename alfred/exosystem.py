@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import emcee
 import corner
 import batman
@@ -11,8 +12,6 @@ from astropy.io import fits
 from astropy import units as u
 from astropy import constants
 from astropy.timeseries import LombScargle
-import matplotlib
-from celerite2 import GaussianProcess, terms
 from isochrones import SingleStarModel, get_ichrone
 import pickle
 from tqdm.notebook import tqdm

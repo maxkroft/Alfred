@@ -1,0 +1,30 @@
+[build-system]
+requires = [
+    "setuptools >= 61.0",
+    "cython",
+    "numpy"
+    ]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Alfred"
+dynamic = ["version"]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "emcee",
+    "corner",
+    "batman-package",
+    "scipy",
+    "celerite2",
+    "astropy",
+    "tqdm",
+    "isochrones",
+    "svo_filters"
+    ]
+
+[tool.setuptools.dynamic]
+version = {attr = "alfred.__version__"}
+
+[tool.setuptools.packages]
+find = {}
