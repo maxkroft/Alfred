@@ -4,12 +4,10 @@ from scipy.interpolate import LinearNDInterpolator
 import pickle
 import os
 
-try:
-    from exoctk.limb_darkening import limb_darkening_fit as ldf
-except:
-    print('exoctk not installed')
+from alfred import ld_grid_dir, exoctk_inst
 
-from alfred import ld_grid_dir
+if exoctk_inst:
+    from exoctk.limb_darkening import limb_darkening_fit as ldf
 
 ld_grid_list = []
 for fname in os.listdir(ld_grid_dir):
@@ -18,6 +16,10 @@ for fname in os.listdir(ld_grid_dir):
 
 
 def generate_ld_grid(filter, filter_nickname):
+
+    if not exoctk_inst:
+        print('Cannot generate new limb darkening grids without installing exoctk and its data. See optional installation instructions in the docs.')
+        return
 
     ldc = ldf.LDC()
 
@@ -66,6 +68,7 @@ def load_ld_grid(filter_name: str):
         print('No limb darkening grid available for filter {0}.'.format(filter_name))
         print('Please use one of the following filters with limb darkening grids available:\n{0}'.format(ld_grid_list))
         print('Or run generate_ld_grid to create a new grid using a valid svo filter name and nickname {0}.'.format(filter_name))
+        print('Note that this requires installation of exoctk and its data. See optional installation instructions in the docs.')
         print('Available svo filters can be found by calling svo.filters().')
         raise
 

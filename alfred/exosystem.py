@@ -22,6 +22,7 @@ from alfred._rv_func import _rvModel
 from alfred.init_class import *
 from alfred.ld_grids import *
 from alfred.priors import *
+from alfred import pymultinest_inst
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('TKAgg')
