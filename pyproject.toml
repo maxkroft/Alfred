@@ -20,7 +20,10 @@ dependencies = [
     "astropy",
     "tqdm",
     "isochrones",
-    "svo_filters"
+    "svo_filters",
+    "setuptools < 81",
+    "holoviews",
+    "numba"
     ]
 
 [tool.setuptools.dynamic]

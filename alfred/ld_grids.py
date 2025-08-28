@@ -1,9 +1,13 @@
-from exoctk.limb_darkening import limb_darkening_fit as ldf
 from svo_filters import svo
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator
 import pickle
 import os
+
+try:
+    from exoctk.limb_darkening import limb_darkening_fit as ldf
+except:
+    print('exoctk not installed')
 
 from alfred import ld_grid_dir
 
