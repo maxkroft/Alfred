@@ -76,3 +76,12 @@ def load_ld_grid(filter_name: str):
     interpu2 = LinearNDInterpolator(grid['coords'], grid['u2'])
 
     return interpu1, interpu2
+
+
+def calc_ld(filter_name: str, T, logg, feh):
+
+    interpu1, interpu2 = load_ld_grid(filter_name)
+
+    interp_input = np.array([T, logg, feh]).T
+
+    return interpu1(interp_input), interpu2(interp_input)
