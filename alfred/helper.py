@@ -5,7 +5,7 @@ import os
 from scipy.stats import linregress
 from celerite2 import GaussianProcess, terms
 
-from alfred import ExoSystem
+from exosystem import ExoSystem
 from _rv_func import _rvModel
 
 
