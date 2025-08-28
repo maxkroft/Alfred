@@ -5,8 +5,10 @@ from scipy.interpolate import LinearNDInterpolator
 import pickle
 import os
 
+from alfred import ld_grid_dir
+
 ld_grid_list = []
-for fname in os.listdir(os.path.dirname(os.path.realpath(__file__))+'/ld_grids'):
+for fname in os.listdir(ld_grid_dir):
     if fname[-7:] == '_grid.p':
         ld_grid_list.append(fname[:-7])
 
