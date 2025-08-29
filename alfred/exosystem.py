@@ -1011,7 +1011,7 @@ class ExoSystem:
 
             self.plot_sed_fit(name, show_plot = show_plots)
 
-
+        print('')
         self.print_results(name)
 
 
@@ -1087,6 +1087,7 @@ class ExoSystem:
 
         self.plot_sed_fit(name, show_plots)
 
+        print('')
         self.print_results(name)
 
 
