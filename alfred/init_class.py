@@ -8,6 +8,9 @@ class InitFile:
     def __init__(self, direc, name):
 
         self.direc = direc
+
+        if len(name) < 4 or name[-4:] != '.txt':
+            name += '.txt'
         self.name = name
     
     def from_file(self):
@@ -23,6 +26,8 @@ class InitFile:
         
     def rename(self, newname):
 
+        if len(newname) < 4 or newname[-4:] != '.txt':
+            newname += '.txt'
         self.name = newname
 
 
@@ -613,7 +618,9 @@ class Init_priors(InitFile):
 
             if priortype not in ['U', 'G']:
 
-                input('Prior type is not recognized. Enter to try again.')
+                z = input('Prior type is not recognized. Enter to try again. Type "stop" to exit.')
+                if z.lower() == 'stop':
+                    return
 
             else:
 
