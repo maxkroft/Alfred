@@ -1614,9 +1614,7 @@ class ExoSystem:
                 starpars = np.array([Tstar, loggstar, self.res['feh']]).T
                 ld = np.array([self.ldgrids[self.filters[i]][0](starpars)[0], self.ldgrids[self.filters[i]][1](starpars)[0]]).T
 
-            detrend = False
-            if 'log(rho_gp) {0}'.format(sec) in self.res:
-                detrend = True
+            detrend = self.detrend[i]
 
             n = len(self.res['ror 1'])
 
