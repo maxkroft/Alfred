@@ -493,6 +493,9 @@ class ExoSystem:
         if self.fit_transit:
             print('\nStarting sigma clipping of lightcurves.')
 
+
+        clipped = [0]*len(self.tt)
+
         for i in range(10):
 
             res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(keys, x)}, *args)[0], [self.x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
@@ -551,7 +554,6 @@ class ExoSystem:
                     pars.append(get_transit_params(x, j+1, ar = arlist[j] if self.fit_star else None))
 
 
-            clipped = [0]*len(self.tt)
             lastclipped = 0
 
             for j in range(len(self.tt)):
@@ -1009,6 +1011,9 @@ class ExoSystem:
             pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
 
             self.plot_sed_fit(name, show_plot = show_plots)
+
+
+        self.print_results(name)
 
 
     def fit_star_only(self, name):
@@ -2311,7 +2316,7 @@ class ExoSystem:
 
     def print_results(self, name):
 
-        tab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|')
+        tab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
         print(tab)
 
 
