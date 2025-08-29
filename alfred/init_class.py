@@ -67,7 +67,10 @@ class Init_lcs(InitFile):
         fpath = input('Absolute path to lightcurve file to move here: ')
         fname = fpath[fpath.rfind('/')+1:]
         row.append(fname)
-        shutil.copyfile(fpath, self.direc+'/'+fname)
+        try:
+            shutil.copyfile(fpath, self.direc+'/'+fname)
+        except shutil.SameFileError:
+            print('File already there.')
 
         nickname = input('Nickname for the data set (e.g. "TESS S57"): ')
         row.append(nickname)
