@@ -2309,6 +2309,12 @@ class ExoSystem:
             plt.close()
 
 
+    def print_results(self, name):
+
+        tab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|')
+        print(tab)
+
+
     def calc_rv_bic(self):
 
         k = len(self.res)-1
