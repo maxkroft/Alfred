@@ -1823,7 +1823,6 @@ class ExoSystem:
 
                 ax['a'].tick_params(axis = 'both', labelsize = 15)
                 ax['a'].set_yticks(ticks = ax['a'].get_yticks(), labels = np.round((np.array(ax['a'].get_yticks())-1)*1000, 1))
-                ax['a'].legend(fontsize = 15)
                 ax['a'].set_title(str(sec), fontsize = 20)
 
             ax['b'].errorbar(self.tt[i], self.f[i] - (gpf if self.detrend[i] else 0), yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
@@ -1842,7 +1841,10 @@ class ExoSystem:
 
             ax['b'].tick_params(axis = 'both', labelsize = 15)
             ax['b'].legend(fontsize = 15)
-            ax['b'].sharey(ax['a'])
+
+            if not self.detrend[i]:
+                ax['b'].set_yticks(ticks = ax['b'].get_yticks(), labels = np.round((np.array(ax['b'].get_yticks())-1)*1000, 1))
+                ax['b'].set_title(str(sec), fontsize = 20)
 
             mod = np.sum(fm, axis = 0) + mean + (gpf if self.detrend[i] else 0)
             ax['c'].errorbar(self.tt[i], self.f[i] - mod, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
@@ -1852,11 +1854,14 @@ class ExoSystem:
 
             ax['c'].tick_params(axis = 'both', labelsize = 15)
             ax['c'].set_yticks(ticks = ax['c'].get_yticks(), labels = np.round(np.array(ax['c'].get_yticks())*1000, 1))
-            ax['a'].sharex(ax['c'])
             ax['b'].sharex(ax['c'])
-            plt.setp(ax['a'].get_xticklabels(), visible = False)
             plt.setp(ax['b'].get_xticklabels(), visible = False)
             ax['c'].set_xlabel('Time [BJD-2450000]', fontsize = 20)
+
+            if self.detrend[i]:
+                ax['b'].sharey(ax['a'])
+                ax['a'].sharex(ax['c'])
+                plt.setp(ax['a'].get_xticklabels(), visible = False)
 
             fig.supylabel('Relative Flux [ppt]', fontsize = 20)
 
