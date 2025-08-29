@@ -1523,7 +1523,7 @@ class ExoSystem:
 
     def gen_lcs(self, name, lc_supersample_size = 600):
 
-        print('Generating light curves for plots.')
+        print('\nGenerating light curves for plots.')
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
@@ -1996,7 +1996,7 @@ class ExoSystem:
 
     def gen_rv(self, name):
 
-        print('Generating RV models for plots.')
+        print('\nGenerating RV models for plots.')
 
         n = len(self.res['log_like'])
 
