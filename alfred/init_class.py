@@ -543,15 +543,20 @@ class Init_priors(InitFile):
 
         while True:
 
-            var = input('Variable name. Type "help" to see a list of variables.')
+            var = input('Variable name. Type "help" to see a list of variables. Type "stop" to exit.')
 
             if var.lower() == 'help':
 
                 self.var_help()
 
+            elif var.lower() == 'stop':
+                return
+
             elif var not in self.allowed_vars:
 
-                input('Variable is not recognized. Enter to try again.')
+                z = input('Variable is not recognized. Enter to try again. Type "stop" to exit.')
+                if z.lower() == 'stop':
+                    return
 
             else:
                 
