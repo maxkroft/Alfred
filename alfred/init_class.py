@@ -67,7 +67,7 @@ class Init_lcs(InitFile):
         fpath = input('Absolute path to lightcurve file to move here: ')
         fname = fpath[fpath.rfind('/')+1:]
         row.append(fname)
-        shutil.copyfile(fpath, dir+'/'+fname)
+        shutil.copyfile(fpath, self.direc+'/'+fname)
 
         nickname = input('Nickname for the data set (e.g. "TESS S57"): ')
         row.append(nickname)
@@ -141,7 +141,7 @@ class Init_rv(InitFile):
         fpath = input('Absolute path to RV file to move here: ')
         fname = fpath[fpath.rfind('/')+1:]
         row.append(fname)
-        shutil.copyfile(fpath, dir+'/'+fname)
+        shutil.copyfile(fpath, self.direc+'/'+fname)
 
         nickname = input('Nickname for the data set (e.g. "NEID"): ')
         row.append(nickname)
