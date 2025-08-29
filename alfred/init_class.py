@@ -144,7 +144,10 @@ class Init_rv(InitFile):
         fpath = input('Absolute path to RV file to move here: ')
         fname = fpath[fpath.rfind('/')+1:]
         row.append(fname)
-        shutil.copyfile(fpath, self.direc+'/'+fname)
+        try:
+            shutil.copyfile(fpath, self.direc+'/'+fname)
+        except shutil.SameFileError:
+            print('File already there.')
 
         nickname = input('Nickname for the data set (e.g. "NEID"): ')
         row.append(nickname)
