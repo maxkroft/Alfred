@@ -25,7 +25,6 @@ from alfred.ld_grids import *
 from alfred.priors import *
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
-matplotlib.use('TKAgg')
 np.set_printoptions(legacy='1.25')
 
 
@@ -2317,7 +2316,7 @@ class ExoSystem:
     def print_results(self, name):
 
         tab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
-        print(tab)
+        tab.pprint_all()
 
 
     def calc_rv_bic(self):
