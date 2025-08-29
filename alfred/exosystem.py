@@ -2674,7 +2674,7 @@ def log_like(par: dict, exs: ExoSystem):
 
         for i in range(len(exs.tt)):
 
-            fm = par['mean {0}'.format(exs.lcnames[i])]
+            fm = par['F0 {0}'.format(exs.lcnames[i])]
 
             ld = exs.ld[exs.filters[i]]
 
