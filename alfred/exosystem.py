@@ -29,9 +29,24 @@ np.set_printoptions(legacy='1.25')
 
 
 class ExoSystem:
+    """A class for fitting exoplanet systems.
+    """
 
+    def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt',
+                 init_rv = 'init_rv.txt', init_ld = 'init_ld.txt', init_priors = 'init_priors.txt', init_ttvs = 'init_ttvs.txt'):
+        """Initialize an ExoSystem object with a directory and init files. The init files must all be created using alfred.
 
-    def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt', init_rv = 'init_rv.txt', init_ld = 'init_ld.txt', init_priors = 'init_priors.txt', init_ttvs = 'init_ttvs.txt'):
+        Args:
+            direc (str): The directory in which the init files, data, outputs, and plots of the ExoSystem are stored.
+            init_planets (str, optional): Name of the planet parameter init file. Default is init_planets.txt.
+            init_star (str, optional): Name of the star parameter init file. Default is init_star.txt.
+            init_lcs (str, optional): Name of the light curve data init file. Default is init_lcs.txt.
+            init_rv (str, optional): Name of the RV data init file. Default is init_rv.txt.
+            init_ld (str, optional): Name of the limb darkening parameter init file. Default is init_ld.txt.
+            init_priors (str, optional): Name of the priors init file. Default is init_priors.txt.
+            init_ttvs (str, optional): Name of the TTV init file. Default is init_ttvs.txt.
+        """
+
 
         self.direc = direc
         self.init_planets = Init_planets(self.direc, init_planets).from_file()
@@ -283,8 +298,65 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name, nburn, nrun, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, use_priors = False,
-            rv_bkg_order = 0, star_run = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False):
+    def fit(self, name: str, nburn: int, nrun: int, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, use_priors = False,
+            rv_bkg_order = 0, star_run: str = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False) -> None:
+        """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
+        
+        Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
+        will perform up to 10 rounds of sigma clipping to get rid of outliers in the lightcurve, stopping when the number of clipped
+        points in a round is less than 10. Clipped points are masked out, and masks are saved in the Masks folder. During each round, masked
+        points are shown in a plot before continuing. MCMC is performed with a joint likelihood function on all of the specified data.
+        
+        When fitting stellar parameters only, runs ExoSystem.fit_star_only instead. See documentation on that function for more details.
+        When fitting stellar parameters simultaneously with planet parameters, runs a star-only fit first using the isochrones multinest fit
+        function to get physical starting values for the stellar parameters.
+        
+        Flattened and thinned MCMC chains are stored to pickle files ending in _res.p in the Output folder, as well as chains of derived parameters
+        in a pickle file ending in _dres.p. A human readable table of median derived parameters, as well as their upper and lower
+        uncertainties, is saved to the Results folder and printed at the end. Plots of the MCMC chains and corner plots are generated and
+        saved to a folder in the Plots folder, along with plots of the best fit models to the data.
+
+        Args:
+            name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
+                and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
+                or plotted again.
+            nburn (int): Number of burn-in steps for the MCMC. These steps are thrown out before saving the results and making plots. The burn-in
+                allows the chains to settle into the maximum likelihood.
+            nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
+                burn-in steps.
+            nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
+                less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
+            fit_transit (bool, optional): Whether or not to fit transits to the light curve data. Default is True.
+            fit_rv (bool, optional): Whether or not to fit a model to the RV data. Default is True.
+            fit_star (bool, optional): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
+                (with or without RV data as well). Cannot be fit with just RV data. Default is False.
+            fit_ld (bool, optional): Whether or not to fit quadratic limb darkening coefficients as free parameters. Will be overriden to False if
+                fit_star is True, as limb darkening coefficients are generated at each step in that case. Default is False.
+            use_priors (bool, optional): Whether or not to use user specified priors from the init_priors file specified during ExoSystem
+                initialization. Default is False.
+            rv_bkg_order (int, optional): Polynomial order for the background trend fit to the RV data. Can be 0 (for a flat line), 1 (for a slope),
+                or 2 (for a quadratic). Default is 0.
+            star_run (str, optional): Name of a previous fit run that included stellar parameters. If specified, provides starting values for the
+                stellar parameters in this fit. If not specified, or it doesn't exist, runs a star only fit before continuing to get physical starting
+                parameters. Default is None.
+            save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
+                if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
+                and these take up additional storage. Default is False.
+            sigma_clip (int, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
+                sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
+                that probably shouldn't be, increase this parameter and run it again. Default is 5.
+            lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
+                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer. For example,
+                if a data set is being supersampled 2 times, each point in the data set will be modeled as the average of two points with half the
+                exposure time. Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the
+                cost of slowing down the fit. Default is 600 seconds.
+            show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
+            order_a (bool, optional): Whether or not to put an order prior on the planetary semi-major axes in a transit fit with multiple transiting
+                planets. If True, restricts the semi-major axis of each planet to be greater than those of planets with shorter orbital periods. If
+                fitting the stellar parameters, overrides this to False, since the stellar mass is instead used to set semi-major axes. Default is
+                False.
+        """
+
 
         self.nburn = nburn
         self.nrun = nrun
@@ -298,13 +370,17 @@ class ExoSystem:
         self.order_a = order_a
 
 
+        if self.rv_bkg_order not in [0,1,2]:
+            print('Invalid RV background polynomial order. Must be 0, 1, or 2.')
+            return None
+
         if not fit_transit and not fit_rv and not fit_star:
             print('You need to fit something!')
-            return
+            return None
         
         if not fit_transit and fit_rv and fit_star:
             print('To fit stellar parameters simultaneously with planet parameters, please use transit data (set fit_transit to True).')
-            return
+            return None
         
         if not os.path.isdir(self.direc+'Plots/'+name):
             os.mkdir(self.direc+'Plots/'+name)
@@ -316,7 +392,7 @@ class ExoSystem:
 
         if not fit_transit and not fit_rv and fit_star:
             self.fit_star_only(name, show_plots)
-            return
+            return None
         
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
@@ -404,23 +480,29 @@ class ExoSystem:
 
             if star_run is not None:
 
-                self.load_results(star_run)
-
                 try:
 
-                    self.x0['eep'] = np.median(self.res['eep'])
-                    self.x0['age'] = np.median(self.res['age'])
-                    self.x0['feh'] = np.median(self.res['feh'])
-                    self.x0['distance'] = np.median(self.res['distance'])
-                    self.x0['AV'] = np.median(self.res['AV'])
+                    self.load_results(star_run)
+
+                    try:
+
+                        self.x0['eep'] = np.median(self.res['eep'])
+                        self.x0['age'] = np.median(self.res['age'])
+                        self.x0['feh'] = np.median(self.res['feh'])
+                        self.x0['distance'] = np.median(self.res['distance'])
+                        self.x0['AV'] = np.median(self.res['AV'])
+
+                    except:
+
+                        self.x0['eep'] = np.median(self.dres['eep'])
+                        self.x0['age'] = np.median(self.dres['age'])
+                        self.x0['feh'] = np.median(self.dres['feh'])
+                        self.x0['distance'] = np.median(self.dres['distance'])
+                        self.x0['AV'] = np.median(self.dres['AV'])
 
                 except:
 
-                    self.x0['eep'] = np.median(self.dres['eep'])
-                    self.x0['age'] = np.median(self.dres['age'])
-                    self.x0['feh'] = np.median(self.dres['feh'])
-                    self.x0['distance'] = np.median(self.dres['distance'])
-                    self.x0['AV'] = np.median(self.dres['AV'])
+                    print('star_run {0} does not exist. Running an initial star only fit.'.format(star_run))
 
             else:
 
@@ -1015,7 +1097,17 @@ class ExoSystem:
         self.print_results(name)
 
 
-    def fit_star_only(self, name, show_plots):
+    def fit_star_only(self, name: str, show_plots = True):
+        """Fits stellar parameters by themselves. Essentially a wrapper on the isochrones package. Fits using multinest rather than MCMC.
+
+        Outputs are done in the same way as the fit function.
+
+        Args:
+            name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
+                and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
+                or plotted again.
+            show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
+        """
 
         misti = get_ichrone('mist')
 
@@ -1091,14 +1183,23 @@ class ExoSystem:
         self.print_results(name)
 
 
-    def load_results(self, name):
+    def load_results(self, name: str):
+        """Loads in the results from a previous run. Direct chains will be accessable in ExoSystem.res and ExoSystem.dres. If the run includes a
+        transit fit, loads in and applies masks to the light curves. Attempts to load in best fit transit models and RV models (if they exist) to
+        ExoSystem.fm and ExoSystem.rvm, respectively. Attempts to load in SED best fit magnitudes and errors (if they exist) into ExoSystem.magfit
+        and ExoSystem.magfiterr, respectively. Attempts to load in unflattened, un-thinned MCMC chains if they exist. Paramater name map is saved to
+        ExoSystem.parnames, chains are saved to ExoSystem.samples, log likelihood values are saved to ExoSystem.log_likes_full.
+
+        Args:
+            name (str): Name of the previous run to load in.
+        """
 
         if os.path.exists(self.direc+'/Output/'+name+'_dres.p'):
             self.dres = pickle.load(open(self.direc+'/Output/'+name+'_dres.p', 'rb'))
         
         else:
             print('No run named {0}.'.format(name))
-            return
+            return None
     
         if os.path.exists(self.direc+'/Output/'+name+'_res.p'):
             self.res = pickle.load(open(self.direc+'/Output/'+name+'_res.p', 'rb'))
@@ -1116,30 +1217,65 @@ class ExoSystem:
                 self.f[i] = self.f[i][self.masks[i]]
                 self.ferr[i] = self.ferr[i][self.masks[i]]
 
+        try:
+            self.load_lcs(name)
+        except:
+            pass
+
+        try:
+            self.load_rv(name)
+        except:
+            pass
+
+        try:
+            self.load_magfit(name)
+        except:
+            pass
+
+        try:
+            self.load_samples(name)
+        except:
+            pass
+
         
-    def load_lcs(self, name):
+    def load_lcs(self, name: str):
+        """Loads in the best fit transit model of a previous run into ExoSystem.fm.
 
-        self.fm = pickle.load(open(self.direc+'Output/'+name+'_fm.p', 'rb'))
+        Args:
+            name (str): Name of the previous run to load in.
+        """
+
+        self.fm = pickle.load(open(self.direc+'/Output/'+name+'_fm.p', 'rb'))
 
 
-    def load_rv(self, name):
+    def load_rv(self, name: str):
+        """Loads in the best fit RV model of a previous run into ExoSystem.rvm.
 
-        self.rvm = pickle.load(open(self.direc+'Output/'+name+'_rvm.p', 'rb'))
+        Args:
+            name (str): Name of the previous run to load in.
+        """
+
+        self.rvm = pickle.load(open(self.direc+'/Output/'+name+'_rvm.p', 'rb'))
 
 
-    def load_magfit(self, name):
+    def load_magfit(self, name: str):
+        """Loads in the best fit stellar SED model of a previous run into ExoSystem.rvm.
 
-        mags = pickle.load(open(self.direc+'Resulsts/'+name+'_magfit.p', 'rb'))
+        Args:
+            name (str): Name of the previous run to load in.
+        """
+
+        mags = pickle.load(open(self.direc+'/Results/'+name+'_magfit.p', 'rb'))
         self.magfit = mags['magfit']
         self.magfiterr = mags['magfiterr']
 
 
     def load_samples(self, name):
 
-            z = pickle.load(open(self.direc+'Output/'+name+'_samples.p', 'rb'))
-            self.parnames = z['parnames']
-            self.samples = z['samples']
-            self.log_likes_full = z['log_like']
+        z = pickle.load(open(self.direc+'/Output/'+name+'_samples.p', 'rb'))
+        self.parnames = z['parnames']
+        self.samples = z['samples']
+        self.log_likes_full = z['log_like']
 
 
     def delete_run(self, name):
@@ -2555,7 +2691,7 @@ def lnGauss(data, model, err):
 
 def log_like(par: dict, exs: ExoSystem):
 
-    if exs.order_a:
+    if exs.order_a and exs.fit_transit:
         logalist = []
 
     #check params
@@ -2797,21 +2933,3 @@ def log_like(par: dict, exs: ExoSystem):
 
     return like if not np.isnan(like) else -np.inf, np.array(ps), np.array(tcs)
 
-
-def log_like_staronly(par: dict, exs: ExoSystem):
-
-    #check feh
-    if not -0.5 <= par['feh'] <= 0.5:
-        return -np.inf
-    
-    #check AV
-    if par['AV'] < 0:
-        return -np.inf
-
-    starlike = exs.starmod.lnlike([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
-    starlike += exs.starmod.lnprior([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
-
-    if np.isnan(starlike):
-        return -np.inf
-    
-    return starlike
