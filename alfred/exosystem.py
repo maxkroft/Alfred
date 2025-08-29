@@ -949,7 +949,7 @@ class ExoSystem:
 
 
         tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
-        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width', overwrite = True)
+        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
         
         self.plot_pl_chains(name, show_plot = show_plots)
