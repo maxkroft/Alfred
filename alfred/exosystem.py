@@ -315,7 +315,7 @@ class ExoSystem:
             self.use_priors = False
 
         if not fit_transit and not fit_rv and fit_star:
-            self.fit_star_only(name)
+            self.fit_star_only(name, show_plots)
             return
         
 
@@ -1015,7 +1015,7 @@ class ExoSystem:
         self.print_results(name)
 
 
-    def fit_star_only(self, name):
+    def fit_star_only(self, name, show_plots):
 
         misti = get_ichrone('mist')
 
@@ -1048,7 +1048,7 @@ class ExoSystem:
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
         tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
-        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width', overwrite = True)
+        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
 
         fig = mod.corner_observed()
@@ -1059,7 +1059,10 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/corner_observed.png')
 
-        plt.show()
+        if show_plots:
+            plt.show()
+        else:
+            plt.close()
 
 
         fig = mod.corner_physical()
@@ -1070,7 +1073,11 @@ class ExoSystem:
 
         fig.savefig(self.direc+'Plots/'+name+'/corner_physical.png')
 
-        plt.show()
+        if show_plots:
+            plt.show()
+        else:
+            plt.close()
+
 
         maglist = ['J_mag','H_mag','K_mag','G_mag','BP_mag','RP_mag','W1_mag','W2_mag','W3_mag']
         self.magfit = np.array([np.median(self.dres[x]) for x in maglist])
@@ -1078,7 +1085,7 @@ class ExoSystem:
 
         pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
 
-        self.plot_sed_fit(name)
+        self.plot_sed_fit(name, show_plots)
 
 
     def load_results(self, name):
