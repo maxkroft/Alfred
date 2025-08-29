@@ -1087,6 +1087,8 @@ class ExoSystem:
 
         self.plot_sed_fit(name, show_plots)
 
+        self.print_results(name)
+
 
     def load_results(self, name):
 
