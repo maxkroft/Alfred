@@ -471,6 +471,9 @@ class ExoSystem:
 
         keys = list(self.x0.keys())
 
+        print('Initial parameters:')
+        print(self.x0)
+
         if self.use_priors:
 
             self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
@@ -654,6 +657,7 @@ class ExoSystem:
                 break
 
         self.x = x
+        print('Initial parameters after optimization:')
         print(x)
 
         if self.fit_transit:
