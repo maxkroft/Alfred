@@ -312,7 +312,7 @@ class ExoSystem:
         
         self.use_priors = use_priors
         if self.init_priors is None and use_priors:
-            print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create().')
+            print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create(). Running with no priors.')
             self.use_priors = False
 
         if not fit_transit and not fit_rv and fit_star:
@@ -491,7 +491,7 @@ class ExoSystem:
             self.masks = [np.ones(len(self.tt[i]), dtype = bool) for i in range(len(self.tt))]
         
         if self.fit_transit:
-            print('Starting sigma clipping of lightcurves.')
+            print('\nStarting sigma clipping of lightcurves.')
 
         for i in range(10):
 
@@ -657,7 +657,7 @@ class ExoSystem:
                 break
 
         self.x = x
-        print('Initial parameters after optimization:')
+        print('\nInitial parameters after optimization:')
         print(x)
 
         if self.fit_transit:
@@ -745,12 +745,12 @@ class ExoSystem:
 
         sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
 
-        print('Running MCMC burn-in.')
+        print('\nRunning MCMC burn-in.')
         #burn in
         state = sampler.run_mcmc(pos, self.nburn, progress = True)
         sampler.reset()
 
-        print('Running MCMC sampling.')
+        print('\nRunning MCMC sampling.')
         #run
         sampler.run_mcmc(state, self.nrun, progress = True)
 
