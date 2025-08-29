@@ -550,8 +550,9 @@ class ExoSystem:
 
                     pars.append(get_transit_params(x, j+1, ar = arlist[j] if self.fit_star else None))
 
-            clipped = 0
 
+            clipped = [0]*len(self.tt)
+            lastclipped = 0
 
             for j in range(len(self.tt)):
 
@@ -620,7 +621,8 @@ class ExoSystem:
                 mask = abs(resid) < self.sigma_clip * rms
 
                 c = np.sum(~mask)
-                clipped += c
+                lastclipped += c
+                clipped[j] += c
 
                 fig, ax = plt.subplots(3 if self.detrend[j] else 2, sharex = True)
 
@@ -653,8 +655,14 @@ class ExoSystem:
 
 
 
-            if clipped < 10:
+            if lastclipped < 10:
                 break
+
+        if self.fit_transit:
+            print('\nTotal points clipped:')
+            print('All light curves: {0}'.format(np.sum(clipped)))
+            for i in range(len(self.tt)):
+                print('{0}: {1}'.format(self.lcnames[i], clipped[i]))
 
         self.x = x
         print('\nInitial parameters after optimization:')
