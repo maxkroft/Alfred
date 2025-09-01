@@ -12,5 +12,5 @@ except:
 
 
 from alfred.exosystem import ExoSystem
-from alfred.init_class import Init_lcs, Init_ld, Init_planets, Init_priors, Init_rv, Init_star, Init_ttvs
+from alfred.init_class import Init_lcs, Init_ld, Init_planets, Init_priors, Init_rv, Init_star, Init_ttvs, create_folder
 from alfred.ld_grids import generate_ld_grid, calc_ld

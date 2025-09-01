@@ -309,6 +309,8 @@ class Init_ld(InitFile):
 
         row.append(filt)
 
+        self.table.add_row(row)
+
 
 class Init_planets(InitFile):
 
