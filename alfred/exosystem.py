@@ -1421,14 +1421,16 @@ class ExoSystem:
 
 
     def initialize_ttvs(self, name):
+        """Loads in an Init_ttvs file if it exists, otherwise prompts the user to create one. Then, sets up initial variables for fitting ttvs.
+        """
 
         if not os.path.exists(self.direc+'/'+name):
 
-            tab = Init_ttvs(self.direc).create().table
+            tab = Init_ttvs(self.direc, name = name).create().table
 
         else:
 
-            tab = Init_ttvs(self.direc).from_file().table
+            tab = Init_ttvs(self.direc, name = name).from_file().table
 
         self.ttvs0 = {int(col): np.sort(np.array(tab[col])[~np.isnan(tab[col])]) for col in tab.columns}
 
@@ -1444,17 +1446,29 @@ class ExoSystem:
                     print('Need to input transit times in init_ttv file for planet {0}, which is set to fit_ttv = True. Either edit the file or run create_init_ttvs.')
                     break
 
-                ttvi0 = np.round((np.array(self.ttvs0[i+1]) - self.ttvs0[i+1][0]) / self.p[i], 0)
-                self.ttvi['{0}'.format(i+1)] = ttvi0
+                del_ind = []
 
                 for z in range(len(self.ttvs0[i+1])):
+
+                    found = False
 
                     for l in range(len(self.tt)):
 
                         if np.min(self.tt[l]) <= self.ttvs0[i+1][z] <= np.max(self.tt[l]):
 
                             self.ttvsectors['{0} {1}'.format(i+1, z+1)] = l
+                            found = True
                             break
+
+                    if not found:
+
+                        del_ind.append(z)
+
+                self.ttvs0[i+1] = np.delete(self.ttvs0[i+1], del_ind)
+
+                ttvi0 = np.round((np.array(self.ttvs0[i+1]) - self.ttvs0[i+1][0]) / self.p[i], 0)
+                self.ttvi['{0}'.format(i+1)] = ttvi0
+
 
 
     def plot_pl_chains(self, name, show_plot = True):
