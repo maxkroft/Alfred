@@ -321,37 +321,57 @@ class ExoSystem:
             name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
                 and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
                 or plotted again.
+
             nburn (int): Number of burn-in steps for the MCMC. These steps are thrown out before saving the results and making plots. The burn-in
                 allows the chains to settle into the maximum likelihood.
+
             nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
                 burn-in steps.
+
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
                 less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
+            
             fit_transit (bool, optional): Whether or not to fit transits to the light curve data. Default is True.
+            
             fit_rv (bool, optional): Whether or not to fit a model to the RV data. Default is True.
+            
             fit_star (bool, optional): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
                 (with or without RV data as well). Cannot be fit with just RV data. Default is False.
+            
             fit_ld (bool, optional): Whether or not to fit quadratic limb darkening coefficients as free parameters. Will be overriden to False if
                 fit_star is True, as limb darkening coefficients are generated at each step in that case. Default is False.
+            
             use_priors (bool, optional): Whether or not to use user specified priors from the init_priors file specified during ExoSystem
                 initialization. Default is False.
+            
             rv_bkg_order (int, optional): Polynomial order for the background trend fit to the RV data. Can be 0 (for a flat line), 1 (for a slope),
                 or 2 (for a quadratic). Default is 0.
+            
             star_run (str, optional): Name of a previous fit run that included stellar parameters. If specified, provides starting values for the
                 stellar parameters in this fit. If not specified, or it doesn't exist, runs a star only fit before continuing to get physical starting
                 parameters. Default is None.
+            
             save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
                 if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
                 and these take up additional storage. Default is False.
+            
             sigma_clip (int, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
                 sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
                 that probably shouldn't be, increase this parameter and run it again. Default is 5.
+            
             lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
-                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer. For example,
-                if a data set is being supersampled 2 times, each point in the data set will be modeled as the average of two points with half the
-                exposure time. Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the
-                cost of slowing down the fit. Default is 600 seconds.
+                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
+                
+                For example, if a data set has an exposure time of 1800 seconds and this parameter is set to 600 seconds, each point in the data
+                set will be modeled as the average of three points with an exposure time of 600 seconds.
+                
+                Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the cost of
+                slowing down the fit.
+                
+                Default is 600 seconds.
+            
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
+            
             order_a (bool, optional): Whether or not to put an order prior on the planetary semi-major axes in a transit fit with multiple transiting
                 planets. If True, restricts the semi-major axis of each planet to be greater than those of planets with shorter orbital periods. If
                 fitting the stellar parameters, overrides this to False, since the stellar mass is instead used to set semi-major axes. Default is
@@ -1127,6 +1147,7 @@ class ExoSystem:
             name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
                 and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
                 or plotted again.
+            
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
         """
 
@@ -1368,7 +1389,7 @@ class ExoSystem:
         self.magfiterr = mags['magfiterr']
 
     
-    def load_samples(self, name):
+    def load_samples(self, name: str):
         """Loads in unflattened, un-thinned MCMC chains. Paramater name map is saved to ExoSystem.parnames, chains are saved to ExoSystem.samples,
         log likelihood values are saved to ExoSystem.log_likes_full.
 
@@ -1382,7 +1403,7 @@ class ExoSystem:
         self.log_likes_full = z['log_like']
 
 
-    def delete_run(self, name):
+    def delete_run(self, name: str):
         """Searches for files from a run of the given name and deletes them.
 
         Args:
@@ -1420,8 +1441,11 @@ class ExoSystem:
             shutil.rmtree(self.direc+'multinest chains/'+name)
 
 
-    def initialize_ttvs(self, name):
+    def initialize_ttvs(self, name: str):
         """Loads in an Init_ttvs file if it exists, otherwise prompts the user to create one. Then, sets up initial variables for fitting ttvs.
+
+        Args:
+            name (str): Name of the Init_ttvs file.
         """
 
         if not os.path.exists(self.direc+'/'+name):
@@ -1470,8 +1494,15 @@ class ExoSystem:
                 self.ttvi['{0}'.format(i+1)] = ttvi0
 
 
+    def plot_pl_chains(self, name: str, show_plot = True):
+        """Plots the MCMC chains for the planetary parameters. Saves the plot as pl_chains.png to the folder for this run, set by the name parameter.
+        Shows the plot if show_plot is True.
 
-    def plot_pl_chains(self, name, show_plot = True):
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         fit_rv = False
 
@@ -1584,7 +1615,15 @@ class ExoSystem:
             plt.close()
 
 
-    def plot_ttv_chains(self, name, show_plot = True):
+    def plot_ttv_chains(self, name: str, show_plot = True):
+        """Plots the MCMC chains for the planetary transit times of planets with TTVs. Saves the plot as tt_chains.png to the folder for this run,
+        set by the name parameter. Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         n = 0
         for x in self.ttvi:
@@ -1626,7 +1665,15 @@ class ExoSystem:
             plt.close()
 
 
-    def plot_det_chains(self, name, show_plot = True):
+    def plot_det_chains(self, name: str, show_plot = True):
+        """Plots the MCMC chains for the light curve detrending GP hyper parameters. Saves the plot as gp_chains.png to the folder for this run,
+        set by the name parameter. Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
@@ -1657,7 +1704,7 @@ class ExoSystem:
 
         fig.supxlabel('N Steps')
 
-        fig.savefig(self.direc+'Plots/'+name+'/sec_chains.png')
+        fig.savefig(self.direc+'Plots/'+name+'/gp_chains.png')
 
         if show_plot:
             plt.show()
@@ -1666,7 +1713,15 @@ class ExoSystem:
             plt.close()
 
 
-    def plot_star_chains(self, name, show_plot = True):
+    def plot_star_chains(self, name: str, show_plot = True):
+        """Plots the MCMC chains for the stellar parameters. Saves the plot as star_chains.png to the folder for this run, set by the name parameter.
+        Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         fig, ax = plt.subplots(5, figsize = (7, 12), sharex = True, layout = 'constrained')
 
@@ -1687,7 +1742,15 @@ class ExoSystem:
             plt.close()
 
 
-    def plot_pl_corner(self, name, show_plot = True):
+    def plot_pl_corner(self, name: str, show_plot = True):
+        """Creates corner plots of the MCMC posteriors for each planet's parameters. Saves the plots as p#_corner.png (where # is the planet number)
+        to the folder for this run, set by the name parameter. Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+           
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         fit_rv = False
 
@@ -1762,7 +1825,15 @@ class ExoSystem:
                 plt.close()
 
 
-    def plot_star_corner(self, name, show_plot = True):
+    def plot_star_corner(self, name: str, show_plot = True):
+        """Creates a corner plot of the MCMC posterior for the stellar parameters. Saves the plot as star_corner.png to the folder for this run,
+        set by the name parameter. Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         labels = ['eep','age','feh','distance','AV']
         j = [self.parnames[x] for x in labels]
@@ -1782,7 +1853,15 @@ class ExoSystem:
             plt.close()
 
 
-    def plot_big_corner(self, name, show_plot = False):
+    def plot_big_corner(self, name: str, show_plot = False):
+        """Creates a corner plot of the MCMC posterior of every parameter. Saves the plot as bigcorner.png to the folder for this run,
+        set by the name parameter. Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+        """
 
         keys = list(self.res.keys())
         keys.remove('log_like')
@@ -1800,7 +1879,39 @@ class ExoSystem:
             plt.close()
 
 
-    def gen_lcs(self, name, lc_supersample_size = 600):
+    def gen_lcs(self, name: str, lc_supersample_size = 600):
+        """Generates model light curves from the best fit parameters. Saves these to ExoSystem.fm, and the pickle file Output/name_fm.p.
+
+        fm is a dict, with a key for each light curve data set using their nicknames. These keys correspond to their own dicts with the following keys:
+            - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
+                each planet at the times of this data set.
+            - fm_err: A 3d numpy array of 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
+                error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
+                corresponding to a different planet.
+            - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
+            - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
+                1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
+            - ttphase: A 1d numpy array of phase folded times.
+            - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
+                model light curve for each planet, at the times of ttphase.
+            - fmphase_err: A 3d numpy array of 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the lower
+                1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase, with
+                each row corresponding to a different planet.
+
+        Args:
+            name (str): Name of the run. Sets the name of the output pickle file to name_fm.p.
+            
+            lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
+                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
+                
+                For example, if a data set has an exposure time of 1800 seconds and this parameter is set to 600 seconds, each point in the data
+                set will be modeled as the average of three points with an exposure time of 600 seconds.
+                
+                Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the cost of
+                slowing down the fit.
+                
+                Default is 600 seconds.
+        """
 
         print('\nGenerating light curves for plots.')
 
