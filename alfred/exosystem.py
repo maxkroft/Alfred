@@ -2603,7 +2603,7 @@ class ExoSystem:
 
     def calc_gelman_rubin(self):
 
-        print('Gelman-Rubin Statistics:')
+        print('\nGelman-Rubin Statistics:')
 
         for k, v in self.parnames.items():
 
