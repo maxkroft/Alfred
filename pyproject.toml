@@ -23,8 +23,7 @@ dependencies = [
     "svo_filters",
     "setuptools < 81",
     "holoviews",
-    "numba",
-    "pymultinest"
+    "numba"
     ]
 
 [tool.setuptools.dynamic]
