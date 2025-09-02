@@ -23,6 +23,7 @@ from alfred._rv_func import _rvModel
 from alfred.init_class import *
 from alfred.ld_grids import *
 from alfred.priors import *
+from alfred import mnest_inst
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 np.set_printoptions(legacy='1.25')
@@ -1122,19 +1123,23 @@ class ExoSystem:
         if not np.isnan(self.feh):
             props['feh'] = (self.feh, self.feherr)
 
-        mod = SingleStarModel(misti, name=name, **props)
+        self.starmod = SingleStarModel(misti, name=name, **props)
 
         if self.use_priors:
-            mod = apply_star_priors(self.init_priors.table, mod)
+            self.starmod = apply_star_priors(self.init_priors.table, self.starmod)
         
 
-        mod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
+        if mnest_inst:
+            self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
+
+        else:
+            self.fit_star_only_emcee()
 
 
         self.dres = {}
         out = []
-        for x in mod.derived_samples:
-            self.dres[x] = np.array(mod.derived_samples[x])
+        for x in self.starmod.derived_samples:
+            self.dres[x] = np.array(self.starmod.derived_samples[x])
             out.append([x, np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
 
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
@@ -1143,7 +1148,7 @@ class ExoSystem:
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
 
-        fig = mod.corner_observed()
+        fig = self.starmod.corner_observed()
         
         fig.suptitle('Observed Params')
 
@@ -1157,7 +1162,7 @@ class ExoSystem:
             plt.close()
 
 
-        fig = mod.corner_physical()
+        fig = self.starmod.corner_physical()
 
         fig.suptitle('Physical Params')
 
@@ -1181,6 +1186,56 @@ class ExoSystem:
 
         print('')
         self.print_results(name)
+
+
+    def fit_star_only_emcee(self, starmod):
+
+        self.x0 = {'eep': 355, 'age': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
+        keys = list(self.x0.keys())
+
+        res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args)[0], [self.x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
+        x = {k:v for k,v in zip(keys, res.x)}
+        self.x = x
+
+        self.parnames = {}
+
+        pos = []
+
+        for i, k in enumerate(keys):
+
+            self.parnames[k] = i
+
+            if k == 'eep':
+                pos.append(np.random.normal(x[k], 1, self.nwalk))
+
+            if k == 'age':
+                pos.append(np.random.normal(x[k], 0.05, self.nwalk))
+
+            if k == 'feh':
+                z = np.random.normal(x[k], 0.01, self.nwalk)
+                j = np.where(np.abs(z) > 0.5)[0]
+                z[j] = 0.45 * np.sign(z[j])
+                pos.append(z)
+
+            if k == 'distance':
+                pos.append(np.random.normal(x[k], 1, self.nwalk))
+
+            if k == 'AV':
+                pos.append(np.abs(np.random.normal(x[k], 0.01, self.nwalk)))
+
+
+        pos = np.transpose(np.array(pos))
+
+        sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like_staronly, args = (self,), parameter_names = self.parnames)
+
+        print('\nRunning MCMC burn-in.')
+        #burn in
+        state = sampler.run_mcmc(pos, self.nburn, progress = True)
+        sampler.reset()
+
+        print('\nRunning MCMC sampling.')
+        #run
+        sampler.run_mcmc(state, self.nrun, progress = True)
 
 
     def load_results(self, name: str):
@@ -2933,3 +2988,21 @@ def log_like(par: dict, exs: ExoSystem):
 
     return like if not np.isnan(like) else -np.inf, np.array(ps), np.array(tcs)
 
+
+def log_like_staronly(par: dict, exs: ExoSystem):
+
+    #check feh
+    if not -0.5 <= par['feh'] <= 0.5:
+        return -np.inf
+    
+    #check AV
+    if par['AV'] < 0:
+        return -np.inf
+
+    starlike = exs.starmod.lnlike([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+    starlike += exs.starmod.lnprior([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+
+    if np.isnan(starlike):
+        return -np.inf
+    
+    return starlike
