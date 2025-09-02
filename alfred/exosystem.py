@@ -481,6 +481,8 @@ class ExoSystem:
 
             if star_run is not None:
 
+                run_star_fit = False
+
                 try:
 
                     self.load_results(star_run)
@@ -504,10 +506,19 @@ class ExoSystem:
                 except:
 
                     print('star_run {0} does not exist. Running an initial star only fit.'.format(star_run))
+                    run_star_fit = True
 
             else:
 
-                self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
+                run_star_fit = True
+
+            if run_star_fit:
+
+                if mnest_inst:
+                    self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
+
+                else:
+                    self.fit_star_only_emcee()
 
                 self.x0['eep'] = np.median(self.starmod.derived_samples['eep'])
                 self.x0['age'] = np.median(self.starmod.derived_samples['age'])
@@ -1110,7 +1121,7 @@ class ExoSystem:
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
         """
 
-        misti = get_ichrone('mist')
+        self.misti = get_ichrone('mist')
 
         props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr),
         'J': (self.Jmag, self.Jmagerr), 'H': (self.Hmag, self.Hmagerr), 'K': (self.Kmag, self.Kmagerr),
@@ -1123,7 +1134,7 @@ class ExoSystem:
         if not np.isnan(self.feh):
             props['feh'] = (self.feh, self.feherr)
 
-        self.starmod = SingleStarModel(misti, name=name, **props)
+        self.starmod = SingleStarModel(self.misti, name=name, **props)
 
         if self.use_priors:
             self.starmod = apply_star_priors(self.init_priors.table, self.starmod)
@@ -1188,14 +1199,18 @@ class ExoSystem:
         self.print_results(name)
 
 
-    def fit_star_only_emcee(self, starmod):
+    def fit_star_only_emcee(self):
 
-        self.x0 = {'eep': 355, 'age': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
-        keys = list(self.x0.keys())
+        self.nwalk = 10
 
-        res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args)[0], [self.x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
+        x0 = {'eep': 355, 'age': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
+        keys = list(x0.keys())
+
+        res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args), [x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
         x = {k:v for k,v in zip(keys, res.x)}
-        self.x = x
+
+        print('\nInitial parameters after optimization:')
+        print(x)
 
         self.parnames = {}
 
@@ -1223,7 +1238,6 @@ class ExoSystem:
             if k == 'AV':
                 pos.append(np.abs(np.random.normal(x[k], 0.01, self.nwalk)))
 
-
         pos = np.transpose(np.array(pos))
 
         sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like_staronly, args = (self,), parameter_names = self.parnames)
@@ -1236,6 +1250,13 @@ class ExoSystem:
         print('\nRunning MCMC sampling.')
         #run
         sampler.run_mcmc(state, self.nrun, progress = True)
+
+        samples = sampler.get_chain(flat = True)
+
+        self.starmod._derived_samples = self.misti(*[samples[:,self.parnames[x]] for x in ['eep','age','feh','distance','AV']])
+        self.starmod._derived_samples["parallax"] = 1000.0 / samples[:,self.parnames['distance']]
+        self.starmod._derived_samples["distance"] = samples[:,self.parnames['distance']]
+        self.starmod._derived_samples["AV"] = samples[:,self.parnames['AV']]
 
 
     def load_results(self, name: str):
