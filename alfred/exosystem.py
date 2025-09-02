@@ -1364,7 +1364,7 @@ class ExoSystem:
             name (str): Name of the previous run to load in.
         """
 
-        self.fm = pickle.load(open(self.direc+'/Output/'+name+'_fm.p', 'rb'))
+        self._fm = pickle.load(open(self.direc+'/Output/'+name+'_fm.p', 'rb'))
 
 
     def load_rv(self, name: str):
@@ -1880,23 +1880,8 @@ class ExoSystem:
 
 
     def gen_lcs(self, name: str, lc_supersample_size = 600):
-        """Generates model light curves from the best fit parameters. Saves these to ExoSystem.fm, and the pickle file Output/name_fm.p.
-
-        fm is a dict, with a key for each light curve data set using their nicknames. These keys correspond to their own dicts with the following keys:
-            - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
-                each planet at the times of this data set.
-            - fm_err: A 3d numpy array of 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
-                error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
-                corresponding to a different planet.
-            - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
-            - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
-                1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
-            - ttphase: A 1d numpy array of phase folded times.
-            - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
-                model light curve for each planet, at the times of ttphase.
-            - fmphase_err: A 3d numpy array of 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the lower
-                1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase, with
-                each row corresponding to a different planet.
+        """Generates model light curves from the best fit parameters. Saves these to the pickle file Output/name_fm.p. These model light curves are
+        accessible through ExoSystem.fm. See the documentation on ExoSystem.fm for details on the formatting of the object.
 
         Args:
             name (str): Name of the run. Sets the name of the output pickle file to name_fm.p.
@@ -1917,7 +1902,7 @@ class ExoSystem:
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
-        self.fm = {}
+        self._fm = {}
 
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
@@ -2172,9 +2157,31 @@ class ExoSystem:
                 gpf_err = np.percentile(gpf_err, [16,84], axis = 0)
                 z['gpf_err'] = gpf_err
 
-            self.fm[sec] = z
+            self._fm[sec] = z
 
-        pickle.dump(self.fm, open(self.direc+'Output/'+name+'_fm.p', 'wb'))
+        pickle.dump(self._fm, open(self.direc+'Output/'+name+'_fm.p', 'wb'))
+
+
+    @property
+    def fm(self):
+        """
+        fm is a dict, with a key for each light curve data set using their nicknames. These keys correspond to their own dicts with the following keys:
+            - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
+                each planet at the times of this data set.
+            - fm_err: A 3d numpy array of 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
+                error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
+                corresponding to a different planet.
+            - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
+            - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
+                1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
+            - ttphase: A 1d numpy array of phase folded times.
+            - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
+                model light curve for each planet, at the times of ttphase.
+            - fmphase_err: A 3d numpy array of 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the lower
+                1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase, with
+                each row corresponding to a different planet.
+        """
+        return self._fm
 
 
     def plot_full_lc(self, name, show_plot = True):
@@ -2194,14 +2201,14 @@ class ExoSystem:
 
             fig, ax = plt.subplot_mosaic(mosaic, figsize = (14,10), layout = 'constrained')
 
-            fm = self.fm[sec]['fm']
-            fm_err = self.fm[sec]['fm_err']
+            fm = self._fm[sec]['fm']
+            fm_err = self._fm[sec]['fm_err']
             mean = np.median(self.res['F0 {0}'.format(sec)])
 
             if self.detrend[i]:
 
-                gpf = self.fm[sec]['gpf']
-                gpf_err = self.fm[sec]['gpf_err']
+                gpf = self._fm[sec]['gpf']
+                gpf_err = self._fm[sec]['gpf_err']
 
                 ax['a'].errorbar(self.tt[i], self.f[i], yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
                 ax['a'].plot(self.tt[i], gpf + mean, color = 'green', label = 'GP Model', zorder = 3, linewidth = 2)
@@ -2323,12 +2330,12 @@ class ExoSystem:
 
 
 
-                other = np.sum(self.fm[sec]['fm'], axis = 0) - self.fm[sec]['fm'][k] + (self.fm[sec]['gpf'] if detrend else 0)
+                other = np.sum(self._fm[sec]['fm'], axis = 0) - self._fm[sec]['fm'][k] + (self._fm[sec]['gpf'] if detrend else 0)
                 xfold = (newt - tc + 0.5 * p) % p - 0.5 * p
-                ttphase = self.fm[sec]['ttphase']
-                fmphase = self.fm[sec]['fmphase'][k]
-                fmphase_err = self.fm[sec]['fmphase_err'][:,k]
-                fm = self.fm[sec]['fm'][k]
+                ttphase = self._fm[sec]['ttphase']
+                fmphase = self._fm[sec]['fmphase'][k]
+                fmphase_err = self._fm[sec]['fmphase_err'][:,k]
+                fm = self._fm[sec]['fm'][k]
 
                 ax['a{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
@@ -2723,10 +2730,10 @@ class ExoSystem:
 
             sec = self.lcnames[i]
 
-            fm = np.sum(self.fm[sec]['fm'], axis = 0) + np.median(self.res['F0 {0}'.format(sec)])
+            fm = np.sum(self._fm[sec]['fm'], axis = 0) + np.median(self.res['F0 {0}'.format(sec)])
 
-            if 'gpf' in self.fm[sec]:
-                fm += self.fm[sec]['gpf']
+            if 'gpf' in self._fm[sec]:
+                fm += self._fm[sec]['gpf']
         
             resstd = np.std(self.f[i] - fm)
 
