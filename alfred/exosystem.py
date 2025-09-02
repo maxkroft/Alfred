@@ -514,6 +514,8 @@ class ExoSystem:
 
             if run_star_fit:
 
+                print('Running initial star only fit:\n')
+
                 if mnest_inst:
                     self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
 
@@ -2069,7 +2071,7 @@ class ExoSystem:
                 ax['b'].plot(self.tt[i], fm[k]+mean, label = 'Planet {0}'.format(j+1), zorder = 3, linewidth = 2)
                 ax['b'].fill_between(self.tt[i], fm_err[0][k]+mean, fm_err[1][k]+mean, zorder = 2, alpha = 0.5, edgecolor = 'none')
             
-            ax['b'].text(0.01, 0.99, 'Corrected', fontsize = 20, ha = 'left', va = 'top', transform = ax['b'].transAxes)
+            ax['b'].text(0.01, 0.99, 'Flattened', fontsize = 20, ha = 'left', va = 'top', transform = ax['b'].transAxes)
 
             ax['b'].tick_params(axis = 'both', labelsize = 15)
             ax['b'].legend(fontsize = 15)
