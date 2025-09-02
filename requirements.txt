@@ -12,4 +12,3 @@ svo_filters
 setuptools < 81
 holoviews
 numba
-pymultinest

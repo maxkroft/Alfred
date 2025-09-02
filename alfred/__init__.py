@@ -10,6 +10,12 @@ try:
 except:
     exoctk_inst = False
 
+try:
+    import pymultinest
+    mnest_inst = True
+except:
+    mnest_inst = False
+
 
 from alfred.exosystem import ExoSystem
 from alfred.init_class import Init_lcs, Init_ld, Init_planets, Init_priors, Init_rv, Init_star, Init_ttvs, create_folder
