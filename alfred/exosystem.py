@@ -310,7 +310,7 @@ class ExoSystem:
         
         When fitting stellar parameters only, runs ExoSystem.fit_star_only instead. See documentation on that function for more details.
         When fitting stellar parameters simultaneously with planet parameters, runs a star-only fit first using the isochrones multinest fit
-        function to get physical starting values for the stellar parameters.
+        function, or an emcee wrapper on isochrones if multinest isn't installed, to get physical starting values for the stellar parameters.
         
         Flattened and thinned MCMC chains are stored to pickle files ending in _res.p in the Output folder, as well as chains of derived parameters
         in a pickle file ending in _dres.p. A human readable table of median derived parameters, as well as their upper and lower
@@ -517,7 +517,10 @@ class ExoSystem:
                 print('Running initial star only fit:\n')
 
                 if mnest_inst:
-                    self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
+                    if not os.path.isdir(self.direc+'multinest chains/'+name):
+                        os.mkdir(self.direc+'multinest chains/'+name)
+
+                    self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'/')
 
                 else:
                     self.fit_star_only_emcee()
@@ -1112,7 +1115,11 @@ class ExoSystem:
 
 
     def fit_star_only(self, name: str, show_plots = True):
-        """Fits stellar parameters by themselves. Essentially a wrapper on the isochrones package. Fits using multinest rather than MCMC.
+        """Fits stellar parameters by themselves. Essentially a wrapper on the isochrones package.
+
+
+        If multinest is installed, uses the SingleStarModel.fit function from isochrones. Otherwise, runs fit_star_only_emcee, an emcee
+        wrapper on isochrones, to fit the stellar parameters.
 
         Outputs are done in the same way as the fit function.
 
@@ -1143,7 +1150,10 @@ class ExoSystem:
         
 
         if mnest_inst:
-            self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'-')
+            if not os.path.isdir(self.direc+'multinest chains/'+name):
+                os.mkdir(self.direc+'multinest chains/'+name)
+
+            self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'/')
 
         else:
             self.fit_star_only_emcee()
@@ -1202,6 +1212,11 @@ class ExoSystem:
 
 
     def fit_star_only_emcee(self):
+        """Fits stellar parameters by themselves using an emcee wrapper around the isochrones package. Workaround for those without multinest
+        installed. Called by fit_star_only and fit.
+        
+        Do not run this by itself.
+        """
 
         self.nwalk = 10
 
@@ -1262,11 +1277,16 @@ class ExoSystem:
 
 
     def load_results(self, name: str):
-        """Loads in the results from a previous run. Direct chains will be accessable in ExoSystem.res and ExoSystem.dres. If the run includes a
-        transit fit, loads in and applies masks to the light curves. Attempts to load in best fit transit models and RV models (if they exist) to
-        ExoSystem.fm and ExoSystem.rvm, respectively. Attempts to load in SED best fit magnitudes and errors (if they exist) into ExoSystem.magfit
-        and ExoSystem.magfiterr, respectively. Attempts to load in unflattened, un-thinned MCMC chains if they exist. Paramater name map is saved to
-        ExoSystem.parnames, chains are saved to ExoSystem.samples, log likelihood values are saved to ExoSystem.log_likes_full.
+        """Loads in the results from a previous run. Flattened chains will be accessable in ExoSystem.res and ExoSystem.dres.
+        
+        If the run includes a transit fit, loads in and applies masks to the light curves.
+        
+        Attempts to load in best fit transit models and RV models (if they exist) to ExoSystem.fm and ExoSystem.rvm, respectively.
+        
+        Attempts to load in SED best fit magnitudes and errors (if they exist) into ExoSystem.magfit and ExoSystem.magfiterr, respectively.
+        
+        Attempts to load in unflattened, un-thinned MCMC chains if they exist. Paramater name map is saved to ExoSystem.parnames,
+        chains are saved to ExoSystem.samples, log likelihood values are saved to ExoSystem.log_likes_full.
 
         Args:
             name (str): Name of the previous run to load in.
@@ -1337,7 +1357,7 @@ class ExoSystem:
 
 
     def load_magfit(self, name: str):
-        """Loads in the best fit stellar SED model of a previous run into ExoSystem.rvm.
+        """Loads in the best fit stellar SED model of a previous run into ExoSystem.magfit and ExoSystem.magfiterr.
 
         Args:
             name (str): Name of the previous run to load in.
@@ -1347,8 +1367,14 @@ class ExoSystem:
         self.magfit = mags['magfit']
         self.magfiterr = mags['magfiterr']
 
-
+    
     def load_samples(self, name):
+        """Loads in unflattened, un-thinned MCMC chains. Paramater name map is saved to ExoSystem.parnames, chains are saved to ExoSystem.samples,
+        log likelihood values are saved to ExoSystem.log_likes_full.
+
+        Args:
+            name (str): Name of the previous run to load in.
+        """
 
         z = pickle.load(open(self.direc+'/Output/'+name+'_samples.p', 'rb'))
         self.parnames = z['parnames']
@@ -1357,6 +1383,11 @@ class ExoSystem:
 
 
     def delete_run(self, name):
+        """Searches for files from a run of the given name and deletes them.
+
+        Args:
+            name (str): Name of the previous run to delete.
+        """
 
         if os.path.exists(self.direc+'Masks/'+name+'_masks.p'):
             os.remove(self.direc+'Masks/'+name+'_masks.p')
@@ -1385,10 +1416,8 @@ class ExoSystem:
         if os.path.exists(self.direc+'Results/'+name+'.txt'):
             os.remove(self.direc+'Results/'+name+'.txt')
 
-        if os.path.exists(self.direc+'multinest chains/'+name+'-.txt'):
-            for filename in os.listdir(self.direc+'multinest chains/'):
-                if len(filename) >= len(name) and filename[:len(name)] == name:
-                    os.remove(self.direc+'multinest chains/'+filename)
+        if os.path.isdir(self.direc+'multinest chains/'+name):
+            shutil.rmtree(self.direc+'multinest chains/'+name)
 
 
     def initialize_ttvs(self, name):
