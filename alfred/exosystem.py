@@ -2183,13 +2183,12 @@ class ExoSystem:
         return self._fm
 
 
-    def plot_full_lc(self, name, show_plot = True):
-        """Plots full light curve fits for each data set. Saves to the folder in Plots set by name. Each data set
-        plot is named transit_full_nickname.png where nickname is the data set's nickname.
+    def plot_full_lc(self, name: str, show_plot = True):
+        """Plots full light curve fits for each data set. Saves to the folder in Plots set by name. Each data set plot is named
+        transit_full_nickname.png, where nickname is the data set's nickname.
 
-        If the data set was detrended, plots the GP prediction with best fit hyperparameters in the first panel. The
-        flattened light curve and best fit transit models are plotted in the next panel. The residuals are plotted in
-        the final panel.
+        If the data set was detrended, plots the GP prediction with best fit hyperparameters in the first panel. The flattened light curve and
+        best fit transit models are plotted in the next panel. The residuals are plotted in the final panel.
 
         Args:
             name (str): Name of the run. Sets the folder in Plots to save this plot to.
@@ -2283,11 +2282,11 @@ class ExoSystem:
                 plt.close()
 
 
-    def plot_lc_phase(self, name, show_plot = True):
-        """Plots phased light curve fits for each planet in each data set. Saves to the folder in Plots set by name.
-        Each data set plot is named transits_nickname.png where nickname is the data set's nickname.
+    def plot_lc_phase(self, name: str, show_plot = True):
+        """Plots phased light curve fits for each planet in each data set. Saves to the folder in Plots set by name. Each data set plot is named
+        transits_nickname.png where nickname is the data set's nickname.
 
-        The phased transit for each planet is plotted in a separate panel for each data set.
+        The phased transit for each planet is plotted in a separate panel for each data set, with its residual below it.
 
         Args:
             name (str): Name of the run. Sets the folder in Plots to save this plot to.
@@ -2412,7 +2411,13 @@ class ExoSystem:
                 plt.close()
 
 
-    def gen_rv(self, name):
+    def gen_rv(self, name: str):
+        """Generates radial velocity models from the best fit parameters. Saves these to the pickle file Output/name_rvm.p. These RV models are
+        accessible through ExoSystem.rvm. See the documentation on ExoSystem.rvm for details on the formatting of the object.
+
+        Args:
+            name (str): Name of the run. Sets the name of the output pickle file to name_rvm.p.
+        """
 
         print('\nGenerating RV models for plots.')
 
@@ -2512,11 +2517,29 @@ class ExoSystem:
         pickle.dump(self.rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
 
     
-    def plot_rv(self, name, show_plot = True):
+    def plot_rv(self, name: str, show_plot = True):
+        """Plots the best fit radial velocity model to the data. Saves to the folder in Plots set by name. The plot is named rv.png.
 
-        mos = [['a' for i in range(self.nr)], ['a' for i in range(self.nr)], ['b' for i in range(self.nr)], ['c{0}'.format(i) for i in range(self.nr)], ['c{0}'.format(i) for i in range(self.nr)], ['d{0}'.format(i) for i in range(self.nr)]]
+        The top panel shows the full RV time series, with the combined best fit model. It also plots the contribution of each planet to the RV model,
+        as well as the background polynomial. The residual is plotted below it.
 
-        fig, ax = plt.subplot_mosaic(mos, figsize = (14*self.nr,12), layout = 'constrained')
+        The lower panels are the RV models of each individual planet, phased to its period. The data have the contributions of the other planets and
+        the background polynomial subtracted out. The residual is plotted below each of these panels as well.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+        """
+
+        mos = [['a']*2, ['a']*2, ['b']*2]
+        if self.nr == 1:
+            mos += [['c0']*2, ['c0']*2, ['d0']*2]
+        else:
+            for i in range((self.nr+1)//2):
+                mos += [['c{0}'.format(2*i),'c{0}'.format(2*i+1)], ['c{0}'.format(2*i),'c{0}'.format(2*i+1)], ['d{0}'.format(2*i),'d{0}'.format(2*i+1)]]
+
+        fig, ax = plt.subplot_mosaic(mos, figsize = (28,6+6*(self.nr+1)//2), layout = 'constrained')
 
         trplot = self.rvm['trplot']
         rvallplot = self.rvm['rvallplot']
@@ -2574,6 +2597,16 @@ class ExoSystem:
         ax['b'].set_ylabel('Resid. [m/s]', fontsize = 20)
         ax['b'].set_xlim([np.min(trplot),np.max(trplot)])
 
+        if self.nr > 1 and self.nr%2 == 1:
+
+            plt.setp(ax['c{0}'.format(self.nr)].get_xticklabels(), visible = False)
+            plt.setp(ax['c{0}'.format(self.nr)].get_yticklabels(), visible = False)
+            ax['c{0}'.format(self.nr)].axis('off')
+
+            plt.setp(ax['d{0}'.format(self.nr)].get_xticklabels(), visible = False)
+            plt.setp(ax['d{0}'.format(self.nr)].get_yticklabels(), visible = False)
+            ax['d{0}'.format(self.nr)].axis('off')
+
         for i in range(self.n):
 
             if not self.is_rv[i]:
@@ -2605,12 +2638,15 @@ class ExoSystem:
 
             ax['c{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
 
-            if j == 0:
+            if j%2 == 0:
                 ax['c{0}'.format(j)].set_ylabel('RV [m/s]', fontsize = 20)
 
             else:
-                ax['c{0}'.format(j)].sharey(ax['c0'])
+                ax['c{0}'.format(j)].sharey(ax['c{0}'.format(j-1)])
                 plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
+
+            if j%2 == 0 and j > 0:
+                ax['c{0}'.format(j)].sharey(ax['c0'])
 
 
             for ii, kk in enumerate(np.unique(self.which_rv)):
@@ -2622,18 +2658,27 @@ class ExoSystem:
 
             ax['d{0}'.format(j)].axhline(0, c = 'red', lw = 1, zorder = 1)
 
-            ax['d{0}'.format(j)].sharex(ax['c{0}'.format(j)])
+            ax['c{0}'.format(j)].sharex(ax['d{0}'.format(j)])
             plt.setp(ax['c{0}'.format(j)].get_xticklabels(), visible = False)
             ax['d{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
-            ax['d{0}'.format(j)].set_xlabel('Orbital Phase', fontsize = 20)
-            ax['d{0}'.format(j)].set_xlim([-0.5,0.5])
 
-            if j == 0:
+            if j + 2 >= self.nr:
+                ax['d{0}'.format(j)].set_xlabel('Orbital Phase', fontsize = 20)
+                ax['d{0}'.format(j)].set_xlim([-0.5,0.5])
+
+            else:
+                ax['d{0}'.format(j)].sharex(ax['d{0}'.format(j+2)])
+                plt.setp(ax['d{0}'.format(j)].get_xticklabels(), visible = False)
+
+            if j%2 == 0:
                 ax['d{0}'.format(j)].set_ylabel('Resid. [m/s]', fontsize = 20)
 
             else:
-                ax['d{0}'.format(j)].sharey(ax['d0'])
+                ax['d{0}'.format(j)].sharey(ax['d{0}'.format(j-1)])
                 plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
+
+            if j%2 == 0 and j > 0:
+                ax['d{0}'.format(j)].sharey(ax['d0'])
 
         
         fig.savefig(self.direc+'Plots/'+name+'/rv.png')
