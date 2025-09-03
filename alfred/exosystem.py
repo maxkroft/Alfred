@@ -1374,7 +1374,7 @@ class ExoSystem:
             name (str): Name of the previous run to load in.
         """
 
-        self.rvm = pickle.load(open(self.direc+'/Output/'+name+'_rvm.p', 'rb'))
+        self._rvm = pickle.load(open(self.direc+'/Output/'+name+'_rvm.p', 'rb'))
 
 
     def load_magfit(self, name: str):
@@ -2163,11 +2163,12 @@ class ExoSystem:
 
     @property
     def fm(self):
-        """
+        """Stores the best fit model light curves.
+
         fm is a dict, with a key for each light curve data set using their nicknames. These keys correspond to their own dicts with the following keys:
             - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
                 each planet at the times of this data set.
-            - fm_err: A 3d numpy array of 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
+            - fm_err: A 3d numpy array of the 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
                 error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
                 corresponding to a different planet.
             - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
@@ -2176,9 +2177,9 @@ class ExoSystem:
             - ttphase: A 1d numpy array of phase folded times.
             - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
                 model light curve for each planet, at the times of ttphase.
-            - fmphase_err: A 3d numpy array of 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the lower
-                1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase, with
-                each row corresponding to a different planet.
+            - fmphase_err: A 3d numpy array of the 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
+                lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
+                with each row corresponding to a different planet.
         """
         return self._fm
 
@@ -2512,11 +2513,36 @@ class ExoSystem:
         rvallplot_err = np.percentile(rvallplot_err, [16,84], axis = 0)
         rvmphase_err = np.percentile(rvmphase_err, [16,84], axis = 1)
 
-        self.rvm = {'rvm': rvm, 'bkg': bkg, 'rvallplot': rvallplot, 'rvallplot_err': rvallplot_err, 'rvmplot': rvmplot, 'bkgplot': bkgplot, 'rvmphase': rvmphase, 'rvmphase_err': rvmphase_err, 'trplot': trplot, 'trphase': trphase}
+        self._rvm = {'rvm': np.array(rvm), 'bkg': bkg, 'rvallplot': rvallplot, 'rvallplot_err': rvallplot_err, 'rvmplot': np.array(rvmplot), 'bkgplot': bkgplot, 'rvmphase': np.array(rvmphase), 'rvmphase_err': rvmphase_err, 'trplot': trplot, 'trphase': trphase}
 
-        pickle.dump(self.rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
+        pickle.dump(self._rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
 
-    
+    @property
+    def rvm(self):
+        """Stores the best fit radial velocity models.
+
+        rvm is a dict,  with the following keys:
+            - rvm: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
+                at the times of the RV data.
+            - bkg: A 1d numpy array of the values of the background polynomial trend at the times of the RV data.
+            - trplot: A 1d numpy array of more finely sampled times to make plotted models look smooth.
+            - rvmplot: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
+                at the times of trplot, for smooth plotting.
+            - bkgplot: A 1d numpy array of the values of the background polynomial trend at the times of trplot, for smooth plotting.
+            - rvallplot: A 1d numpy array of the full best fit RV model at the times of trplot, for smooth plotting. It is the sum of all planet
+                components and the background polynomial.
+            - rvallplot_err: A 2d numpy array of the 1 sigma uncertainties on rvallplot. In the 0th axis, the 0 index is a 1d array corresponding to
+                the lower 1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
+            - trphase: A 1d numpy array of phase folded times.
+            - rvmphase: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit phase-folded RV
+                model for each planet, at the times of trphase.
+            - rvmphase_err: A 3d numpy array of the 1 sigma uncertainties on rvmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
+                lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like rvmphase,
+                with each row corresponding to a different planet.
+        """
+        return self._rvm
+
+
     def plot_rv(self, name: str, show_plot = True):
         """Plots the best fit radial velocity model to the data. Saves to the folder in Plots set by name. The plot is named rv.png.
 
@@ -2525,6 +2551,8 @@ class ExoSystem:
 
         The lower panels are the RV models of each individual planet, phased to its period. The data have the contributions of the other planets and
         the background polynomial subtracted out. The residual is plotted below each of these panels as well.
+
+        In each plot, the data are colored according to the data set they come from, and labeled with the data set's nickname.
 
         Args:
             name (str): Name of the run. Sets the folder in Plots to save this plot to.
@@ -2541,16 +2569,16 @@ class ExoSystem:
 
         fig, ax = plt.subplot_mosaic(mos, figsize = (28,6+6*(self.nr+1)//2), layout = 'constrained')
 
-        trplot = self.rvm['trplot']
-        rvallplot = self.rvm['rvallplot']
-        rvallplot_err = self.rvm['rvallplot_err']
-        rvmplot = self.rvm['rvmplot']
-        bkgplot = self.rvm['bkgplot']
-        rvm = self.rvm['rvm']
-        bkg = self.rvm['bkg']
-        rvmphase = self.rvm['rvmphase']
-        rvmphase_err = self.rvm['rvmphase_err']
-        trphase = self.rvm['trphase']
+        trplot = self._rvm['trplot']
+        rvallplot = self._rvm['rvallplot']
+        rvallplot_err = self._rvm['rvallplot_err']
+        rvmplot = self._rvm['rvmplot']
+        bkgplot = self._rvm['bkgplot']
+        rvm = self._rvm['rvm']
+        bkg = self._rvm['bkg']
+        rvmphase = self._rvm['rvmphase']
+        rvmphase_err = self._rvm['rvmphase_err']
+        trphase = self._rvm['trphase']
 
         rv = self.rv.copy()
         for i, k in enumerate(np.unique(self.which_rv)):
@@ -2775,7 +2803,7 @@ class ExoSystem:
         k = len(self.res)-1
         n = len(self.tr.ravel())
 
-        rvm = np.sum(self.rvm['rvm'], axis = 0) + self.rvm['bkg']
+        rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
         for i in np.unique(self.which_rv)[1:]:
 
@@ -2810,7 +2838,7 @@ class ExoSystem:
 
     def calc_rv_err_scale(self):
 
-        rvm = np.sum(self.rvm['rvm'], axis = 0) + self.rvm['bkg']
+        rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
         rv = self.rv.copy()
         for i in np.unique(self.which_rv):
@@ -2850,7 +2878,7 @@ class ExoSystem:
     def rv_lomb_scargle(self, min_freq = None, max_freq = None, freq = None, plot_periods = False, residual = True):
 
         if residual:
-            rvres = self.rv - np.sum(self.rvm['rvm'], axis = 0) - self.rvm['bkg']
+            rvres = self.rv - np.sum(self._rvm['rvm'], axis = 0) - self._rvm['bkg']
 
         else:
             rvres = self.rv
