@@ -2186,7 +2186,7 @@ class ExoSystem:
 
     def plot_full_lc(self, name: str, show_plot = True):
         """Plots full light curve fits for each data set. Saves to the folder in Plots set by name. Each data set plot is named
-        transit_full_nickname.png, where nickname is the data set's nickname.
+        transit_full_nickname.png, where nickname is the data set's nickname. Shows the plot if show_plot is True.
 
         If the data set was detrended, plots the GP prediction with best fit hyperparameters in the first panel. The flattened light curve and
         best fit transit models are plotted in the next panel. The residuals are plotted in the final panel.
@@ -2194,7 +2194,7 @@ class ExoSystem:
         Args:
             name (str): Name of the run. Sets the folder in Plots to save this plot to.
             
-            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
         
         for i in range(len(self.lcnames)):
@@ -2285,14 +2285,14 @@ class ExoSystem:
 
     def plot_lc_phase(self, name: str, show_plot = True):
         """Plots phased light curve fits for each planet in each data set. Saves to the folder in Plots set by name. Each data set plot is named
-        transits_nickname.png where nickname is the data set's nickname.
+        transits_nickname.png where nickname is the data set's nickname. Shows the plot if show_plot is True.
 
         The phased transit for each planet is plotted in a separate panel for each data set, with its residual below it.
 
         Args:
             name (str): Name of the run. Sets the folder in Plots to save this plot to.
             
-            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
         if np.any(self.fit_ttv):
@@ -2544,7 +2544,8 @@ class ExoSystem:
 
 
     def plot_rv(self, name: str, show_plot = True):
-        """Plots the best fit radial velocity model to the data. Saves to the folder in Plots set by name. The plot is named rv.png.
+        """Plots the best fit radial velocity model to the data. Saves to the folder in Plots set by name. The plot is named rv.png. Shows the plot
+        if show_plot is True.
 
         The top panel shows the full RV time series, with the combined best fit model. It also plots the contribution of each planet to the RV model,
         as well as the background polynomial. The residual is plotted below it.
@@ -2557,7 +2558,7 @@ class ExoSystem:
         Args:
             name (str): Name of the run. Sets the folder in Plots to save this plot to.
             
-            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
         mos = [['a']*2, ['a']*2, ['b']*2]
@@ -2718,7 +2719,15 @@ class ExoSystem:
             plt.close()
 
 
-    def plot_sed_fit(self, name, show_plot = True):
+    def plot_sed_fit(self, name: str, show_plot = True):
+        """Plots the magnitudes of the best fit stellar parameters against the data. Residuals are shown below. Saves to the folder in Plots set
+        by name. The plot is named sed.png. Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+           
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14, 12), layout = 'constrained', sharex = True)
 
@@ -2745,7 +2754,15 @@ class ExoSystem:
             plt.close()
 
 
-    def plot_ttvs(self, name, show_plot = True):
+    def plot_ttvs(self, name: str, show_plot = True):
+        """Plots the best fit transit times versus the difference from a linear ephemeris for planets with TTVs. Saves to the folder in Plots set
+        by name. The plot is named ttvs.png. Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+           
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
 
         self.initialize_ttvs(name = self.init_ttvs_name)
 
