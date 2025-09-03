@@ -2161,7 +2161,6 @@ class ExoSystem:
 
         pickle.dump(self._fm, open(self.direc+'Output/'+name+'_fm.p', 'wb'))
 
-
     @property
     def fm(self):
         """
@@ -2185,6 +2184,18 @@ class ExoSystem:
 
 
     def plot_full_lc(self, name, show_plot = True):
+        """Plots full light curve fits for each data set. Saves to the folder in Plots set by name. Each data set
+        plot is named transit_full_nickname.png where nickname is the data set's nickname.
+
+        If the data set was detrended, plots the GP prediction with best fit hyperparameters in the first panel. The
+        flattened light curve and best fit transit models are plotted in the next panel. The residuals are plotted in
+        the final panel.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+        """
         
         for i in range(len(self.lcnames)):
 
@@ -2263,7 +2274,7 @@ class ExoSystem:
             for a in ax:
                 ax[a].set_rasterized(True)
 
-            fig.savefig(self.direc+'Plots/'+name+'/transit_det_{0}.png'.format(sec))
+            fig.savefig(self.direc+'Plots/'+name+'/transit_full_{0}.png'.format(sec))
 
             if show_plot:
                 plt.show()
@@ -2273,6 +2284,16 @@ class ExoSystem:
 
 
     def plot_lc_phase(self, name, show_plot = True):
+        """Plots phased light curve fits for each planet in each data set. Saves to the folder in Plots set by name.
+        Each data set plot is named transits_nickname.png where nickname is the data set's nickname.
+
+        The phased transit for each planet is plotted in a separate panel for each data set.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+        """
 
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
