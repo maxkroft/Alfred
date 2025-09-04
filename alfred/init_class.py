@@ -3,6 +3,9 @@ from astropy.table import Table
 import shutil
 import os
 
+from alfred.ld_grids import calc_ld, ld_grid_list
+
+
 class InitFile:
 
     def __init__(self, direc, name):
@@ -297,19 +300,56 @@ class Init_ld(InitFile):
 
     def add_ld_params(self):
 
-        row = []
+        autogen = input('Auto-generate limb darkening parameters from existing grids? y/n').lower()
 
-        filt = input('Filter to define limb darkening parameters for (e.g. TESS, Kepler, V): ')
+        if autogen == 'y':
 
-        u1 = input('First quadratic limb darkening parameter for {0} (linear term): '.format(filt))
-        row.append(u1)
+            while True:
 
-        u2 = input('Second quadratic limb darkening parameter for {0} (non-linear term): '.format(filt))
-        row.append(u2)
+                filt = input('Filter to generate the limb darkening parameter for? Type "help" to see available filters. Type "stop" to exit.')
 
-        row.append(filt)
+                if filt.lower() == 'help':
 
-        self.table.add_row(row)
+                    print(ld_grid_list)
+
+                elif filt.lower() == 'stop':
+                    return
+
+                elif filt not in ld_grid_list:
+
+                    z = input('Filter is not recognized. Enter to try again. Type "stop" to exit.')
+                    if z.lower() == 'stop':
+                        return
+
+                else:
+                    
+                    break
+
+            T = float(input('Stellar temperature in K:'))
+            logg = float(input('Stellar log g in cgs units:'))
+            feh = float(input('Stellar [Fe/H]:'))
+
+            u1, u2 = calc_ld(filt, T, logg, feh)
+
+            row = [filt, u1, u2]
+
+            self.table.add_row(row)
+
+        else:
+
+            row = []
+
+            filt = input('Filter to define limb darkening parameters for (e.g. TESS, Kepler, V): ')
+
+            u1 = input('First quadratic limb darkening parameter for {0} (linear term): '.format(filt))
+            row.append(u1)
+
+            u2 = input('Second quadratic limb darkening parameter for {0} (non-linear term): '.format(filt))
+            row.append(u2)
+
+            row.append(filt)
+
+            self.table.add_row(row)
 
 
 class Init_planets(InitFile):

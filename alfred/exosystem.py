@@ -1172,12 +1172,10 @@ class ExoSystem:
 
     def make_results(self, name: str):
         """Converts flat_samples and flat_log_likes into a dict that stores the chains of parameters that were directly fit, as well as the log
-        likelihood of each sample. Saves these to the pickle file Output/name_res.p. Accessible through ExoSystem.results. See the documentation on
-        ExoSystem.results for more details on the formatting of the object.
+        likelihood of each sample. Saves these to the pickle file Output/name_res.p. Accessible through ExoSystem.results.
 
         Also creates a dict of flat chains of derived parameters (e.g. period from log(period), or planet equilibrium temperature). Saves these to the
-        pickle file Output/name_dres.p. Accessible through ExoSystem.derived_results. See the documentation on ExoSystem.derived_results for more
-        details on the formatting of the object.
+        pickle file Output/name_dres.p. Accessible through ExoSystem.derived_results.
 
         Combines results and derived_results into a single human-readable ascii table which is saved to Results/name.txt. Can be directly printed out
         by calling ExoSystem.print_results(name).
@@ -1361,6 +1359,18 @@ class ExoSystem:
 
         tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
+
+    @property
+    def results(self):
+        """Dict which stores the flattened chains of fit parameters. Keys are the parameter names, e.g. log(P) 1, ror 2, etc.
+        """
+        return self.res
+    
+    @property
+    def derived_results(self):
+        """Dict which stores flat chains of derived parameters. Keys are the parameter names, e.g. Teq 1, Mp 2, etc.
+        """
+        return self.dres
 
 
     def load_results(self, name: str):
