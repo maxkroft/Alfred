@@ -299,7 +299,7 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, nburn: int, nrun: int, nwalk = 0, fit_transit = True, fit_rv = True, fit_star = False, fit_ld = False, use_priors = False,
+    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk = 0, fit_ld = False, use_priors = False,
             rv_bkg_order = 0, star_run: str = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
@@ -327,16 +327,16 @@ class ExoSystem:
 
             nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
                 burn-in steps.
+            
+            fit_transit (bool): Whether or not to fit transits to the light curve data.
+            
+            fit_rv (bool): Whether or not to fit a model to the RV data.
+            
+            fit_star (bool): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
+                (with or without RV data as well). Cannot be fit with just RV data.
 
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
                 less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
-            
-            fit_transit (bool, optional): Whether or not to fit transits to the light curve data. Default is True.
-            
-            fit_rv (bool, optional): Whether or not to fit a model to the RV data. Default is True.
-            
-            fit_star (bool, optional): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
-                (with or without RV data as well). Cannot be fit with just RV data. Default is False.
             
             fit_ld (bool, optional): Whether or not to fit quadratic limb darkening coefficients as free parameters. Will be overriden to False if
                 fit_star is True, as limb darkening coefficients are generated at each step in that case. Default is False.
@@ -1134,9 +1134,8 @@ class ExoSystem:
         self.print_results(name)
 
 
-    def fit_star_only(self, name: str, show_plots = True):
+    def fit_star_only(self, name: str, show_plots = True, use_emcee = False, nburn = 5000, nrun = 5000):
         """Fits stellar parameters by themselves. Essentially a wrapper on the isochrones package.
-
 
         If multinest is installed, uses the SingleStarModel.fit function from isochrones. Otherwise, runs fit_star_only_emcee, an emcee
         wrapper on isochrones, to fit the stellar parameters.
@@ -1149,6 +1148,16 @@ class ExoSystem:
                 or plotted again.
             
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
+
+            use_emcee (bool, optional): Whether or not to use emcee regardless of multinest installation. Default is False.
+
+            nburn (int, optional): Number of burn-in steps for the MCMC. These steps are thrown out before saving the results and making plots. The
+                burn-in allows the chains to settle into the maximum likelihood. This parameter only matters if running emcee instead of multinest, and
+                when calling this function directly (not with fit). Default is 5000.
+
+            nrun (int, optional): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not
+                include the burn-in steps. This parameter only matters if running emcee instead of multinest, and when calling this function directly
+                (not with fit). Default is 5000.
         """
 
         self.misti = get_ichrone('mist')
@@ -1170,22 +1179,34 @@ class ExoSystem:
             self.starmod = apply_star_priors(self.init_priors.table, self.starmod)
         
 
-        if mnest_inst:
+        if mnest_inst and not use_emcee:
+
             if not os.path.isdir(self.direc+'multinest chains/'+name):
                 os.mkdir(self.direc+'multinest chains/'+name)
 
             self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'/')
 
         else:
+
+            if not hasattr(self, 'nburn'):
+                self.nburn = nburn
+            if not hasattr(self, 'nrun'):
+                self.nrun = nrun
+
             self.fit_star_only_emcee()
 
 
+        self.res = {}
         self.dres = {}
         out = []
         for x in self.starmod.derived_samples:
-            self.dres[x] = np.array(self.starmod.derived_samples[x])
-            out.append([x, np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
+            if x in ['eep', 'age', 'feh', 'distance', 'AV']:
+                self.res[x] = np.array(self.starmod.derived_samples[x])
+            else:
+                self.dres[x] = np.array(self.starmod.derived_samples[x])
+            out.append([x, np.nanmedian(self.starmod.derived_samples[x])]+list(np.diff(np.nanpercentile(self.starmod.derived_samples[x], [16,50,84]))))
 
+        pickle.dump(self.res, open(self.direc+'Output/'+name+'_res.p', 'wb'))
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
         tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
@@ -1364,7 +1385,7 @@ class ExoSystem:
             name (str): Name of the previous run to load in.
         """
 
-        self._fm = pickle.load(open(self.direc+'/Output/'+name+'_fm.p', 'rb'))
+        self._lcm = pickle.load(open(self.direc+'/Output/'+name+'_lcm.p', 'rb'))
 
 
     def load_rv(self, name: str):
@@ -1422,8 +1443,8 @@ class ExoSystem:
         if os.path.exists(self.direc+'Output/'+name+'_dres.p'):
             os.remove(self.direc+'Output/'+name+'_dres.p')
 
-        if os.path.exists(self.direc+'Output/'+name+'_fm.p'):
-            os.remove(self.direc+'Output/'+name+'_fm.p')
+        if os.path.exists(self.direc+'Output/'+name+'_lcm.p'):
+            os.remove(self.direc+'Output/'+name+'_lcm.p')
 
         if os.path.exists(self.direc+'Output/'+name+'_rvm.p'):
             os.remove(self.direc+'Output/'+name+'_rvm.p')
@@ -1880,11 +1901,11 @@ class ExoSystem:
 
 
     def gen_lcs(self, name: str, lc_supersample_size = 600):
-        """Generates model light curves from the best fit parameters. Saves these to the pickle file Output/name_fm.p. These model light curves are
-        accessible through ExoSystem.fm. See the documentation on ExoSystem.fm for details on the formatting of the object.
+        """Generates model light curves from the best fit parameters. Saves these to the pickle file Output/name_lcm.p. These model light curves are
+        accessible through ExoSystem.lc_mod. See the documentation on ExoSystem.lc_mod for details on the formatting of the object.
 
         Args:
-            name (str): Name of the run. Sets the name of the output pickle file to name_fm.p.
+            name (str): Name of the run. Sets the name of the output pickle file to name_lcm.p.
             
             lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
                 the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
@@ -1902,7 +1923,7 @@ class ExoSystem:
 
         self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
-        self._fm = {}
+        self._lcm = {}
 
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
@@ -2157,12 +2178,12 @@ class ExoSystem:
                 gpf_err = np.percentile(gpf_err, [16,84], axis = 0)
                 z['gpf_err'] = gpf_err
 
-            self._fm[sec] = z
+            self._lcm[sec] = z
 
-        pickle.dump(self._fm, open(self.direc+'Output/'+name+'_fm.p', 'wb'))
+        pickle.dump(self._lcm, open(self.direc+'Output/'+name+'_lcm.p', 'wb'))
 
     @property
-    def fm(self):
+    def lc_mod(self):
         """Stores the best fit model light curves.
 
         fm is a dict, with a key for each light curve data set using their nicknames. These keys correspond to their own dicts with the following keys:
@@ -2181,7 +2202,7 @@ class ExoSystem:
                 lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
                 with each row corresponding to a different planet.
         """
-        return self._fm
+        return self._lcm
 
 
     def plot_full_lc(self, name: str, show_plot = True):
@@ -2212,14 +2233,14 @@ class ExoSystem:
 
             fig, ax = plt.subplot_mosaic(mosaic, figsize = (14,10), layout = 'constrained')
 
-            fm = self._fm[sec]['fm']
-            fm_err = self._fm[sec]['fm_err']
+            fm = self._lcm[sec]['fm']
+            fm_err = self._lcm[sec]['fm_err']
             mean = np.median(self.res['F0 {0}'.format(sec)])
 
             if self.detrend[i]:
 
-                gpf = self._fm[sec]['gpf']
-                gpf_err = self._fm[sec]['gpf_err']
+                gpf = self._lcm[sec]['gpf']
+                gpf_err = self._lcm[sec]['gpf_err']
 
                 ax['a'].errorbar(self.tt[i], self.f[i], yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
                 ax['a'].plot(self.tt[i], gpf + mean, color = 'green', label = 'GP Model', zorder = 3, linewidth = 2)
@@ -2351,12 +2372,12 @@ class ExoSystem:
 
 
 
-                other = np.sum(self._fm[sec]['fm'], axis = 0) - self._fm[sec]['fm'][k] + (self._fm[sec]['gpf'] if detrend else 0)
+                other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if detrend else 0)
                 xfold = (newt - tc + 0.5 * p) % p - 0.5 * p
-                ttphase = self._fm[sec]['ttphase']
-                fmphase = self._fm[sec]['fmphase'][k]
-                fmphase_err = self._fm[sec]['fmphase_err'][:,k]
-                fm = self._fm[sec]['fm'][k]
+                ttphase = self._lcm[sec]['ttphase']
+                fmphase = self._lcm[sec]['fmphase'][k]
+                fmphase_err = self._lcm[sec]['fmphase_err'][:,k]
+                fm = self._lcm[sec]['fm'][k]
 
                 ax['a{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
@@ -2414,7 +2435,7 @@ class ExoSystem:
 
     def gen_rv(self, name: str):
         """Generates radial velocity models from the best fit parameters. Saves these to the pickle file Output/name_rvm.p. These RV models are
-        accessible through ExoSystem.rvm. See the documentation on ExoSystem.rvm for details on the formatting of the object.
+        accessible through ExoSystem.rv_mod. See the documentation on ExoSystem.rv_mod for details on the formatting of the object.
 
         Args:
             name (str): Name of the run. Sets the name of the output pickle file to name_rvm.p.
@@ -2518,7 +2539,7 @@ class ExoSystem:
         pickle.dump(self._rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
 
     @property
-    def rvm(self):
+    def rv_mod(self):
         """Stores the best fit radial velocity models.
 
         rvm is a dict,  with the following keys:
@@ -2841,10 +2862,10 @@ class ExoSystem:
 
             sec = self.lcnames[i]
 
-            fm = np.sum(self._fm[sec]['fm'], axis = 0) + np.median(self.res['F0 {0}'.format(sec)])
+            fm = np.sum(self._lcm[sec]['fm'], axis = 0) + np.median(self.res['F0 {0}'.format(sec)])
 
-            if 'gpf' in self._fm[sec]:
-                fm += self._fm[sec]['gpf']
+            if 'gpf' in self._lcm[sec]:
+                fm += self._lcm[sec]['gpf']
         
             resstd = np.std(self.f[i] - fm)
 
