@@ -197,9 +197,13 @@ class ExoSystem:
 
         for i, name in enumerate(self.fnames):
 
+            if not os.path.exists(self.direc+'/'+name):
+                print('LC file {0} not found.'.format(name))
+                continue
+
             if name[-5:] == '.fits':
 
-                with fits.open(self.direc+name) as hdul:
+                with fits.open(self.direc+'/'+name) as hdul:
 
                     tdata = hdul[1].data
 
@@ -224,7 +228,7 @@ class ExoSystem:
 
             elif name[-4:] == '.npz':
 
-                dat = np.load(self.direc+name)
+                dat = np.load(self.direc+'/'+name)
 
                 tt0 = dat[tab_lcs['Time Col'][i]]
                 f0 = dat[tab_lcs['Flux Col'][i]]
@@ -233,7 +237,7 @@ class ExoSystem:
 
             elif name[-4:] == '.dat':
 
-                dat = Table.read(self.direc+name, format = 'ascii.no_header')
+                dat = Table.read(self.direc+'/'+name, format = 'ascii.no_header')
 
                 tt0 = dat['col1']
                 f0 = dat['col2']
@@ -886,198 +890,26 @@ class ExoSystem:
 
         self.samples = sampler.get_chain()
 
-        self.log_likes_full = sampler.get_log_prob()
-
-
-        if save_samples:
-
-            pickle.dump({'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes_full}, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
-
-        self.calc_gelman_rubin()
-
-
-        self.flat_samples = sampler.get_chain(flat = True, thin = 20)
-        self.log_likes = sampler.get_log_prob(flat = True, thin = 20)
+        self.log_likes = sampler.get_log_prob()
 
         if self.fit_transit and np.any(self.fit_ttv):
 
-            blobs = sampler.get_blobs(flat = True, thin = 20)
+            self.blobs = sampler.get_blobs()
 
-            ps = np.array([x for x in blobs['ps']]).T
-            tcs = np.array([x for x in blobs['tcs']]).T
+        if save_samples:
 
+            z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
 
-        self.res = {}
+            if hasattr(self, 'blobs'):
+                z['blobs'] = self.blobs
 
-        for k, v in self.parnames.items():
+            pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
 
-            self.res[k] = self.flat_samples[:,v]
+        self.calc_gelman_rubin()
 
-        self.res['log_like'] = self.log_likes
+        self.flatten_chains()
 
-        pickle.dump(self.res, open(self.direc+'Output/'+name+'_res.p', 'wb'))
-
-        self.dres = {}
-
-        n = len(self.res['log_like'])
-
-        if self.fit_star:
-
-            rstar, mstar, T, logg = self.misti.interp_value([self.res['eep'],self.res['age'],self.res['feh']],['radius','mass','Teff','logg']).T
-            self.dres['rstar'] = rstar
-            self.dres['mstar'] = mstar
-            self.dres['Tstar'] = T
-            self.dres['loggstar'] = logg
-
-            interp_input = np.array([T, logg, self.res['feh']]).T
-
-            for filt in np.unique(self.filters):
-
-                self.dres['u1 {0}'.format(filt)] = self.ldgrids[filt][0](interp_input)
-                self.dres['u2 {0}'.format(filt)] = self.ldgrids[filt][1](interp_input)
-
-        else:
-
-            T = np.random.normal(self.Ts, self.Tserr, n)
-            rstar = np.random.normal(self.rs, self.rserr, n)
-            mstar = np.random.normal(self.ms, self.mserr, n)
-
-        J = np.random.normal(self.Jmag, self.Jmagerr, n)
-        einsol = 1*u.Lsun / (4 * np.pi * u.AU**2)
-
-        for i in range(self.n):
-
-            if self.is_transit[i] and self.fit_transit:
-
-                if self.fit_ttv[i]:
-
-                    k = np.sum(self.fit_ttv[:i])
-
-                    p = np.array(ps[k])
-                    self.dres['P {0}'.format(i+1)] = p
-
-                    tc = np.array(tcs[k])
-                    self.dres['Tc {0}'.format(i+1)] = tc
-
-                else:
-
-                    p = np.exp(self.res['log(P) {0}'.format(i+1)])
-                    self.dres['P {0}'.format(i+1)] = p
-
-                rp = self.res['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
-                self.dres['Rp {0}'.format(i+1)] = rp
-
-                if not self.fit_star:
-
-                    ars = np.exp(self.res['log(a/rs) {0}'.format(i+1)])
-                    self.dres['a/rs {0}'.format(i+1)] = ars
-
-                    a = ars * rstar * (1*u.Rsun).to(u.AU).value
-                    self.dres['a {0}'.format(i+1)] = a
-
-                inc = np.arccos(self.res['cos(i) {0}'.format(i+1)]) * 180/np.pi
-                self.dres['i {0}'.format(i+1)] = inc
-
-
-            elif self.is_rv[i] and self.fit_rv:
-
-                p = np.exp(self.res['log(P) {0}'.format(i+1)])
-                self.dres['P {0}'.format(i+1)] = p
-
-            if self.fit_ecc[i]:
-
-                e = self.res['secw {0}'.format(i+1)]**2 + self.res['sesw {0}'.format(i+1)]**2
-                self.dres['e {0}'.format(i+1)] = e
-
-                w = np.arctan2(self.res['sesw {0}'.format(i+1)], self.res['secw {0}'.format(i+1)]) * 180/np.pi
-                self.dres['w {0}'.format(i+1)] = w
-
-            else:
-
-                e = 0
-                w = 90
-
-            mp = 0
-
-            if self.is_rv[i] and self.fit_rv:
-
-                k = np.exp(self.res['log(K) {0}'.format(i+1)])
-                self.dres['K {0}'.format(i+1)] = k
-
-                if self.is_transit[i] and self.fit_transit:
-
-                    mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, inc*np.pi/180, mstar)
-                    self.dres['Mp {0}'.format(i+1)] = mp
-
-                    rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
-                    self.dres['rhop {0}'.format(i+1)] = rhop
-
-                else:
-
-                    mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
-                    self.dres['Mp sini {0}'.format(i+1)] = mp
-
-            if self.fit_star or (self.is_rv[i] and self.fit_rv):
-
-                a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
-                self.dres['a {0}'.format(i+1)] = a
-
-                ars = (a*u.AU).to(u.Rsun).value / rstar
-                self.dres['a/rs {0}'.format(i+1)] = ars
-
-            teq = (1/4)**(1/4) * T * ars**(-1/2)
-            self.dres['teq {0}'.format(i+1)] = teq
-
-            sinc = (constants.sigma_sb * (T * u.K)**4 * ars**(-2) / einsol).to(u.dimensionless_unscaled)
-            self.dres['sinc {0}'.format(i+1)] = sinc
-
-            if self.is_transit[i] and self.fit_transit:
-
-                b = ars * self.res['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w * np.pi/180))
-                self.dres['b {0}'.format(i+1)] = b
-
-                dur = p / np.pi * np.arcsin(np.sqrt((1 + self.res['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - self.res['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
-                self.dres['dur {0}'.format(i+1)] = dur
-
-                if not self.fit_star:
-
-                    rhos = 0.018916375 * ars**3 / p**2
-                    self.dres['rhos {0}'.format(i+1)] = rhos
-
-                if self.is_rv[i] and self.fit_rv:
-
-                    sf = np.full(n, 0.19)
-                    j = np.where(rp > 1.5)[0]
-                    sf[j] = 1.26
-                    j = np.where(rp > 2.75)[0]
-                    sf[j] = 1.28
-                    j = np.where(rp > 4)[0]
-                    sf[j] = 1.15
-
-                    tsm = sf * rp**3 * teq / (mp * rstar**2) * 10**(-J/5)
-                    self.dres['TSM {0}'.format(i+1)] = tsm
-
-
-        if not self.fit_star:
-            self.dres['rstar'] = rstar
-            self.dres['mstar'] = mstar
-            self.dres['Tstar'] = T
-
-
-        pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
-
-
-        out = []
-        for x in self.res:
-            if x == 'log_like':
-                continue
-            out.append([x, np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
-        for x in self.dres:
-            out.append([x, np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
-
-
-        tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
-        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
+        self.make_results(name)
 
         
         self.plot_pl_chains(name, show_plot = show_plots)
@@ -1318,6 +1150,219 @@ class ExoSystem:
         self.starmod._derived_samples["AV"] = samples[:,self.parnames['AV']]
 
 
+    def flatten_chains(self):
+        """Flattens and thins by a factor of 20 ExoSystem.samples, ExoSystem.log_likes, and ExoSystem.blobs (if it exists, stores linear regression periods and Tcs of
+        TTV planets from each sample). Stores these as ExoSystem.flat_samples, ExoSystem.flat_log_likes, and ExoSystem.flat_blobs, respectively.
+        """
+
+        self.flat_samples = self.samples[19::20]
+        shape = self.flat_samples.shape
+        self.flat_samples = np.reshape(self.flat_samples, (shape[0]*shape[1], shape[2]))
+
+        self.flat_log_likes = self.log_likes[19::20]
+        shape = self.flat_log_likes.shape
+        self.flat_log_likes = np.reshape(self.flat_log_likes, (shape[0]*shape[1]))
+
+        if hasattr(self, 'blobs'):
+
+            self.flat_blobs = self.blobs[19::20]
+            shape = self.flat_blobs.shape
+            self.flat_blobs = np.reshape(self.flat_blobs, (shape[0]*shape[1]))
+
+
+    def make_results(self, name: str):
+        """Converts flat_samples and flat_log_likes into a dict that stores the chains of parameters that were directly fit, as well as the log
+        likelihood of each sample. Saves these to the pickle file Output/name_res.p. Accessible through ExoSystem.results. See the documentation on
+        ExoSystem.results for more details on the formatting of the object.
+
+        Also creates a dict of flat chains of derived parameters (e.g. period from log(period), or planet equilibrium temperature). Saves these to the
+        pickle file Output/name_dres.p. Accessible through ExoSystem.derived_results. See the documentation on ExoSystem.derived_results for more
+        details on the formatting of the object.
+
+        Combines results and derived_results into a single human-readable ascii table which is saved to Results/name.txt. Can be directly printed out
+        by calling ExoSystem.print_results(name).
+
+        Args:
+            name (str): Name of the run. Sets the names of the output files from this function.
+        """
+
+        if self.fit_transit and np.any(self.fit_ttv):
+
+            ps = np.array([x for x in self.flat_blobs['ps']]).T
+            tcs = np.array([x for x in self.flat_blobs['tcs']]).T
+
+        self.res = {}
+
+        for k, v in self.parnames.items():
+
+            self.res[k] = self.flat_samples[:,v]
+
+        self.res['log_like'] = self.flat_log_likes
+
+        pickle.dump(self.res, open(self.direc+'Output/'+name+'_res.p', 'wb'))
+
+        self.dres = {}
+
+        n = len(self.res['log_like'])
+
+        if self.fit_star:
+
+            rstar, mstar, T, logg = self.misti.interp_value([self.res['eep'],self.res['age'],self.res['feh']],['radius','mass','Teff','logg']).T
+            self.dres['rstar'] = rstar
+            self.dres['mstar'] = mstar
+            self.dres['Tstar'] = T
+            self.dres['loggstar'] = logg
+
+            interp_input = np.array([T, logg, self.res['feh']]).T
+
+            for filt in np.unique(self.filters):
+
+                self.dres['u1 {0}'.format(filt)] = self.ldgrids[filt][0](interp_input)
+                self.dres['u2 {0}'.format(filt)] = self.ldgrids[filt][1](interp_input)
+
+        else:
+
+            T = np.random.normal(self.Ts, self.Tserr, n)
+            rstar = np.random.normal(self.rs, self.rserr, n)
+            mstar = np.random.normal(self.ms, self.mserr, n)
+
+        J = np.random.normal(self.Jmag, self.Jmagerr, n)
+        einsol = 1*u.Lsun / (4 * np.pi * u.AU**2)
+
+        for i in range(self.n):
+
+            if self.is_transit[i] and self.fit_transit:
+
+                if self.fit_ttv[i]:
+
+                    k = np.sum(self.fit_ttv[:i])
+
+                    p = np.array(ps[k])
+                    self.dres['P {0}'.format(i+1)] = p
+
+                    tc = np.array(tcs[k])
+                    self.dres['Tc {0}'.format(i+1)] = tc
+
+                else:
+
+                    p = np.exp(self.res['log(P) {0}'.format(i+1)])
+                    self.dres['P {0}'.format(i+1)] = p
+
+                rp = self.res['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
+                self.dres['Rp {0}'.format(i+1)] = rp
+
+                if not self.fit_star:
+
+                    ars = np.exp(self.res['log(a/rs) {0}'.format(i+1)])
+                    self.dres['a/rs {0}'.format(i+1)] = ars
+
+                    a = ars * rstar * (1*u.Rsun).to(u.AU).value
+                    self.dres['a {0}'.format(i+1)] = a
+
+                inc = np.arccos(self.res['cos(i) {0}'.format(i+1)]) * 180/np.pi
+                self.dres['i {0}'.format(i+1)] = inc
+
+
+            elif self.is_rv[i] and self.fit_rv:
+
+                p = np.exp(self.res['log(P) {0}'.format(i+1)])
+                self.dres['P {0}'.format(i+1)] = p
+
+            if self.fit_ecc[i]:
+
+                e = self.res['secw {0}'.format(i+1)]**2 + self.res['sesw {0}'.format(i+1)]**2
+                self.dres['e {0}'.format(i+1)] = e
+
+                w = np.arctan2(self.res['sesw {0}'.format(i+1)], self.res['secw {0}'.format(i+1)]) * 180/np.pi
+                self.dres['w {0}'.format(i+1)] = w
+
+            else:
+
+                e = 0
+                w = 90
+
+            mp = 0
+
+            if self.is_rv[i] and self.fit_rv:
+
+                k = np.exp(self.res['log(K) {0}'.format(i+1)])
+                self.dres['K {0}'.format(i+1)] = k
+
+                if self.is_transit[i] and self.fit_transit:
+
+                    mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, inc*np.pi/180, mstar)
+                    self.dres['Mp {0}'.format(i+1)] = mp
+
+                    rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+                    self.dres['rhop {0}'.format(i+1)] = rhop
+
+                else:
+
+                    mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
+                    self.dres['Mp sini {0}'.format(i+1)] = mp
+
+            if self.fit_star or (self.is_rv[i] and self.fit_rv):
+
+                a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
+                self.dres['a {0}'.format(i+1)] = a
+
+                ars = (a*u.AU).to(u.Rsun).value / rstar
+                self.dres['a/rs {0}'.format(i+1)] = ars
+
+            teq = (1/4)**(1/4) * T * ars**(-1/2)
+            self.dres['teq {0}'.format(i+1)] = teq
+
+            sinc = (constants.sigma_sb * (T * u.K)**4 * ars**(-2) / einsol).to(u.dimensionless_unscaled)
+            self.dres['sinc {0}'.format(i+1)] = sinc
+
+            if self.is_transit[i] and self.fit_transit:
+
+                b = ars * self.res['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w * np.pi/180))
+                self.dres['b {0}'.format(i+1)] = b
+
+                dur = p / np.pi * np.arcsin(np.sqrt((1 + self.res['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - self.res['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
+                self.dres['dur {0}'.format(i+1)] = dur
+
+                if not self.fit_star:
+
+                    rhos = 0.018916375 * ars**3 / p**2
+                    self.dres['rhos {0}'.format(i+1)] = rhos
+
+                if self.is_rv[i] and self.fit_rv:
+
+                    sf = np.full(n, 0.19)
+                    j = np.where(rp > 1.5)[0]
+                    sf[j] = 1.26
+                    j = np.where(rp > 2.75)[0]
+                    sf[j] = 1.28
+                    j = np.where(rp > 4)[0]
+                    sf[j] = 1.15
+
+                    tsm = sf * rp**3 * teq / (mp * rstar**2) * 10**(-J/5)
+                    self.dres['TSM {0}'.format(i+1)] = tsm
+
+
+        if not self.fit_star:
+            self.dres['rstar'] = rstar
+            self.dres['mstar'] = mstar
+            self.dres['Tstar'] = T
+
+
+        pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
+
+
+        out = []
+        for x in self.res:
+            if x == 'log_like':
+                continue
+            out.append([x, np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
+        for x in self.dres:
+            out.append([x, np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
+
+        tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
+        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
+
+
     def load_results(self, name: str):
         """Loads in the results from a previous run. Flattened chains will be accessable in ExoSystem.res and ExoSystem.dres.
         
@@ -1412,7 +1457,8 @@ class ExoSystem:
     
     def load_samples(self, name: str):
         """Loads in unflattened, un-thinned MCMC chains. Paramater name map is saved to ExoSystem.parnames, chains are saved to ExoSystem.samples,
-        log likelihood values are saved to ExoSystem.log_likes_full.
+        log likelihood values are saved to ExoSystem.log_likes. If any TTVs were fit, linear regression periods and Tcs for each sample are saved to
+        Exosystem.blobs.
 
         Args:
             name (str): Name of the previous run to load in.
@@ -1421,7 +1467,9 @@ class ExoSystem:
         z = pickle.load(open(self.direc+'/Output/'+name+'_samples.p', 'rb'))
         self.parnames = z['parnames']
         self.samples = z['samples']
-        self.log_likes_full = z['log_like']
+        self.log_likes = z['log_like']
+        if 'blobs' in z:
+            self.blobs = z['blobs']
 
 
     def delete_run(self, name: str):
@@ -1511,7 +1559,7 @@ class ExoSystem:
 
                 self.ttvs0[i+1] = np.delete(self.ttvs0[i+1], del_ind)
 
-                ttvi0 = np.round((np.array(self.ttvs0[i+1]) - self.ttvs0[i+1][0]) / self.p[i], 0)
+                ttvi0 = np.round((np.array(self.ttvs0[i+1]) - self.ttvs0[i+1][0]) / self.p[i], 0).astype(int)
                 self.ttvi['{0}'.format(i+1)] = ttvi0
 
 
