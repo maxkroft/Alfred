@@ -24,7 +24,8 @@ dependencies = [
     "setuptools < 81",
     "holoviews",
     "numba",
-    "astroquery"
+    "astroquery",
+    "mplcursors"
     ]
 
 [tool.setuptools.dynamic]

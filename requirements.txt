@@ -13,3 +13,4 @@ setuptools < 81
 holoviews
 numba
 astroquery
+mplcursors

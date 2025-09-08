@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+import mplcursors
 import emcee
 import corner
 import batman
@@ -2886,6 +2887,37 @@ class ExoSystem:
 
         else:
             plt.close()
+
+
+    def examine_chains(self, parname: str):
+        """Allows you to examine the chains of a specific parameter. Hovering over a chain with your mouse will highlight it and display the index
+        of the chain in the 1 axis (0-indexed) of ExoSystem.samples.
+
+        Useful for identifying the index of an outlier chain so that you can remove it.
+
+        Must have the full samples of the run available as Exosystem.samples. Either this is from having just run a fit with this ExoSystem object,
+        or from loading in the results of a previous run which had save_samples set to True.
+
+        Args:
+            parname (str): The name of the parameter whose chains will be plotted. See the parameters that were fit in this run with
+            ExoSystem.parnames.
+        """
+
+        k = self.parnames[parname]
+
+        fig, ax = plt.subplots(figsize = (14,8), layout = 'constrained')
+
+        for i in range(self.samples.shape[1]):
+            ax.plot(self.samples[:,i,k], color = 'black', alpha = 0.2, label = 'Index = {0}'.format(i))
+
+        cursor = mplcursors.cursor(hover = mplcursors.HoverMode.Transient, highlight = True)
+        cursor.connect("add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
+
+        ax.set_xlabel('N Steps', fontsize = 15)
+        ax.set_ylabel(parname, fontsize = 15)
+        ax.set_title('Mouse over a chain to see its index.')
+
+        plt.show()
 
 
     def print_results(self, name: str):
