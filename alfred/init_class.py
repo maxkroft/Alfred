@@ -720,10 +720,6 @@ def create_folder(direc: str):
     if not os.path.exists(direc+'/Output'):
         os.mkdir(direc+'/Output')
 
-
-    alt_name = input('What is the HD ID or TIC ID of the star? ')
-    with open(direc+'/'+alt_name+'.txt', 'w') as file: pass
-
     x = input('Do you have the light curve files already? y/n ')
 
     if x.lower() == 'y':
