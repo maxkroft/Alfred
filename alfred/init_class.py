@@ -77,13 +77,19 @@ class Init_lcs(InitFile):
 
         row = []
 
-        fpath = input('Absolute path to lightcurve file to move here: ')
-        fname = fpath[fpath.rfind('/')+1:]
+        fpath = input('Absolute path to light curve file to move here, or type "skip" if you dont want to move a file now: ')
+
+        if fpath.lower() == 'skip':
+            fname = input('Name of light curve file: ')
+
+        else:
+            fname = fpath[fpath.rfind('/')+1:]
+            try:
+                shutil.copyfile(fpath, self.direc+'/'+fname)
+            except shutil.SameFileError:
+                print('File already there.')
+
         row.append(fname)
-        try:
-            shutil.copyfile(fpath, self.direc+'/'+fname)
-        except shutil.SameFileError:
-            print('File already there.')
 
         nickname = input('Nickname for the data set (e.g. "TESS S57"): ')
         row.append(nickname)
@@ -157,13 +163,19 @@ class Init_rv(InitFile):
 
         row = []
 
-        fpath = input('Absolute path to RV file to move here: ')
-        fname = fpath[fpath.rfind('/')+1:]
+        fpath = input('Absolute path to RV file to move here, or type "skip" if you dont want to move a file now: ')
+
+        if fpath.lower() == 'skip':
+            fname = input('Name of RV file: ')
+
+        else:
+            fname = fpath[fpath.rfind('/')+1:]
+            try:
+                shutil.copyfile(fpath, self.direc+'/'+fname)
+            except shutil.SameFileError:
+                print('File already there.')
+
         row.append(fname)
-        try:
-            shutil.copyfile(fpath, self.direc+'/'+fname)
-        except shutil.SameFileError:
-            print('File already there.')
 
         nickname = input('Nickname for the data set (e.g. "NEID"): ')
         row.append(nickname)
