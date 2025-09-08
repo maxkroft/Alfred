@@ -314,10 +314,18 @@ class Init_star(InitFile):
             rows[0].append(W3[0])
             rows[1].append(W3[1])
 
+
         self.table = Table(rows = rows,
                 names = ['Val/Err','Radius','Mass','Teff','log(g)','Fe/H','Parallax','J','H','K','G','Bp','Rp','W1','W2','W3'],
                 units = [None,'Rsun','Msun','K','cgs','dex','mas','mag','mag','mag','mag','mag','mag','mag','mag','mag'],
                 dtype = [str,float,float,int,float,float,float,float,float,float,float,float,float,float,float,float])
+        
+        if auto == 'y':
+
+            tabformat = {'Parallax': '%.4f','J': '%.3f','H': '%.3f','K': '%.3f','G': '%.6f','Bp': '%.6f','Rp': '%.6f','W1': '%.3f','W2': '%.3f','W3': '%.3f'}
+
+            for x in tabformat:
+                self.table[x].format = tabformat[x]
         
         self.save()
 
