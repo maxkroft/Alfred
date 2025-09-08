@@ -2888,13 +2888,23 @@ class ExoSystem:
             plt.close()
 
 
-    def print_results(self, name):
+    def print_results(self, name: str):
+        """Loads in and prints out the results table from Results/name.txt that was created by Exosystem.make_results(name).
+
+        Args:
+            name (str): Name of the run to load the results from. Loads in Results/name.txt.
+        """
 
         tab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
         tab.pprint_all()
 
 
     def calc_rv_bic(self):
+        """Calculates the Bayesian information criterion (BIC) of the best fit RV model. Can be used to compare different RV models with different
+        numbers of planets, background trends, planet eccentricities, etc.
+
+        Not implemented for transit models, as the out of transit points tend to dominate and so it is less reliable.
+        """
 
         k = len(self.res)-1
         n = len(self.tr.ravel())
@@ -2915,6 +2925,14 @@ class ExoSystem:
 
 
     def calc_transit_err_scale(self):
+        """Calculates the standard deviation of the residual of the best fit transit model and compares this to the median error on the light curve.
+        Does this light curve by light curve. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
+        value to put into init_lcs for each light curve, accounting for any error scaling already in effect.
+
+        It can be useful to rescale errors to if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is an alternative to using a jitter term in other fitting packages. Rescaling the errors can be very important when detrending light
+        curves using a GP, as underestimated errors will cause the GP to try to detrend to each individual point.
+        """
 
         for i in range(len(self.tt)):
 
@@ -2933,6 +2951,13 @@ class ExoSystem:
 
 
     def calc_rv_err_scale(self):
+        """Calculates the standard deviation of the residual of the best fit RV model and compares this to the median error on the RV data.
+        Does this data set by data set. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
+        value to put into init_rv for each data set, accounting for any error scaling already in effect.
+
+        It can be useful to rescale errors to if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is an alternative to using a jitter term in other fitting packages.
+        """
 
         rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
@@ -2953,6 +2978,9 @@ class ExoSystem:
 
 
     def calc_gelman_rubin(self):
+        """Calculates the Gelman-Rubin Statistic for each parameter in the MCMC fit. Generally, if the Gelman-Rubin Statistic is below 1.1 for all
+        parameters, then the MCMC has converged. If it looks converged, but the statistic is above 1.1 for some parameters, try running for more steps.
+        """
 
         print('\nGelman-Rubin Statistics:')
 
@@ -2971,9 +2999,29 @@ class ExoSystem:
             print(k, R)
 
 
-    def rv_lomb_scargle(self, min_freq = None, max_freq = None, freq = None, plot_periods = False, residual = True):
+    def rv_lomb_scargle(self, min_freq: float = None, max_freq: float = None, freq: np.typing.ArrayLike = None, plot_periods = False, use_residual = True) -> tuple[np.typing.NDArray]:
+        """Creates a Lomb-Scargle periodogram of the RV data. Also plots the 1% and 5% false alarm levels in red and orange, respectively. Generally,
+        a signal is significant if it crosses above the 1% false alarm level. Can be useful for looking for additional periodic signals (like planets!)
+        in the RV data.
 
-        if residual:
+        Args:
+            min_freq (float, optional): If it is not None, sets the minimum frequency (in 1/days) to search in the periodogram. Default is None.
+
+            max_freq (float, optional): If it is not None, sets the maximum frequency (in 1/days) to search in the periodgram. Default is None.
+
+            freq (ArrayLike, optional): Manually sets the frequency grid to use in the periodogram. Units are 1/days. Default is None.
+
+            plot_periods (bool, optional): Whether or not to plot the periodgram relative to period (True) or frequency (False). Default is False.
+
+            use_residual (bool, optional): Whether or not to make this periodogram off of just the RV data (False), or the residual of the RV data with the
+                best fit model (True). If True, uses whatever model is currently in ExoSystem.rv_mod. Default is True.
+
+        Returns:
+            The frequency grid and the periodogram power at each frequency as a tuple of arrays. Allows you to calculate the maxmimum power
+            frequency, or make other plots.
+        """
+
+        if use_residual:
             rvres = self.rv - np.sum(self._rvm['rvm'], axis = 0) - self._rvm['bkg']
 
         else:
@@ -2994,13 +3042,16 @@ class ExoSystem:
         if plot_periods:
             ax.plot(1/freq, power, c = 'black')
             ax.set_xscale('log')
+            ax.set_xlabel('Period (days)', fontsize = 20)
 
         else:
             ax.plot(freq, power, c = 'black')
+            ax.set_xlabel('Frequency (1/days)', fontsize = 20)
 
         ax.axhline(ls.false_alarm_level(0.01), c = 'red', label = '1% FA')
         ax.axhline(ls.false_alarm_level(0.05), c = 'orange', label = '5% FA')
-        ax.legend()
+        ax.legend(fontsize = 15)
+        ax.tick_params(axis = 'both', labelsize = 15)
         plt.show()
 
         return freq, power
