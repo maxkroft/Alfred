@@ -2,6 +2,8 @@ import numpy as np
 from astropy.table import Table
 import shutil
 import os
+from astroquery.vizier import Vizier
+from astropy import units as u
 
 from alfred.ld_grids import calc_ld, ld_grid_list
 
@@ -52,7 +54,10 @@ class Init_lcs(InitFile):
 
         if not empty:
 
-            input('Creating light curve initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+            x = input('Creating light curve initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+            if x == 'stop':
+                return
 
             while True:
 
@@ -129,7 +134,10 @@ class Init_rv(InitFile):
 
         if not empty:
 
-            input('Creating rv initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+            x = input('Creating rv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+            if x == 'stop':
+                return
 
             while True:
 
@@ -193,7 +201,10 @@ class Init_star(InitFile):
 
     def create(self):
 
-        input('Creating star initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+        x = input('Creating star initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+        if x == 'stop':
+            return
 
         rows = [['Value'],['Error']]
 
@@ -209,10 +220,6 @@ class Init_star(InitFile):
         rows[0].append(T[0])
         rows[1].append(T[1])
 
-        P = input('Gaia parallax and error (in mas), separated by a space: ').split()
-        rows[0].append(P[0])
-        rows[1].append(P[1])
-
         logg = input('Stellar log(g) and err (in cgs), separated by a space (or "nan nan" if unavailable): ').split()
         rows[0].append(logg[0])
         rows[1].append(logg[1])
@@ -221,45 +228,95 @@ class Init_star(InitFile):
         rows[0].append(feh[0])
         rows[1].append(feh[1])
 
-        J = input('2MASS J band magnitude and err, separated by a space: ').split()
-        rows[0].append(J[0])
-        rows[1].append(J[1])
+        auto = input('Get parallax and magnitudes using astroquery? y/n').lower()
 
-        H = input('2MASS H band magnitude and err, separated by a space: ').split()
-        rows[0].append(H[0])
-        rows[1].append(H[1])
+        if auto == 'y':
 
-        K = input('2MASS K band magnitude and err, separated by a space: ').split()
-        rows[0].append(K[0])
-        rows[1].append(K[1])
+            cid = input('Catalog ID (TIC, Gaia, HIP, etc): ')
 
-        G = input('Gaia G band magnitude and err, separated by a space: ').split()
-        rows[0].append(G[0])
-        rows[1].append(G[1])
+            vizier = Vizier(columns = ['**','+_r'])
 
-        Bp = input('Gaia Bp band magnitude and err, separated by a space: ').split()
-        rows[0].append(Bp[0])
-        rows[1].append(Bp[1])
+            gaia = vizier.query_object(object_name = cid, catalog = 'I/355/gaiadr3', radius = 1*u.arcmin)[0][0]
 
-        Rp = input('Gaia Rp band magnitude and err, separated by a space: ').split()
-        rows[0].append(Rp[0])
-        rows[1].append(Rp[1])
+            twomass = vizier.query_object(object_name = cid, catalog = 'II/246/out', radius = 1*u.arcmin)[0][0]
 
-        W1 = input('WISE W1 band magnitude and err, separated by a space: ').split()
-        rows[0].append(W1[0])
-        rows[1].append(W1[1])
+            wise = vizier.query_object(object_name = cid, catalog = 'II/328/allwise', radius = 1*u.arcmin)[0][0]
 
-        W2 = input('WISE W2 band magnitude and err, separated by a space: ').split()
-        rows[0].append(W2[0])
-        rows[1].append(W2[1])
+            rows[0].append(gaia['Plx'])
+            rows[1].append(gaia['e_Plx'])
 
-        W3 = input('WISE W3 band magnitude and err, separated by a space: ').split()
-        rows[0].append(W3[0])
-        rows[1].append(W3[1])
+            rows[0].append(twomass['Jmag'])
+            rows[1].append(twomass['e_Jmag'])
+
+            rows[0].append(twomass['Hmag'])
+            rows[1].append(twomass['e_Hmag'])
+
+            rows[0].append(twomass['Kmag'])
+            rows[1].append(twomass['e_Kmag'])
+
+            rows[0].append(gaia['Gmag'])
+            rows[1].append(gaia['e_Gmag'])
+
+            rows[0].append(gaia['BPmag'])
+            rows[1].append(gaia['e_BPmag'])
+
+            rows[0].append(gaia['RPmag'])
+            rows[1].append(gaia['e_RPmag'])
+
+            rows[0].append(wise['W1mag'])
+            rows[1].append(wise['e_W1mag'])
+
+            rows[0].append(wise['W2mag'])
+            rows[1].append(wise['e_W2mag'])
+
+            rows[0].append(wise['W3mag'])
+            rows[1].append(wise['e_W3mag'])
+
+        else:
+
+            P = input('Gaia parallax and error (in mas), separated by a space: ').split()
+            rows[0].append(P[0])
+            rows[1].append(P[1])
+
+            J = input('2MASS J band magnitude and err, separated by a space: ').split()
+            rows[0].append(J[0])
+            rows[1].append(J[1])
+
+            H = input('2MASS H band magnitude and err, separated by a space: ').split()
+            rows[0].append(H[0])
+            rows[1].append(H[1])
+
+            K = input('2MASS K band magnitude and err, separated by a space: ').split()
+            rows[0].append(K[0])
+            rows[1].append(K[1])
+
+            G = input('Gaia G band magnitude and err, separated by a space: ').split()
+            rows[0].append(G[0])
+            rows[1].append(G[1])
+
+            Bp = input('Gaia Bp band magnitude and err, separated by a space: ').split()
+            rows[0].append(Bp[0])
+            rows[1].append(Bp[1])
+
+            Rp = input('Gaia Rp band magnitude and err, separated by a space: ').split()
+            rows[0].append(Rp[0])
+            rows[1].append(Rp[1])
+
+            W1 = input('WISE W1 band magnitude and err, separated by a space: ').split()
+            rows[0].append(W1[0])
+            rows[1].append(W1[1])
+
+            W2 = input('WISE W2 band magnitude and err, separated by a space: ').split()
+            rows[0].append(W2[0])
+            rows[1].append(W2[1])
+
+            W3 = input('WISE W3 band magnitude and err, separated by a space: ').split()
+            rows[0].append(W3[0])
+            rows[1].append(W3[1])
 
         self.table = Table(rows = rows,
-                names = ['Val/Err','Radius','Mass','Teff','Parallax','log(g)','Fe/H','J','H','K','G','Bp','Rp','W1','W2','W3'],
-                units = [None,'Rsun','Msun','K','mas','cgs','dex','mag','mag','mag','mag','mag','mag','mag','mag','mag'],
+                names = ['Val/Err','Radius','Mass','Teff','log(g)','Fe/H','Parallax','J','H','K','G','Bp','Rp','W1','W2','W3'],
+                units = [None,'Rsun','Msun','K','cgs','dex','mas','mag','mag','mag','mag','mag','mag','mag','mag','mag'],
                 dtype = [str,float,float,int,float,float,float,float,float,float,float,float,float,float,float,float])
         
         self.save()
@@ -282,7 +339,10 @@ class Init_ld(InitFile):
 
         if not empty:
 
-            input('Creating limb darkening initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+            x = input('Creating limb darkening initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+            if x == 'stop':
+                return
 
             while True:
 
@@ -367,7 +427,10 @@ class Init_planets(InitFile):
             units = [None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None],
             dtype = [bool, bool, bool, bool, float, float, float, float, float, float, float, float])
 
-        input('Creating planet initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+        x = input('Creating planet initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+        if x == 'stop':
+            return
 
         while True:
 
@@ -466,7 +529,10 @@ class Init_ttvs(InitFile):
 
         self.table = Table()
 
-        input('Creating ttv initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+        x = input('Creating ttv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+        if x == 'stop':
+            return
 
         while True:
 
@@ -568,7 +634,10 @@ class Init_priors(InitFile):
         self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
             dtype = [str, str, float, float])
 
-        input('Creating prior initialization file {0} in {1}. If this was a mistake, press esc. Otherwise, enter to continue.'.format(self.name, self.direc))
+        x = input('Creating prior initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+        if x == 'stop':
+            return
 
         while True:
 

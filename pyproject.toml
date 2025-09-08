@@ -23,7 +23,8 @@ dependencies = [
     "svo_filters",
     "setuptools < 81",
     "holoviews",
-    "numba"
+    "numba",
+    "astroquery"
     ]
 
 [tool.setuptools.dynamic]
