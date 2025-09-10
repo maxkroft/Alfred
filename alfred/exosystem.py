@@ -1363,7 +1363,29 @@ class ExoSystem:
 
     @property
     def results(self):
-        """Dict which stores the flattened chains of fit parameters. Keys are the parameter names, e.g. log(P) 1, ror 2, etc.
+        """Dict which stores the flattened chains of fit parameters. Keys are the parameter names.
+
+        Potential fit parameters:
+            - log(P) x:
+            - Tc x:
+            - ror x:
+            - log(a/Rs) x:
+            - cos(i) x:
+            - log(K) x:
+            - secw x:
+            - sesw x:
+            - TT x y:
+            - F0 x:
+            - log(rho_gp) x:
+            - log(sigma_gp) x:
+            - trend x:
+            - u1 x:
+            - u2 x:
+            - eep:
+            - age:
+            - feh:
+            - distance:
+            - AV:
         """
         return self.res
     
@@ -1757,7 +1779,7 @@ class ExoSystem:
 
         fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
-        if len(self.tt) == 1:
+        if np.sum(self.detrend) == 1:
             ax = np.array([ax])
 
         for j in range(len(self.tt)):
