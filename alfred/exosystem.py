@@ -2697,7 +2697,7 @@ class ExoSystem:
 
         rv = self.rv.copy()
 
-        if self.use_BIS:
+        if 'BIS_C' in self.res:
 
             rv -= np.median(self.res['BIS_C'])*self.bis
 
@@ -2982,7 +2982,7 @@ class ExoSystem:
 
         rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
-        if self.use_BIS:
+        if 'BIS_C' in self.res:
 
             rvm += np.median(self.res['BIS_C'])*self.bis
 
@@ -3036,7 +3036,7 @@ class ExoSystem:
 
         rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
-        if self.use_BIS:
+        if 'BIS_C' in self.res:
 
             rvm += np.median(self.res['BIS_C'])*self.bis
 
@@ -3112,7 +3112,7 @@ class ExoSystem:
 
             rvres = self.rv - rvm
 
-            if self.use_BIS:
+            if 'BIS_C' in self.res:
 
                 rvres -= np.median(self.res['BIS_C'])*self.bis
 
