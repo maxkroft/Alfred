@@ -286,7 +286,8 @@ class ExoSystem:
                 self.rv.append(rv0)
                 self.rverr.append(rverr0)
                 self.which_rv.append([i]*len(tr0))
-                self.bis.append(np.array(rvdata['BIS']))
+                if 'BIS' in rvdata.columns:
+                    self.bis.append(np.array(rvdata['BIS']))
 
         if len(self.tr) > 0:
 
@@ -294,14 +295,16 @@ class ExoSystem:
             self.rv = np.concatenate(self.rv)
             self.rverr = np.concatenate(self.rverr)
             self.which_rv = np.concatenate(self.which_rv)
-            self.bis = np.concatenate(self.bis)
+            if len(self.bis) > 0:
+                self.bis = np.concatenate(self.bis)
 
             o = np.argsort(self.tr)
             self.tr = self.tr[o]
             self.rv = self.rv[o]
             self.rverr = self.rverr[o]
             self.which_rv = self.which_rv[o]
-            self.bis = self.bis[o]
+            if len(self.bis) > 0:
+                self.bis = self.bis[o]
 
             self.tr_ref = (np.max(self.tr) + np.min(self.tr))/2
             self.tr_plot = np.linspace(np.min(self.tr)-5, np.max(self.tr+5), 1000)
