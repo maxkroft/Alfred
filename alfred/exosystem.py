@@ -265,6 +265,7 @@ class ExoSystem:
         self.rv = []
         self.rverr = []
         self.which_rv = []
+        self.bis = []
 
         for i, name in enumerate(self.rvfiles):
 
@@ -285,6 +286,7 @@ class ExoSystem:
                 self.rv.append(rv0)
                 self.rverr.append(rverr0)
                 self.which_rv.append([i]*len(tr0))
+                self.bis.append(np.array(rvdata['BIS']))
 
         if len(self.tr) > 0:
 
@@ -292,12 +294,14 @@ class ExoSystem:
             self.rv = np.concatenate(self.rv)
             self.rverr = np.concatenate(self.rverr)
             self.which_rv = np.concatenate(self.which_rv)
+            self.bis = np.concatenate(self.bis)
 
             o = np.argsort(self.tr)
             self.tr = self.tr[o]
             self.rv = self.rv[o]
             self.rverr = self.rverr[o]
             self.which_rv = self.which_rv[o]
+            self.bis = self.bis[o]
 
             self.tr_ref = (np.max(self.tr) + np.min(self.tr))/2
             self.tr_plot = np.linspace(np.min(self.tr)-5, np.max(self.tr+5), 1000)
@@ -305,7 +309,8 @@ class ExoSystem:
 
 
     def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk = 0, fit_ld = False, use_priors = False,
-            rv_bkg_order = 0, star_run: str = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False) -> None:
+            rv_bkg_order = 0, star_run: str = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False,
+            use_BIS = False) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -394,6 +399,7 @@ class ExoSystem:
         self.fit_rv = fit_rv
         self.fit_star = fit_star
         self.order_a = order_a
+        self.use_BIS = use_BIS
 
 
         if self.rv_bkg_order not in [0,1,2]:
@@ -591,6 +597,9 @@ class ExoSystem:
 
             for i in np.unique(self.which_rv)[1:]:
                 self.x0['offset {0}'.format(self.rvnames[i])] = 0
+
+            if self.use_BIS:
+                self.x0['BIS_C'] = 0
 
         keys = list(self.x0.keys())
 
@@ -846,6 +855,9 @@ class ExoSystem:
                 pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01*np.exp(x[k]), self.nwalk)))
 
             if 'offset' in k:
+                pos.append(np.random.normal(x[k], 0.1, self.nwalk))
+
+            if k == 'BIS_C':
                 pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
             if k in ['u1','u2']:
@@ -2684,6 +2696,11 @@ class ExoSystem:
         trphase = self._rvm['trphase']
 
         rv = self.rv.copy()
+
+        if self.use_BIS:
+
+            rv -= np.median(self.res['BIS_C'])*self.bis
+
         for i, k in enumerate(np.unique(self.which_rv)):
 
             j = np.where(self.which_rv == k)[0]
@@ -2965,6 +2982,10 @@ class ExoSystem:
 
         rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
+        if self.use_BIS:
+
+            rvm += np.median(self.res['BIS_C'])*self.bis
+
         for i in np.unique(self.which_rv)[1:]:
 
             j = np.where(self.which_rv == i)[0]
@@ -3014,6 +3035,10 @@ class ExoSystem:
         """
 
         rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
+
+        if self.use_BIS:
+
+            rvm += np.median(self.res['BIS_C'])*self.bis
 
         rv = self.rv.copy()
         for i in np.unique(self.which_rv):
@@ -3076,7 +3101,20 @@ class ExoSystem:
         """
 
         if use_residual:
-            rvres = self.rv - np.sum(self._rvm['rvm'], axis = 0) - self._rvm['bkg']
+
+            rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
+
+            for i in np.unique(self.which_rv)[1:]:
+
+                j = np.where(self.which_rv == i)[0]
+
+                rvm[j] += np.median(self.res['offset {0}'.format(self.rvnames[i])])
+
+            rvres = self.rv - rvm
+
+            if self.use_BIS:
+
+                rvres -= np.median(self.res['BIS_C'])*self.bis
 
         else:
             rvres = self.rv
@@ -3444,6 +3482,9 @@ def log_like(par: dict, exs: ExoSystem):
     if exs.fit_rv:
 
         rvm = np.array([par['trend 0']]*len(exs.tr)) + (par['trend 1'] * (exs.tr - exs.tr_ref) if exs.rv_bkg_order > 0 else 0) + (par['trend 2'] * (exs.tr - exs.tr_ref)**2 if exs.rv_bkg_order > 1 else 0)
+
+        if exs.use_BIS:
+            rvm += par['BIS_C']*exs.bis
 
         for i in np.unique(exs.which_rv)[1:]:
 
