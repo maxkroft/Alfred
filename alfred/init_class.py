@@ -638,7 +638,7 @@ class Init_priors(InitFile):
                                  'stellar mass in solar masses',
                                  'stellar radius in solar radii',
                                  'mean stellar density in g/cm^3',
-                                 'stellar age in Gyr',
+                                 'log10 of stellar age in Gyr',
                                  'V band extinction in mags']
         
     
