@@ -1100,7 +1100,7 @@ class ExoSystem:
 
         if self.use_priors:
 
-            self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+            self.allpriors = AllPriors(self.init_priors.table, x0, self.fit_ttv)
 
         res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args), [x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
         x = {k:v for k,v in zip(keys, res.x)}
