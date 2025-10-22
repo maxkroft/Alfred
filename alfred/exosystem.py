@@ -1098,6 +1098,10 @@ class ExoSystem:
         x0 = {'eep': 355, 'age': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
         keys = list(x0.keys())
 
+        if self.use_priors:
+
+            self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+
         res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args), [x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
         x = {k:v for k,v in zip(keys, res.x)}
 
@@ -3480,6 +3484,10 @@ def log_like_staronly(par: dict, exs: ExoSystem):
 
     starlike = exs.starmod.lnlike([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
     starlike += exs.starmod.lnprior([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+
+    if exs.use_priors:
+
+        starlike += exs.allpriors.apply(par)
 
     if np.isnan(starlike):
         return -np.inf

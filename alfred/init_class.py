@@ -602,13 +602,13 @@ class Init_priors(InitFile):
 
         self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'trend', 'offset',
-                             'mstar', 'rstar', 'rhostar', 'age', 'AV']
+                             'mstar', 'rstar', 'rhostar', 'log10(age)', 'age', 'AV']
         
         self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT']
         self.lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         self.ld_vars = ['u1', 'u2']
         self.rv_vars = ['trend', 'offset']
-        self.star_vars = ['mstar', 'rstar', 'rhostar', 'age', 'AV']
+        self.star_vars = ['mstar', 'rstar', 'rhostar', 'log10(age)', 'age', 'AV']
         
         self.var_descriptions = ['natural log of the planet period in days',
                                  'planet period in days',
@@ -638,7 +638,8 @@ class Init_priors(InitFile):
                                  'stellar mass in solar masses',
                                  'stellar radius in solar radii',
                                  'mean stellar density in g/cm^3',
-                                 'log10 of stellar age in yr',
+                                 'log10 of stellar age in yr. This is used directly in fitting',
+                                 'stellar age in yr. Prior is not compatible with multinest, but works with MCMC',
                                  'V band extinction in mags']
         
     

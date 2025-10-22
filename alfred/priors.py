@@ -52,7 +52,7 @@ class AllPriors:
         searchvars = {'P': 'log(P)', 'a/rs': 'log(a/rs)', 'rhos': 'log(a/rs)', 'i': 'cos(i)', 'K': 'log(K)', 'e': 'secw', 'w': 'secw',
                       'rho_gp': 'log(rho_gp)', 'sigma_gp': 'log(sigma_gp)'}
         
-        star_vars = ['mstar', 'rstar', 'rhostar', 'age', 'AV']
+        star_vars = ['mstar', 'rstar', 'rhostar', 'log10(age)', 'AV']
 
         for i in range(len(tab)):
 
@@ -142,6 +142,12 @@ class AllPriors:
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
+            elif split[0] == 'age':
+
+                x = 10**(par['age'])
+
+                log_like += self.prior_dict[var].apply_priors(x)
+
             elif split[0] == 'rhos':
 
                 svar1 = ' '.join(['log(P)']+split[1:])
@@ -192,7 +198,7 @@ def apply_star_priors(tab: Table, starmod: SingleStarModel):
     var_convert = {'mstar': lambda x: starmod.set_prior(mass = x),
                    'rstar': lambda x: starmod.set_prior(radius = x),
                    'rhostar': lambda x: starmod.set_prior(density = x),
-                   'age': lambda x: starmod.set_prior(age = x),
+                   'log10(age)': lambda x: starmod.set_prior(age = x),
                    'AV': lambda x: starmod.set_prior(AV = x)}
 
     for var in var_convert:
@@ -213,7 +219,7 @@ def apply_star_priors(tab: Table, starmod: SingleStarModel):
         
                 starprior = GaussianPrior(tab['Param 1'][i], tab['Param 2'][i])
 
-        elif len(i) > 2 or len(np.unique(tab['Prior Type'][i])) < 2:
+        elif len(i) > 2 and len(np.unique(tab['Prior Type'][i])) < 2:
 
             print('Cannot apply multiple priors of same type to {0}.'.format(var))
             continue
