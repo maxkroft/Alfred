@@ -3149,7 +3149,7 @@ class ExoSystem:
         ax.tick_params(axis = 'both', labelsize = 15)
         plt.show()
 
-        return freq, power
+        return freq, power, ls
 
 
 
