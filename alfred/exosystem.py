@@ -3005,7 +3005,7 @@ class ExoSystem:
 
             mederr = np.median(self.ferr[i])
 
-            print(sec, 'std', resstd, 'median err', mederr, 'std / median err', resstd / mederr, 'new err scale', resstd/mederr*self.lc_err_scale[i])
+            print(sec, ': resid. std', resstd, ', median err', mederr, ', resid. std / median err', resstd / mederr, ', new err scale', resstd/mederr*self.lc_err_scale[i])
 
 
     def calc_rv_err_scale(self):
@@ -3032,7 +3032,7 @@ class ExoSystem:
 
             mederr = np.median(self.rverr[j])
 
-            print(self.rvnames[i], 'std', resstd, 'median err', mederr, 'std / median err', resstd / mederr, 'new err scale', resstd/mederr*self.rv_err_scale[i])
+            print(self.rvnames[i], ': resid. std', resstd, ', median err', mederr, ', resid. std / median err', resstd / mederr, ', new err scale', resstd/mederr*self.rv_err_scale[i])
 
 
     def calc_gelman_rubin(self):
