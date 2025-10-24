@@ -3057,7 +3057,7 @@ class ExoSystem:
             print(k, R)
 
 
-    def rv_lomb_scargle(self, min_freq: float = None, max_freq: float = None, freq: np.typing.ArrayLike = None, plot_periods = False, use_residual = True) -> tuple[np.typing.NDArray]:
+    def rv_lomb_scargle(self, min_freq: float = None, max_freq: float = None, freq: np.typing.ArrayLike = None, plot_periods = False, use_residual = True) -> tuple:
         """Creates a Lomb-Scargle periodogram of the RV data. Also plots the 1% and 5% false alarm levels in red and orange, respectively. Generally,
         a signal is significant if it crosses above the 1% false alarm level. Can be useful for looking for additional periodic signals (like planets!)
         in the RV data.
@@ -3075,7 +3075,7 @@ class ExoSystem:
                 best fit model (True). If True, uses whatever model is currently in ExoSystem.rv_mod. Default is True.
 
         Returns:
-            The frequency grid and the periodogram power at each frequency as a tuple of arrays. Allows you to calculate the maxmimum power
+            The frequency grid, the periodogram power at each frequency, and the Lomb-Scargle object as a tuple. Allows you to calculate the maxmimum power
             frequency, or make other plots.
         """
 
@@ -3112,7 +3112,7 @@ class ExoSystem:
         ax.tick_params(axis = 'both', labelsize = 15)
         plt.show()
 
-        return freq, power
+        return freq, power, ls
 
 
 
