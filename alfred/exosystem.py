@@ -2713,7 +2713,7 @@ class ExoSystem:
 
         ax['a'].plot(trplot, bkgplot, color = 'black', linewidth = 2, linestyle = ':', zorder = 0, label = 'Background')
 
-        ax['a'].legend(fontsize = 15, loc = 'upper left')
+        ax['a'].legend(fontsize = 15)
         ax['a'].tick_params(axis = 'both', labelsize = 15)
         ax['a'].set_ylabel('RV [m/s]', fontsize = 20)
 
