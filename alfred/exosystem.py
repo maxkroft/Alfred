@@ -1147,12 +1147,16 @@ class ExoSystem:
         #run
         sampler.run_mcmc(state, self.nrun, progress = True)
 
-        self.samples = sampler.get_chain(flat = True)
+        self.samples = sampler.get_chain()
 
-        self.starmod._derived_samples = self.misti(*[self.samples[:,self.parnames[x]] for x in ['eep','age','feh','distance','AV']])
-        self.starmod._derived_samples["parallax"] = 1000.0 / self.samples[:,self.parnames['distance']]
-        self.starmod._derived_samples["distance"] = self.samples[:,self.parnames['distance']]
-        self.starmod._derived_samples["AV"] = self.samples[:,self.parnames['AV']]
+        self.calc_gelman_rubin()
+
+        flat_samples = sampler.get_chain(flat = True)
+
+        self.starmod._derived_samples = self.misti(*[flat_samples[:,self.parnames[x]] for x in ['eep','age','feh','distance','AV']])
+        self.starmod._derived_samples["parallax"] = 1000.0 / flat_samples[:,self.parnames['distance']]
+        self.starmod._derived_samples["distance"] = flat_samples[:,self.parnames['distance']]
+        self.starmod._derived_samples["AV"] = flat_samples[:,self.parnames['AV']]
 
 
     def flatten_chains(self):
