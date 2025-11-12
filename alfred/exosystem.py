@@ -1491,7 +1491,7 @@ class ExoSystem:
             name (str): Name of the previous run to load in.
         """
 
-        mags = pickle.load(open(self.direc+'/Results/'+name+'_magfit.p', 'rb'))
+        mags = pickle.load(open(self.direc+'/Output/'+name+'_magfit.p', 'rb'))
         self.magfit = mags['magfit']
         self.magfiterr = mags['magfiterr']
 
