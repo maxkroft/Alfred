@@ -13,6 +13,9 @@ from astropy.io import fits
 from astropy import units as u
 from astropy import constants
 from astropy.timeseries import LombScargle
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.ERROR)
 from isochrones import SingleStarModel, get_ichrone
 import pickle
 from tqdm.auto import tqdm
