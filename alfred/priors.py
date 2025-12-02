@@ -100,20 +100,20 @@ class AllPriors:
 
                             found = True
 
-                            self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+                            self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,4)])
 
                 elif fit_ttv[int(split[-1])-1] and 'ror {0}'.format(split[-1]) in x0:
 
                     found = True
 
-                    self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+                    self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,4)])
 
 
             if fvar in x0:
 
                 found = True
 
-                self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+                self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,4)])
 
             elif split[-1] == 'x':
 
@@ -125,7 +125,7 @@ class AllPriors:
 
                         yvar = ' '.join([split[0]]+y.split()[1:])
 
-                        self.set_up_prior(yvar, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+                        self.set_up_prior(yvar, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,4)])
 
             if not found:
                 print('Unable to apply prior to {0}, this variable is not being fit.'.format(var))
