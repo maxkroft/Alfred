@@ -365,7 +365,7 @@ class ExoSystem:
             
             sigma_clip (int, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
                 sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
-                that probably shouldn't be, increase this parameter and run it again. Default is 5.
+                that probably shouldn't be, increase this parameter and run it again. To turn off sigma clipping set this parameter to 0. Default is 5.
             
             lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
                 the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
@@ -627,7 +627,7 @@ class ExoSystem:
             res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(keys, x)}, *args)[0], [self.x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
             x = {k:v for k,v in zip(keys, res.x)}
 
-            if not self.fit_transit:
+            if not self.fit_transit or self.sigma_clip == 0:
                 break
 
             if self.fit_star:
