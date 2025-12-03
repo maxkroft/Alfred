@@ -746,9 +746,9 @@ class Init_priors(InitFile):
 
         while True:
             
-            priortype = input('Prior type to use for {0}. U for uniform, G for Gaussian, SG for split Gaussian.'.format(var)).upper()
+            priortype = input('Prior type to use for {0}. U for uniform, G for Gaussian.'.format(var)).upper()
 
-            if priortype not in ['U', 'G', 'SG']:
+            if priortype not in ['U', 'G']:
 
                 z = input('Prior type is not recognized. Enter to try again. Type "stop" to exit.')
                 if z.lower() == 'stop':
@@ -764,23 +764,14 @@ class Init_priors(InitFile):
 
             p1 = input('Lower bound of uniform prior for {0}.'.format(var))
             p2 = input('Upper bound of uniform prior for {0}.'.format(var))
-            p3 = 0
 
         elif priortype == 'G':
 
             p1 = input('Mean of Gaussian prior for {0}.'.format(var))
             p2 = input('Standard deviation of Gaussian prior for {0}.'.format(var))
-            p3 = 0
-
-        elif priortype == 'SG':
-
-            p1 = input('Mode of split Gaussian prior for {0}.'.format(var))
-            p2 = input('Lower standard deviation of split Gaussian prior for {0}.'.format(var))
-            p3 = input('Upper standard deviation of split Gaussian prior for {0}.'.format(var))
 
         row.append(p1)
         row.append(p2)
-        row.append(p3)
 
         self.table.add_row(row)
 

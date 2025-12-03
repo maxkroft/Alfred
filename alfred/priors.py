@@ -3,6 +3,7 @@ from astropy.table import Table
 from isochrones import SingleStarModel
 from isochrones.priors import FlatPrior, GaussianPrior
 
+
 class Priors:
 
     def __init__(self):
@@ -30,25 +31,6 @@ class Priors:
             return 0
         
         self.prior_funcs.append(uniform_prior)
-
-    
-    def add_split_gaussian_prior(self, mu, sigma_low, sigma_high):
-
-        def split_gaussian_prior(x):
-
-            x = np.array(x).reshape((-1,))
-
-            like = np.zeros(x.shape) + np.log(np.sqrt(2/np.pi)) - np.log(sigma_low + sigma_high)
-
-            ind = x < mu
-
-            like[ind] += - 0.5 * ((x[ind] - mu) / sigma_low)**2
-
-            like[~ind] += - 0.5 * ((x[~ind] - mu) / sigma_high)**2
-
-            return like
-        
-        self.prior_funcs.append(split_gaussian_prior)
 
 
     def apply_priors(self, x):
@@ -143,10 +125,6 @@ class AllPriors:
         elif prior_type == 'G':
 
             self.prior_dict[var].add_gaussian_prior(params[0], params[1])
-
-        elif prior_type == 'SG':
-
-            self.prior_dict[var].add_split_gaussian_prior(params[0], params[1], params[2])
 
 
     def apply(self, par: dict):
