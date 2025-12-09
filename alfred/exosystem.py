@@ -163,7 +163,7 @@ class ExoSystem:
         self.W3mag = tab_star['W3'][0]
         self.W3magerr = tab_star['W3'][1]
 
-        self.magwls = [1.24,1.66,2.16,0.584,0.502,0.759,3.35,4.6,11.6]
+        self.magwls = [1.235,1.662,2.159,0.582239,0.503575,0.761996,3.3526,4.6028,11.5608]
         self.magobs = np.array([self.Jmag,self.Hmag,self.Kmag,self.Gmag,self.Bpmag,self.Rpmag,self.W1mag,self.W2mag,self.W3mag])
         self.magobserr = np.array([self.Jmagerr,self.Hmagerr,self.Kmagerr,self.Gmagerr,self.Bpmagerr,self.Rpmagerr,self.W1magerr,self.W2magerr,self.W3magerr])
 
