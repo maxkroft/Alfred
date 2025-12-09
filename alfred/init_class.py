@@ -652,8 +652,8 @@ class Init_priors(InitFile):
     
     def create(self):
 
-        self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2', 'Param 3'],
-            dtype = [str, str, float, float, float])
+        self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
+            dtype = [str, str, float, float])
 
         x = input('Creating prior initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
 
