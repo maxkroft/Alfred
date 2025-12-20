@@ -70,7 +70,7 @@ class Init_lcs(InitFile):
         
         else:
 
-            self.table.add_row()
+            self.table.add_row(['None','None','None','None','None','None',np.nan,np.nan,np.nan,'None',False])
 
         self.save()
 
@@ -160,7 +160,7 @@ class Init_rv(InitFile):
 
         else:
 
-            self.table.add_row()
+            self.table.add_row(['None','None','None','None','None',np.nan,np.nan,'None'])
         
         self.save()
 
@@ -383,7 +383,7 @@ class Init_ld(InitFile):
 
         else:
 
-            self.table.add_row()
+            self.table.add_row([np.nan,np.nan,'None'])
         
         self.save()
 
