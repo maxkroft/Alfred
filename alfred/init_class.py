@@ -68,6 +68,10 @@ class Init_lcs(InitFile):
                 if x.lower() != 'y':
                     break
         
+        else:
+
+            self.table.add_row()
+
         self.save()
 
         return self
@@ -153,6 +157,10 @@ class Init_rv(InitFile):
                 
                 if x.lower() != 'y':
                     break
+
+        else:
+
+            self.table.add_row()
         
         self.save()
 
@@ -372,6 +380,10 @@ class Init_ld(InitFile):
                 
                 if x.lower() != 'y':
                     break
+
+        else:
+
+            self.table.add_row()
         
         self.save()
 
