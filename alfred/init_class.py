@@ -252,15 +252,24 @@ class Init_star(InitFile):
 
         if auto == 'y':
 
-            cid = input('Catalog ID (TIC, Gaia, HIP, etc): ')
+            try:
 
-            vizier = Vizier(columns = ['**','+_r'])
+                cid = input('Catalog ID (TIC, Gaia, HIP, etc): ')
 
-            gaia = vizier.query_object(object_name = cid, catalog = 'I/355/gaiadr3', radius = 1*u.arcmin)[0][0]
+                vizier = Vizier(columns = ['**','+_r'])
 
-            twomass = vizier.query_object(object_name = cid, catalog = 'II/246/out', radius = 1*u.arcmin)[0][0]
+                gaia = vizier.query_object(object_name = cid, catalog = 'I/355/gaiadr3', radius = 1*u.arcmin)[0][0]
 
-            wise = vizier.query_object(object_name = cid, catalog = 'II/328/allwise', radius = 1*u.arcmin)[0][0]
+                twomass = vizier.query_object(object_name = cid, catalog = 'II/246/out', radius = 1*u.arcmin)[0][0]
+
+                wise = vizier.query_object(object_name = cid, catalog = 'II/328/allwise', radius = 1*u.arcmin)[0][0]
+
+            except:
+
+                auto == 'n'
+                print('Issue accessing astroquery, switching back to manual input.')
+
+        if auto == 'y':
 
             rows[0].append(gaia['Plx'])
             rows[1].append(gaia['e_Plx'])
