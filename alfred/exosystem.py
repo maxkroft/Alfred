@@ -27,7 +27,6 @@ from alfred._rv_func import _rvModel
 from alfred.init_class import *
 from alfred.ld_grids import *
 from alfred.priors import *
-from alfred import mnest_inst
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 np.set_printoptions(legacy='1.25')
@@ -397,6 +396,7 @@ class ExoSystem:
         self.fit_rv = fit_rv
         self.fit_star = fit_star
         self.order_a = order_a
+        self.fit_planets = self.fit_transit or self.fit_rv
 
 
         if self.rv_bkg_order not in [0,1,2]:
@@ -418,13 +418,10 @@ class ExoSystem:
         if self.init_priors is None and use_priors:
             print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create(). Running with no priors.')
             self.use_priors = False
-
-        if not fit_transit and not fit_rv and fit_star:
-            self.fit_star_only(name, show_plots)
-            return None
         
-
-        self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
+        
+        if self.fit_transit:
+            self.supersamples = np.array([max(1,int(x/lc_supersample_size)) for x in self.exptimes*24*60*60])
 
 
         if self.fit_star:
@@ -466,43 +463,45 @@ class ExoSystem:
 
         self.x0 = {}
 
-        for i in range(self.n):
+        if self.fit_planets:
 
-            if self.is_transit[i] and self.fit_transit:
+            for i in range(self.n):
 
-                j = np.sum(self.is_transit[:i])
+                if self.is_transit[i] and self.fit_transit:
 
-                if self.fit_ttv[i]:
+                    j = np.sum(self.is_transit[:i])
 
-                    for l in range(len(self.ttvs0[i+1])):
-                        
-                        self.x0['TT {0} {1}'.format(i+1, l+1)] = self.ttvs0[i+1][l]
+                    if self.fit_ttv[i]:
 
-                else:
+                        for l in range(len(self.ttvs0[i+1])):
+                            
+                            self.x0['TT {0} {1}'.format(i+1, l+1)] = self.ttvs0[i+1][l]
+
+                    else:
+
+                        self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
+                        self.x0['Tc {0}'.format(i+1)] = self.tc[i]
+
+                    self.x0['ror {0}'.format(i+1)] = self.ror[j]
+                    if not self.fit_star:
+                        self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[j])
+                    self.x0['cos(i) {0}'.format(i+1)] = self.cosi[i]
+
+                elif self.is_rv[i] and self.fit_rv:
 
                     self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
                     self.x0['Tc {0}'.format(i+1)] = self.tc[i]
 
-                self.x0['ror {0}'.format(i+1)] = self.ror[j]
-                if not self.fit_star:
-                    self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[j])
-                self.x0['cos(i) {0}'.format(i+1)] = self.cosi[i]
+                if self.is_rv[i] and self.fit_rv:
 
-            elif self.is_rv[i] and self.fit_rv:
+                    j = np.sum(self.is_rv[:i])
 
-                self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
-                self.x0['Tc {0}'.format(i+1)] = self.tc[i]
+                    self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[j])
 
-            if self.is_rv[i] and self.fit_rv:
+                if self.fit_ecc[i]:
 
-                j = np.sum(self.is_rv[:i])
-
-                self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[j])
-
-            if self.fit_ecc[i]:
-
-                self.x0['secw {0}'.format(i+1)] = self.secosw[i]
-                self.x0['sesw {0}'.format(i+1)] = self.sesinw[i]
+                    self.x0['secw {0}'.format(i+1)] = self.secosw[i]
+                    self.x0['sesw {0}'.format(i+1)] = self.sesinw[i]
 
         
         if self.fit_star:
@@ -515,21 +514,11 @@ class ExoSystem:
 
                     self.load_results(star_run)
 
-                    try:
-
-                        self.x0['eep'] = np.median(self.res['eep'])
-                        self.x0['age'] = np.median(self.res['age'])
-                        self.x0['feh'] = np.median(self.res['feh'])
-                        self.x0['distance'] = np.median(self.res['distance'])
-                        self.x0['AV'] = np.median(self.res['AV'])
-
-                    except:
-
-                        self.x0['eep'] = np.median(self.dres['eep'])
-                        self.x0['age'] = np.median(self.dres['age'])
-                        self.x0['feh'] = np.median(self.dres['feh'])
-                        self.x0['distance'] = np.median(self.dres['distance'])
-                        self.x0['AV'] = np.median(self.dres['AV'])
+                    self.x0['eep'] = np.median(self.res['eep'])
+                    self.x0['age'] = np.median(self.res['age'])
+                    self.x0['feh'] = np.median(self.res['feh'])
+                    self.x0['distance'] = np.median(self.res['distance'])
+                    self.x0['AV'] = np.median(self.res['AV'])
 
                 except:
 
@@ -542,22 +531,15 @@ class ExoSystem:
 
             if run_star_fit:
 
-                print('Running initial star only fit:\n')
+                print('Running initial star only optimization:')
 
-                if mnest_inst:
-                    if not os.path.isdir(self.direc+'multinest chains/'+name):
-                        os.mkdir(self.direc+'multinest chains/'+name)
+                x = self.initial_star_fit()
 
-                    self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'/')
-
-                else:
-                    self.fit_star_only_emcee()
-
-                self.x0['eep'] = np.median(self.starmod.derived_samples['eep'])
-                self.x0['age'] = np.median(self.starmod.derived_samples['age'])
-                self.x0['feh'] = np.median(self.starmod.derived_samples['feh'])
-                self.x0['distance'] = np.median(self.starmod.derived_samples['distance'])
-                self.x0['AV'] = np.median(self.starmod.derived_samples['AV'])
+                self.x0['eep'] = x['eep']
+                self.x0['age'] = x['age']
+                self.x0['feh'] = x['feh']
+                self.x0['distance'] = x['distance']
+                self.x0['AV'] = x['AV']
 
 
         if self.fit_transit:
@@ -861,7 +843,7 @@ class ExoSystem:
                 pos.append(np.random.normal(x[k], 1, self.nwalk))
 
             if k == 'age':
-                pos.append(np.random.normal(x[k], 0.05, self.nwalk))
+                pos.append(np.log10(np.random.normal(10**x[k], 10**x[k]/100, self.nwalk)))
 
             if k == 'feh':
                 z = np.random.normal(x[k], 0.01, self.nwalk)
@@ -915,8 +897,9 @@ class ExoSystem:
 
         self.make_results(name)
 
-        
-        self.plot_pl_chains(name, show_plot = show_plots)
+        if self.fit_planets:
+
+            self.plot_pl_chains(name, show_plot = show_plots)
 
         if self.nttv > 0 and self.fit_transit:
 
@@ -930,13 +913,18 @@ class ExoSystem:
 
             self.plot_star_chains(name, show_plot = show_plots)
 
-        self.plot_pl_corner(name, show_plot = show_plots)
+        if self.fit_planets:
+        
+            self.plot_pl_corner(name, show_plot = show_plots)
 
         if self.fit_star:
 
             self.plot_star_corner(name, show_plot = show_plots)
 
-        self.plot_big_corner(name)
+
+        if self.fit_planets:
+
+            self.plot_big_corner(name)
 
         if self.fit_transit:
 
@@ -970,133 +958,14 @@ class ExoSystem:
         self.print_results(name)
 
 
-    def fit_star_only(self, name: str, show_plots = True, use_emcee = False, nburn = 5000, nrun = 5000):
-        """Fits stellar parameters by themselves. Essentially a wrapper on the isochrones package.
-
-        If multinest is installed, uses the SingleStarModel.fit function from isochrones. Otherwise, runs fit_star_only_emcee, an emcee
-        wrapper on isochrones, to fit the stellar parameters.
-
-        Outputs are done in the same way as the fit function.
-
-        Args:
-            name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
-                and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
-                or plotted again.
-            
-            show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
-
-            use_emcee (bool, optional): Whether or not to use emcee regardless of multinest installation. Default is False.
-
-            nburn (int, optional): Number of burn-in steps for the MCMC. These steps are thrown out before saving the results and making plots. The
-                burn-in allows the chains to settle into the maximum likelihood. This parameter only matters if running emcee instead of multinest, and
-                when calling this function directly (not with fit). Default is 5000.
-
-            nrun (int, optional): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not
-                include the burn-in steps. This parameter only matters if running emcee instead of multinest, and when calling this function directly
-                (not with fit). Default is 5000.
-        """
-
-        self.misti = get_ichrone('mist')
-
-        props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr),
-        'J': (self.Jmag, self.Jmagerr), 'H': (self.Hmag, self.Hmagerr), 'K': (self.Kmag, self.Kmagerr),
-        'W1': (self.W1mag, self.W1magerr), 'W2': (self.W2mag, self.W2magerr), 'W3': (self.W3mag, self.W3magerr),
-        'G': (self.Gmag, self.Gmagerr), 'BP': (self.Bpmag, self.Bpmagerr), 'RP': (self.Rpmag, self.Rpmagerr)}
-
-        if not np.isnan(self.logg):
-            props['logg'] = (self.logg, self.loggerr)
-        
-        if not np.isnan(self.feh):
-            props['feh'] = (self.feh, self.feherr)
-
-        self.starmod = SingleStarModel(self.misti, name=name, **props)
-
-        if self.use_priors:
-            self.starmod = apply_star_priors(self.init_priors.table, self.starmod)
-        
-
-        if mnest_inst and not use_emcee:
-
-            if not os.path.isdir(self.direc+'multinest chains/'+name):
-                os.mkdir(self.direc+'multinest chains/'+name)
-
-            self.starmod.fit(overwrite = True, basename = self.direc+'multinest chains/'+name+'/')
-
-        else:
-
-            if not hasattr(self, 'nburn'):
-                self.nburn = nburn
-            if not hasattr(self, 'nrun'):
-                self.nrun = nrun
-
-            self.fit_star_only_emcee()
-
-
-        self.res = {}
-        self.dres = {}
-        out = []
-        for x in self.starmod.derived_samples:
-            if x in ['eep', 'age', 'feh', 'distance', 'AV']:
-                self.res[x] = np.array(self.starmod.derived_samples[x])
-            else:
-                self.dres[x] = np.array(self.starmod.derived_samples[x])
-            out.append([x, np.nanmedian(self.starmod.derived_samples[x])]+list(np.diff(np.nanpercentile(self.starmod.derived_samples[x], [16,50,84]))))
-
-        pickle.dump(self.res, open(self.direc+'Output/'+name+'_res.p', 'wb'))
-        pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
-
-        tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
-        tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
-
-
-        fig = self.starmod.corner_observed()
-        
-        fig.suptitle('Observed Params')
-
-        plt.tight_layout()
-
-        fig.savefig(self.direc+'Plots/'+name+'/corner_observed.png')
-
-        if show_plots:
-            plt.show()
-        else:
-            plt.close()
-
-
-        fig = self.starmod.corner_physical()
-
-        fig.suptitle('Physical Params')
-
-        plt.tight_layout()
-
-        fig.savefig(self.direc+'Plots/'+name+'/corner_physical.png')
-
-        if show_plots:
-            plt.show()
-        else:
-            plt.close()
-
-
-        maglist = ['J_mag','H_mag','K_mag','G_mag','BP_mag','RP_mag','W1_mag','W2_mag','W3_mag']
-        self.magfit = np.array([np.median(self.dres[x]) for x in maglist])
-        self.magfiterr = np.diff(np.percentile([self.dres[x] for x in maglist], [16,50,84], axis = 1), axis = 0)
-
-        pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
-
-        self.plot_sed_fit(name, show_plots)
-
-        print('')
-        self.print_results(name)
-
-
-    def fit_star_only_emcee(self):
-        """Fits stellar parameters by themselves using an emcee wrapper around the isochrones package. Workaround for those without multinest
-        installed. Called by fit_star_only and fit.
+    def initial_star_fit(self):
+        """Runs an initial minimization on just the stellar parameters using a minimizer to get them in the ballpark before running MCMC. Starts at
+        solar parameters. Called by fit.
         
         Do not run this by itself.
         """
 
-        self.nwalk = 10
+        # self.nwalk = 10
 
         x0 = {'eep': 355, 'age': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
         keys = list(x0.keys())
@@ -1108,58 +977,61 @@ class ExoSystem:
         res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args), [x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
         x = {k:v for k,v in zip(keys, res.x)}
 
-        print('\nInitial parameters after optimization:')
+        print('\nInitial parameters after star-only optimization:')
         print(x)
+        print('')
 
-        self.parnames = {}
+        return x
 
-        pos = []
+        # self.parnames = {}
 
-        for i, k in enumerate(keys):
+        # pos = []
 
-            self.parnames[k] = i
+        # for i, k in enumerate(keys):
 
-            if k == 'eep':
-                pos.append(np.random.normal(x[k], 1, self.nwalk))
+        #     self.parnames[k] = i
 
-            if k == 'age':
-                pos.append(np.random.normal(x[k], 0.05, self.nwalk))
+        #     if k == 'eep':
+        #         pos.append(np.random.normal(x[k], 1, self.nwalk))
 
-            if k == 'feh':
-                z = np.random.normal(x[k], 0.01, self.nwalk)
-                j = np.where(np.abs(z) > 0.5)[0]
-                z[j] = 0.45 * np.sign(z[j])
-                pos.append(z)
+        #     if k == 'age':
+        #         pos.append(np.random.normal(x[k], 0.05, self.nwalk))
 
-            if k == 'distance':
-                pos.append(np.random.normal(x[k], 1, self.nwalk))
+        #     if k == 'feh':
+        #         z = np.random.normal(x[k], 0.01, self.nwalk)
+        #         j = np.where(np.abs(z) > 0.5)[0]
+        #         z[j] = 0.45 * np.sign(z[j])
+        #         pos.append(z)
 
-            if k == 'AV':
-                pos.append(np.abs(np.random.normal(x[k], 0.01, self.nwalk)))
+        #     if k == 'distance':
+        #         pos.append(np.random.normal(x[k], 1, self.nwalk))
 
-        pos = np.transpose(np.array(pos))
+        #     if k == 'AV':
+        #         pos.append(np.abs(np.random.normal(x[k], 0.01, self.nwalk)))
 
-        sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like_staronly, args = (self,), parameter_names = self.parnames)
+        # pos = np.transpose(np.array(pos))
 
-        print('\nRunning MCMC burn-in.')
-        #burn in
-        state = sampler.run_mcmc(pos, self.nburn, progress = True)
-        sampler.reset()
+        # sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like_staronly, args = (self,), parameter_names = self.parnames)
 
-        print('\nRunning MCMC sampling.')
-        #run
-        sampler.run_mcmc(state, self.nrun, progress = True)
+        # print('\nRunning MCMC burn-in.')
+        # #burn in
+        # state = sampler.run_mcmc(pos, self.nburn, progress = True)
+        # sampler.reset()
 
-        self.samples = sampler.get_chain()
+        # print('\nRunning MCMC sampling.')
+        # #run
+        # sampler.run_mcmc(state, self.nrun, progress = True)
 
-        self.calc_gelman_rubin()
+        # self.samples = sampler.get_chain()
 
-        flat_samples = sampler.get_chain(flat = True)
+        # self.calc_gelman_rubin()
 
-        self.starmod._derived_samples = self.misti(*[flat_samples[:,self.parnames[x]] for x in ['eep','age','feh','distance','AV']])
-        self.starmod._derived_samples["parallax"] = 1000.0 / flat_samples[:,self.parnames['distance']]
-        self.starmod._derived_samples["distance"] = flat_samples[:,self.parnames['distance']]
-        self.starmod._derived_samples["AV"] = flat_samples[:,self.parnames['AV']]
+        # flat_samples = sampler.get_chain(flat = True)
+
+        # self.starmod._derived_samples = self.misti(*[flat_samples[:,self.parnames[x]] for x in ['eep','age','feh','distance','AV']])
+        # self.starmod._derived_samples["parallax"] = 1000.0 / flat_samples[:,self.parnames['distance']]
+        # self.starmod._derived_samples["distance"] = flat_samples[:,self.parnames['distance']]
+        # self.starmod._derived_samples["AV"] = flat_samples[:,self.parnames['AV']]
 
 
     def flatten_chains(self):
@@ -1217,13 +1089,21 @@ class ExoSystem:
 
         if self.fit_star:
 
-            rstar, mstar, T, logg = self.misti.interp_value([self.res['eep'],self.res['age'],self.res['feh']],['radius','mass','Teff','logg']).T
-            self.dres['rstar'] = rstar
-            self.dres['mstar'] = mstar
-            self.dres['Tstar'] = T
-            self.dres['loggstar'] = logg
+            self.starmod._derived_samples = self.misti(*[self.res[x] for x in ['eep','age','feh','distance','AV']])
+            self.starmod._derived_samples["parallax"] = 1000.0 / self.res['distance']
+            self.starmod._derived_samples["distance"] = self.res['distance']
+            self.starmod._derived_samples["AV"] = self.res['AV']
 
-            interp_input = np.array([T, logg, self.res['feh']]).T
+            self.dres['rstar'] = self.starmod._derived_samples['radius']
+            self.dres['mstar'] = self.starmod._derived_samples['mass']
+            self.dres['rhostar'] = self.starmod._derived_samples['density']
+            self.dres['mstar_init'] = self.starmod._derived_samples['initial_mass']
+            self.dres['Tstar'] = self.starmod._derived_samples['Teff']
+            self.dres['loggstar'] = self.starmod._derived_samples['logg']
+            self.dres['Lstar'] = 10**self.starmod._derived_samples['logL']
+            self.dres['Mbolstar'] = self.starmod._derived_samples['Mbol']
+
+            interp_input = np.array([self.dres['Tstar'], self.dres['loggstar'], self.res['feh']]).T
 
             for filt in np.unique(self.filters):
 
@@ -1239,117 +1119,119 @@ class ExoSystem:
         J = np.random.normal(self.Jmag, self.Jmagerr, n)
         einsol = 1*u.Lsun / (4 * np.pi * u.AU**2)
 
-        for i in range(self.n):
+        if self.fit_planets:
 
-            if self.is_transit[i] and self.fit_transit:
+            for i in range(self.n):
 
-                if self.fit_ttv[i]:
+                if self.is_transit[i] and self.fit_transit:
 
-                    k = np.sum(self.fit_ttv[:i])
+                    if self.fit_ttv[i]:
 
-                    p = np.array(ps[k])
-                    self.dres['P {0}'.format(i+1)] = p
+                        k = np.sum(self.fit_ttv[:i])
 
-                    tc = np.array(tcs[k])
-                    self.dres['Tc {0}'.format(i+1)] = tc
+                        p = np.array(ps[k])
+                        self.dres['P {0}'.format(i+1)] = p
 
-                else:
+                        tc = np.array(tcs[k])
+                        self.dres['Tc {0}'.format(i+1)] = tc
+
+                    else:
+
+                        p = np.exp(self.res['log(P) {0}'.format(i+1)])
+                        self.dres['P {0}'.format(i+1)] = p
+
+                    rp = self.res['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
+                    self.dres['Rp {0}'.format(i+1)] = rp
+
+                    if not self.fit_star:
+
+                        ars = np.exp(self.res['log(a/rs) {0}'.format(i+1)])
+                        self.dres['a/rs {0}'.format(i+1)] = ars
+
+                        a = ars * rstar * (1*u.Rsun).to(u.AU).value
+                        self.dres['a {0}'.format(i+1)] = a
+
+                    inc = np.arccos(self.res['cos(i) {0}'.format(i+1)]) * 180/np.pi
+                    self.dres['i {0}'.format(i+1)] = inc
+
+
+                elif self.is_rv[i] and self.fit_rv:
 
                     p = np.exp(self.res['log(P) {0}'.format(i+1)])
                     self.dres['P {0}'.format(i+1)] = p
 
-                rp = self.res['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
-                self.dres['Rp {0}'.format(i+1)] = rp
+                if self.fit_ecc[i]:
 
-                if not self.fit_star:
+                    e = self.res['secw {0}'.format(i+1)]**2 + self.res['sesw {0}'.format(i+1)]**2
+                    self.dres['e {0}'.format(i+1)] = e
 
-                    ars = np.exp(self.res['log(a/rs) {0}'.format(i+1)])
-                    self.dres['a/rs {0}'.format(i+1)] = ars
-
-                    a = ars * rstar * (1*u.Rsun).to(u.AU).value
-                    self.dres['a {0}'.format(i+1)] = a
-
-                inc = np.arccos(self.res['cos(i) {0}'.format(i+1)]) * 180/np.pi
-                self.dres['i {0}'.format(i+1)] = inc
-
-
-            elif self.is_rv[i] and self.fit_rv:
-
-                p = np.exp(self.res['log(P) {0}'.format(i+1)])
-                self.dres['P {0}'.format(i+1)] = p
-
-            if self.fit_ecc[i]:
-
-                e = self.res['secw {0}'.format(i+1)]**2 + self.res['sesw {0}'.format(i+1)]**2
-                self.dres['e {0}'.format(i+1)] = e
-
-                w = np.arctan2(self.res['sesw {0}'.format(i+1)], self.res['secw {0}'.format(i+1)]) * 180/np.pi
-                self.dres['w {0}'.format(i+1)] = w
-
-            else:
-
-                e = 0
-                w = 90
-
-            mp = 0
-
-            if self.is_rv[i] and self.fit_rv:
-
-                k = np.exp(self.res['log(K) {0}'.format(i+1)])
-                self.dres['K {0}'.format(i+1)] = k
-
-                if self.is_transit[i] and self.fit_transit:
-
-                    mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, inc*np.pi/180, mstar)
-                    self.dres['Mp {0}'.format(i+1)] = mp
-
-                    rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
-                    self.dres['rhop {0}'.format(i+1)] = rhop
+                    w = np.arctan2(self.res['sesw {0}'.format(i+1)], self.res['secw {0}'.format(i+1)]) * 180/np.pi
+                    self.dres['w {0}'.format(i+1)] = w
 
                 else:
 
-                    mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
-                    self.dres['Mp sini {0}'.format(i+1)] = mp
+                    e = 0
+                    w = 90
 
-            if self.fit_star or (self.is_rv[i] and self.fit_rv):
-
-                a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
-                self.dres['a {0}'.format(i+1)] = a
-
-                ars = (a*u.AU).to(u.Rsun).value / rstar
-                self.dres['a/rs {0}'.format(i+1)] = ars
-
-            teq = (1/4)**(1/4) * T * ars**(-1/2)
-            self.dres['teq {0}'.format(i+1)] = teq
-
-            sinc = (constants.sigma_sb * (T * u.K)**4 * ars**(-2) / einsol).to(u.dimensionless_unscaled)
-            self.dres['sinc {0}'.format(i+1)] = sinc
-
-            if self.is_transit[i] and self.fit_transit:
-
-                b = ars * self.res['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w * np.pi/180))
-                self.dres['b {0}'.format(i+1)] = b
-
-                dur = p / np.pi * np.arcsin(np.sqrt((1 + self.res['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - self.res['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
-                self.dres['dur {0}'.format(i+1)] = dur
-
-                if not self.fit_star:
-
-                    rhos = 0.018916375 * ars**3 / p**2
-                    self.dres['rhos {0}'.format(i+1)] = rhos
+                mp = 0
 
                 if self.is_rv[i] and self.fit_rv:
 
-                    sf = np.full(n, 0.19)
-                    j = np.where(rp > 1.5)[0]
-                    sf[j] = 1.26
-                    j = np.where(rp > 2.75)[0]
-                    sf[j] = 1.28
-                    j = np.where(rp > 4)[0]
-                    sf[j] = 1.15
+                    k = np.exp(self.res['log(K) {0}'.format(i+1)])
+                    self.dres['K {0}'.format(i+1)] = k
 
-                    tsm = sf * rp**3 * teq / (mp * rstar**2) * 10**(-J/5)
-                    self.dres['TSM {0}'.format(i+1)] = tsm
+                    if self.is_transit[i] and self.fit_transit:
+
+                        mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, inc*np.pi/180, mstar)
+                        self.dres['Mp {0}'.format(i+1)] = mp
+
+                        rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+                        self.dres['rhop {0}'.format(i+1)] = rhop
+
+                    else:
+
+                        mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
+                        self.dres['Mp sini {0}'.format(i+1)] = mp
+
+                if self.fit_star or (self.is_rv[i] and self.fit_rv):
+
+                    a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
+                    self.dres['a {0}'.format(i+1)] = a
+
+                    ars = (a*u.AU).to(u.Rsun).value / rstar
+                    self.dres['a/rs {0}'.format(i+1)] = ars
+
+                teq = (1/4)**(1/4) * T * ars**(-1/2)
+                self.dres['teq {0}'.format(i+1)] = teq
+
+                sinc = (constants.sigma_sb * (T * u.K)**4 * ars**(-2) / einsol).to(u.dimensionless_unscaled)
+                self.dres['sinc {0}'.format(i+1)] = sinc
+
+                if self.is_transit[i] and self.fit_transit:
+
+                    b = ars * self.res['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w * np.pi/180))
+                    self.dres['b {0}'.format(i+1)] = b
+
+                    dur = p / np.pi * np.arcsin(np.sqrt((1 + self.res['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - self.res['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
+                    self.dres['dur {0}'.format(i+1)] = dur
+
+                    if not self.fit_star:
+
+                        rhos = 0.018916375 * ars**3 / p**2
+                        self.dres['rhos {0}'.format(i+1)] = rhos
+
+                    if self.is_rv[i] and self.fit_rv:
+
+                        sf = np.full(n, 0.19)
+                        j = np.where(rp > 1.5)[0]
+                        sf[j] = 1.26
+                        j = np.where(rp > 2.75)[0]
+                        sf[j] = 1.28
+                        j = np.where(rp > 4)[0]
+                        sf[j] = 1.15
+
+                        tsm = sf * rp**3 * teq / (mp * rstar**2) * 10**(-J/5)
+                        self.dres['TSM {0}'.format(i+1)] = tsm
 
 
         if not self.fit_star:
@@ -1953,15 +1835,43 @@ class ExoSystem:
 
         fig = corner.corner(self.flat_samples[:,j], labels = labels)
 
-        fig.suptitle('Star')
+        fig.suptitle('Star Fit Params')
 
         plt.tight_layout()
 
-        fig.savefig(self.direc+'Plots/'+name+'/star_corner.png')
+        fig.savefig(self.direc+'Plots/'+name+'/star_corner_fit.png')
 
         if show_plot:
             plt.show()
 
+        else:
+            plt.close()
+
+
+        fig = self.starmod.corner_observed()
+        
+        fig.suptitle('Star Observed Params')
+
+        plt.tight_layout()
+
+        fig.savefig(self.direc+'Plots/'+name+'/star_corner_observed.png')
+
+        if show_plot:
+            plt.show()
+        else:
+            plt.close()
+
+
+        fig = self.starmod.corner_physical()
+
+        fig.suptitle('Star Physical Params')
+
+        plt.tight_layout()
+
+        fig.savefig(self.direc+'Plots/'+name+'/star_corner_physical.png')
+
+        if show_plot:
+            plt.show()
         else:
             plt.close()
 
@@ -3236,44 +3146,46 @@ def lnGauss(data, model, err):
 
 def log_like(par: dict, exs: ExoSystem):
 
-    if exs.order_a and exs.fit_transit:
-        logalist = []
-
     #check params
-    for i in range(exs.n):
-    
-        if exs.is_transit[i] and exs.fit_transit:
+    if exs.fit_planets:
 
-            #check cosi
-            if not 0 <= par['cos(i) {0}'.format(i+1)] <= 1:
+        if exs.order_a and exs.fit_transit:
+            logalist = []
+
+        for i in range(exs.n):
+        
+            if exs.is_transit[i] and exs.fit_transit:
+
+                #check cosi
+                if not 0 <= par['cos(i) {0}'.format(i+1)] <= 1:
+                    return -np.inf, [], []
+                
+                #check ror
+                if not 0 <= par['ror {0}'.format(i+1)] <= 1:
+                    return -np.inf, [], []
+                
+                if exs.order_a:
+                    logalist.append(par['log(a/rs) {0}'.format(i+1)])
+                
+                
+            if exs.fit_ecc[i]:
+
+                #check e
+                if par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2 > 0.9:
+                    return -np.inf, [], []
+                
+
+        #check a order
+        if exs.fit_transit and exs.order_a:
+            logadiff = np.diff(np.array(logalist)[exs.transitsortorder])
+            if np.any(logadiff <= 0):
                 return -np.inf, [], []
-            
-            #check ror
-            if not 0 <= par['ror {0}'.format(i+1)] <= 1:
+
+
+        #check ld
+        if exs.fit_transit and exs.fit_ld:
+            if not 0 <= par['u1'] <= 1 or not 0 <= par['u2'] <= 1:
                 return -np.inf, [], []
-            
-            if exs.order_a:
-                logalist.append(par['log(a/rs) {0}'.format(i+1)])
-            
-            
-        if exs.fit_ecc[i]:
-
-            #check e
-            if par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2 > 0.9:
-                return -np.inf, [], []
-            
-
-    #check a order
-    if exs.fit_transit and exs.order_a:
-        logadiff = np.diff(np.array(logalist)[exs.transitsortorder])
-        if np.any(logadiff <= 0):
-            return -np.inf, [], []
-
-
-    #check ld
-    if exs.fit_transit and exs.fit_ld:
-        if not 0 <= par['u1'] <= 1 or not 0 <= par['u2'] <= 1:
-            return -np.inf, [], []
         
 
 
@@ -3297,41 +3209,43 @@ def log_like(par: dict, exs: ExoSystem):
         
         like += starlike
 
-        rstar, mstar, Tstar, loggstar = exs.misti.interp_value([par['eep'],par['age'],par['feh']],['radius','mass','Teff','logg'])
+        if exs.fit_planets:
 
-        if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
-            return -np.inf, [], []
+            rstar, mstar, Tstar, loggstar = exs.misti.interp_value([par['eep'],par['age'],par['feh']],['radius','mass','Teff','logg'])
 
-        arlist = []
-        for i in range(exs.n):
+            if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
+                return -np.inf, [], []
 
-            if not exs.is_transit[i]:
-                arlist.append(np.nan)
-                continue
+            arlist = []
+            for i in range(exs.n):
 
-            if exs.fit_ttv[i]:
+                if not exs.is_transit[i]:
+                    arlist.append(np.nan)
+                    continue
 
-                p = get_ttv_params(par, i+1, exs.ttvi['{0}'.format(i+1)], ar = 1)[0]
+                if exs.fit_ttv[i]:
 
-            else:
+                    p = get_ttv_params(par, i+1, exs.ttvi['{0}'.format(i+1)], ar = 1)[0]
 
-                p = np.exp(par['log(P) {0}'.format(i+1)])
+                else:
 
-            if exs.is_rv[i] and exs.fit_rv:
+                    p = np.exp(par['log(P) {0}'.format(i+1)])
 
-                e = 0
-                if exs.fit_ecc[i]:
-                    e = par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2
+                if exs.is_rv[i] and exs.fit_rv:
 
-                mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)
+                    e = 0
+                    if exs.fit_ecc[i]:
+                        e = par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2
 
-            else:
+                    mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)
 
-                mp = 0
+                else:
 
-            ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+                    mp = 0
 
-            arlist.append(ar)
+                ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+
+                arlist.append(ar)
         
 
             
@@ -3343,36 +3257,38 @@ def log_like(par: dict, exs: ExoSystem):
     if exs.use_priors:
         priorpar = par.copy()
 
-    for i in range(exs.n):
-        
-        if exs.is_transit[i] and exs.fit_transit:
+    if exs.fit_planets:
 
-            if exs.fit_ttv[i]:
+        for i in range(exs.n):
+            
+            if exs.is_transit[i] and exs.fit_transit:
 
-                pars = get_ttv_params(par, i+1, exs.ttvi['{0}'.format(i+1)], ar = arlist[i] if exs.fit_star else None)
-                ps.append(pars[0])
-                tcs.append(pars[1])
-                tpars.append(pars)
+                if exs.fit_ttv[i]:
 
-                if exs.use_priors:
-                    priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
-                    priorpar['Tc {0}'.format(i+1)] = pars[1]
+                    pars = get_ttv_params(par, i+1, exs.ttvi['{0}'.format(i+1)], ar = arlist[i] if exs.fit_star else None)
+                    ps.append(pars[0])
+                    tcs.append(pars[1])
+                    tpars.append(pars)
 
-                if exs.is_rv[i] and exs.fit_rv:
+                    if exs.use_priors:
+                        priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
+                        priorpar['Tc {0}'.format(i+1)] = pars[1]
 
-                    rpars.append(get_rv_params(par, i+1, pars[0], pars[1]))
+                    if exs.is_rv[i] and exs.fit_rv:
 
-            else:
+                        rpars.append(get_rv_params(par, i+1, pars[0], pars[1]))
 
-                tpars.append(get_transit_params(par, i+1, ar = arlist[i] if exs.fit_star else None))
+                else:
 
-                if exs.is_rv[i] and exs.fit_rv:
+                    tpars.append(get_transit_params(par, i+1, ar = arlist[i] if exs.fit_star else None))
 
-                    rpars.append(get_rv_params(par, i+1))
+                    if exs.is_rv[i] and exs.fit_rv:
 
-        elif exs.is_rv[i] and exs.fit_rv:
+                        rpars.append(get_rv_params(par, i+1))
 
-            rpars.append(get_rv_params(par, i+1))
+            elif exs.is_rv[i] and exs.fit_rv:
+
+                rpars.append(get_rv_params(par, i+1))
             
 
     if exs.use_priors:
