@@ -145,7 +145,7 @@ class AllPriors:
 
             elif split[0] == 'age':
 
-                x = 10**(par['age'])
+                x = 10**(par['log10(age)'])
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
@@ -194,7 +194,7 @@ class AllPriors:
     
 
 
-def apply_star_priors(tab: Table, starmod: SingleStarModel):
+def setup_star_priors(tab: Table, starmod: SingleStarModel):
 
     var_convert = {'mstar': lambda x: starmod.set_prior(mass = x),
                    'rstar': lambda x: starmod.set_prior(radius = x),

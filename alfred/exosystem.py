@@ -445,7 +445,7 @@ class ExoSystem:
             self.starmod = SingleStarModel(self.misti, name = name, **props)
 
             if self.use_priors:
-                self.starmod = apply_star_priors(self.init_priors.table, self.starmod)
+                self.starmod = setup_star_priors(self.init_priors.table, self.starmod)
 
             self.ldgrids = {}
 
@@ -515,7 +515,7 @@ class ExoSystem:
                     self.load_results(star_run)
 
                     self.x0['eep'] = np.median(self.res['eep'])
-                    self.x0['age'] = np.median(self.res['age'])
+                    self.x0['log10(age)'] = np.median(self.res['log10(age)'])
                     self.x0['feh'] = np.median(self.res['feh'])
                     self.x0['distance'] = np.median(self.res['distance'])
                     self.x0['AV'] = np.median(self.res['AV'])
@@ -536,7 +536,7 @@ class ExoSystem:
                 x = self.initial_star_fit()
 
                 self.x0['eep'] = x['eep']
-                self.x0['age'] = x['age']
+                self.x0['log10(age)'] = x['log10(age)']
                 self.x0['feh'] = x['feh']
                 self.x0['distance'] = x['distance']
                 self.x0['AV'] = x['AV']
@@ -614,7 +614,7 @@ class ExoSystem:
 
             if self.fit_star:
 
-                rstar, mstar, Tstar, loggstar = self.misti.interp_value([x['eep'],x['age'],x['feh']],['radius','mass','Teff','logg'])
+                rstar, mstar, Tstar, loggstar = self.misti.interp_value([x['eep'],x['log10(age)'],x['feh']],['radius','mass','Teff','logg'])
 
                 arlist = []
                 for j in range(self.n):
@@ -842,7 +842,7 @@ class ExoSystem:
             if k == 'eep':
                 pos.append(np.random.normal(x[k], 1, self.nwalk))
 
-            if k == 'age':
+            if k == 'log10(age)':
                 pos.append(np.log10(np.random.normal(10**x[k], 10**x[k]/100, self.nwalk)))
 
             if k == 'feh':
@@ -946,7 +946,7 @@ class ExoSystem:
 
         if self.fit_star:
 
-            mags = self.misti.interp_mag([self.res['eep'],self.res['age'],self.res['feh'],self.res['distance'],self.res['AV']], ['J','H','K','G','BP','RP','W1','W2','W3'])[3]
+            mags = self.misti.interp_mag([self.res['eep'],self.res['log10(age)'],self.res['feh'],self.res['distance'],self.res['AV']], ['J','H','K','G','BP','RP','W1','W2','W3'])[3]
             self.magfit = np.median(mags, axis = 0)
             self.magfiterr = np.diff(np.percentile(mags, [16,50,84], axis = 0), axis = 0)
 
@@ -965,9 +965,7 @@ class ExoSystem:
         Do not run this by itself.
         """
 
-        # self.nwalk = 10
-
-        x0 = {'eep': 355, 'age': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
+        x0 = {'eep': 355, 'log10(age)': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
         keys = list(x0.keys())
 
         if self.use_priors:
@@ -982,56 +980,6 @@ class ExoSystem:
         print('')
 
         return x
-
-        # self.parnames = {}
-
-        # pos = []
-
-        # for i, k in enumerate(keys):
-
-        #     self.parnames[k] = i
-
-        #     if k == 'eep':
-        #         pos.append(np.random.normal(x[k], 1, self.nwalk))
-
-        #     if k == 'age':
-        #         pos.append(np.random.normal(x[k], 0.05, self.nwalk))
-
-        #     if k == 'feh':
-        #         z = np.random.normal(x[k], 0.01, self.nwalk)
-        #         j = np.where(np.abs(z) > 0.5)[0]
-        #         z[j] = 0.45 * np.sign(z[j])
-        #         pos.append(z)
-
-        #     if k == 'distance':
-        #         pos.append(np.random.normal(x[k], 1, self.nwalk))
-
-        #     if k == 'AV':
-        #         pos.append(np.abs(np.random.normal(x[k], 0.01, self.nwalk)))
-
-        # pos = np.transpose(np.array(pos))
-
-        # sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like_staronly, args = (self,), parameter_names = self.parnames)
-
-        # print('\nRunning MCMC burn-in.')
-        # #burn in
-        # state = sampler.run_mcmc(pos, self.nburn, progress = True)
-        # sampler.reset()
-
-        # print('\nRunning MCMC sampling.')
-        # #run
-        # sampler.run_mcmc(state, self.nrun, progress = True)
-
-        # self.samples = sampler.get_chain()
-
-        # self.calc_gelman_rubin()
-
-        # flat_samples = sampler.get_chain(flat = True)
-
-        # self.starmod._derived_samples = self.misti(*[flat_samples[:,self.parnames[x]] for x in ['eep','age','feh','distance','AV']])
-        # self.starmod._derived_samples["parallax"] = 1000.0 / flat_samples[:,self.parnames['distance']]
-        # self.starmod._derived_samples["distance"] = flat_samples[:,self.parnames['distance']]
-        # self.starmod._derived_samples["AV"] = flat_samples[:,self.parnames['AV']]
 
 
     def flatten_chains(self):
@@ -1089,7 +1037,7 @@ class ExoSystem:
 
         if self.fit_star:
 
-            self.starmod._derived_samples = self.misti(*[self.res[x] for x in ['eep','age','feh','distance','AV']])
+            self.starmod._derived_samples = self.misti(*[self.res[x] for x in ['eep','log10(age)','feh','distance','AV']])
             self.starmod._derived_samples["parallax"] = 1000.0 / self.res['distance']
             self.starmod._derived_samples["distance"] = self.res['distance']
             self.starmod._derived_samples["AV"] = self.res['AV']
@@ -1275,7 +1223,7 @@ class ExoSystem:
             - u1 x:
             - u2 x:
             - eep:
-            - age:
+            - log10(age):
             - feh:
             - distance:
             - AV:
@@ -1720,7 +1668,7 @@ class ExoSystem:
 
         fig, ax = plt.subplots(5, figsize = (7, 12), sharex = True, layout = 'constrained')
 
-        for i, z in enumerate(['eep','age','feh','distance','AV']):
+        for i, z in enumerate(['eep','log10(age)','feh','distance','AV']):
 
             v = self.parnames[z]
             ax[i].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
@@ -1830,7 +1778,7 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
-        labels = ['eep','age','feh','distance','AV']
+        labels = ['eep','log10(age)','feh','distance','AV']
         j = [self.parnames[x] for x in labels]
 
         fig = corner.corner(self.flat_samples[:,j], labels = labels)
@@ -1968,7 +1916,7 @@ class ExoSystem:
 
             self.misti = get_ichrone('mist')
 
-            rstar, mstar, Tstar, loggstar = self.misti.interp_value([self.res['eep'],self.res['age'],self.res['feh']],['radius','mass','Teff','logg']).T
+            rstar, mstar, Tstar, loggstar = self.misti.interp_value([self.res['eep'],self.res['log10(age)'],self.res['feh']],['radius','mass','Teff','logg']).T
 
             arlist = []
             for j in range(self.n):
@@ -3201,8 +3149,8 @@ def log_like(par: dict, exs: ExoSystem):
         if par['AV'] < 0:
             return -np.inf, [], []
 
-        starlike = exs.starmod.lnlike([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
-        starlike += exs.starmod.lnprior([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+        starlike = exs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+        starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
 
         if np.isnan(starlike):
             return -np.inf, [], []
@@ -3211,7 +3159,7 @@ def log_like(par: dict, exs: ExoSystem):
 
         if exs.fit_planets:
 
-            rstar, mstar, Tstar, loggstar = exs.misti.interp_value([par['eep'],par['age'],par['feh']],['radius','mass','Teff','logg'])
+            rstar, mstar, Tstar, loggstar = exs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
                 return -np.inf, [], []
@@ -3405,8 +3353,8 @@ def log_like_staronly(par: dict, exs: ExoSystem):
     if par['AV'] < 0:
         return -np.inf
 
-    starlike = exs.starmod.lnlike([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
-    starlike += exs.starmod.lnprior([par['eep'],par['age'],par['feh'],par['distance'],par['AV']])
+    starlike = exs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+    starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
 
     if exs.use_priors:
 

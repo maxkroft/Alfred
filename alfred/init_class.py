@@ -660,7 +660,7 @@ class Init_priors(InitFile):
                                  'stellar radius in solar radii',
                                  'mean stellar density in g/cm^3',
                                  'log10 of stellar age in yr. This is used directly in fitting',
-                                 'stellar age in yr. Prior is not compatible with multinest, but works with MCMC',
+                                 'stellar age in yr.',
                                  'V band extinction in mags']
         
     
