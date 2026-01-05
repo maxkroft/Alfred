@@ -623,13 +623,12 @@ class Init_priors(InitFile):
 
         self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'trend', 'offset',
-                             'mstar', 'rstar', 'rhostar', 'log10(age)', 'age', 'AV']
+                             'eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar', 'age']
         
         self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT']
         self.lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         self.ld_vars = ['u1', 'u2']
         self.rv_vars = ['trend', 'offset']
-        self.star_vars = ['mstar', 'rstar', 'rhostar', 'log10(age)', 'age', 'AV']
         
         self.var_descriptions = ['natural log of the planet period in days',
                                  'planet period in days',
@@ -656,12 +655,15 @@ class Init_priors(InitFile):
                                  'quadratic limb darkening non-linear term',
                                  'RV data background trend in m/s (flat term), m/s per day (linear term), or m/s per day^2 (quadratic term)',
                                  'RV offset in m/s (only used for second data set and on when there are multiple RV data sets)',
-                                 'stellar mass in solar masses',
-                                 'stellar radius in solar radii',
-                                 'mean stellar density in g/cm^3',
+                                 'equivalent evolutionary phase, used in fitting the star with isochrones',
                                  'log10 of stellar age in yr. This is used directly in fitting',
                                  'stellar age in yr.',
-                                 'V band extinction in mags']
+                                 'stellar metallicity in dex',
+                                 'distance to the system in pc',
+                                 'V band extinction in mags',
+                                 'stellar mass in solar masses',
+                                 'stellar radius in solar radii',
+                                 'mean stellar density in g/cm^3 in stellar fitting']
         
     
     def var_help(self):
@@ -720,6 +722,7 @@ class Init_priors(InitFile):
                 
                 break
 
+        origvar = var
         
         if var in self.planet_vars:
 
@@ -767,11 +770,17 @@ class Init_priors(InitFile):
 
         while True:
             
-            priortype = input('Prior type to use for {0}. U for uniform, G for Gaussian.'.format(var)).upper()
+            priortype = input('Prior type to use for {0}. U for uniform, G for Gaussian, F for fixed.'.format(var)).upper()
 
-            if priortype not in ['U', 'G']:
+            if priortype not in ['U', 'G', 'F']:
 
                 z = input('Prior type is not recognized. Enter to try again. Type "stop" to exit.')
+                if z.lower() == 'stop':
+                    return
+                
+            elif priortype == 'F' and origvar in ['rhos','u1','u2','mstar','rstar','rhostar']:
+
+                z = input('Cannot set {0} to fixed. Enter to try again. Type "stop" to exit.'.format(origvar))
                 if z.lower() == 'stop':
                     return
 
@@ -790,6 +799,11 @@ class Init_priors(InitFile):
 
             p1 = input('Mean of Gaussian prior for {0}.'.format(var))
             p2 = input('Standard deviation of Gaussian prior for {0}.'.format(var))
+
+        elif priortype == 'F':
+
+            p1 = input('Value at which to fix {0}.'.format(var))
+            p2 = 0
 
         row.append(p1)
         row.append(p2)

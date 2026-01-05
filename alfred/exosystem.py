@@ -577,14 +577,34 @@ class ExoSystem:
             for i in np.unique(self.which_rv)[1:]:
                 self.x0['offset {0}'.format(self.rvnames[i])] = 0
 
+        if self.use_priors:
+
+            self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+
+            for i in range(self.n):
+
+                if 'e {0}'.format(i+1) in self.allpriors.fixed or 'w {0}'.format(i+1) in self.allpriors.fixed:
+
+                    self.x0.pop('secw {0}'.format(i+1))
+                    self.x0.pop('sesw {0}'.format(i+1))
+
+                    self.x0['e {0}'.format(i+1)] = 0.01
+                    self.x0['w {0}'.format(i+1)] = np.pi/2
+
+            for f in self.allpriors.fixed:
+
+                if f in self.x0:
+
+                    self.x0.pop(f)
+
         keys = list(self.x0.keys())
 
         print('Initial parameters:')
         print(self.x0)
-
-        if self.use_priors:
-
-            self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+        
+        if len(self.allpriors.fixed) > 0:
+            print('Fixed Parameters:')
+            print(self.allpriors.fixed)
 
 
         if self.nwalk < len(keys) * 2:
@@ -611,10 +631,25 @@ class ExoSystem:
 
             if not self.fit_transit or self.sigma_clip == 0:
                 break
+            
+            if self.use_priors:
+
+                y = x | self.allpriors.fixed
+
+                for j in range(self.n):
+
+                    if 'e {0}'.format(j+1) in y:
+
+                        y['secw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.cos(y['w {0}'.format(j+1)])
+                        y['sesw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.sin(y['w {0}'.format(j+1)])
+
+            else:
+
+                y = x.copy()
 
             if self.fit_star:
 
-                rstar, mstar, Tstar, loggstar = self.misti.interp_value([x['eep'],x['log10(age)'],x['feh']],['radius','mass','Teff','logg'])
+                rstar, mstar, Tstar, loggstar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg'])
 
                 arlist = []
                 for j in range(self.n):
@@ -625,19 +660,19 @@ class ExoSystem:
 
                     if self.fit_ttv[j]:
 
-                        p = get_ttv_params(x, j+1, self.ttvi['{0}'.format(j+1)], ar = 1)[0]
+                        p = get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = 1)[0]
 
                     else:
 
-                        p = np.exp(x['log(P) {0}'.format(j+1)])
+                        p = np.exp(y['log(P) {0}'.format(j+1)])
 
                     if self.is_rv[j] and self.fit_rv:
 
                         e = 0
                         if self.fit_ecc[j]:
-                            e = x['secw {0}'.format(j+1)]**2 + x['sesw {0}'.format(j+1)]**2
+                            e = y['secw {0}'.format(j+1)]**2 + y['sesw {0}'.format(j+1)]**2
 
-                        mp = calc_m_from_k(p, np.exp(x['log(K) {0}'.format(j+1)]), e, np.arccos(x['cos(i) {0}'.format(j+1)]), mstar)
+                        mp = calc_m_from_k(p, np.exp(y['log(K) {0}'.format(j+1)]), e, np.arccos(y['cos(i) {0}'.format(j+1)]), mstar)
 
                     else:
 
@@ -655,18 +690,18 @@ class ExoSystem:
 
                 if self.fit_ttv[j]:
 
-                    pars.append(get_ttv_params(x, j+1, self.ttvi['{0}'.format(j+1)], ar = arlist[j] if self.fit_star else None))
+                    pars.append(get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = arlist[j] if self.fit_star else None))
 
                 else:
 
-                    pars.append(get_transit_params(x, j+1, ar = arlist[j] if self.fit_star else None))
+                    pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None))
 
 
             lastclipped = 0
 
             for j in range(len(self.tt)):
 
-                mean = x['F0 {0}'.format(self.lcnames[j])]
+                mean = y['F0 {0}'.format(self.lcnames[j])]
 
                 fm = mean
 
@@ -674,11 +709,11 @@ class ExoSystem:
 
                 if self.fit_ld:
 
-                    ld = [x['u1 {0}'.format(self.filters[j])], x['u2 {0}'.format(self.filters[j])]]
+                    ld = [y['u1 {0}'.format(self.filters[j])], y['u2 {0}'.format(self.filters[j])]]
 
                 if self.fit_star:
 
-                    ld = [self.ldgrids[self.filters[j]][0]([Tstar, loggstar, x['feh']])[0], self.ldgrids[self.filters[j]][1]([Tstar, loggstar, x['feh']])[0]]
+                    ld = [self.ldgrids[self.filters[j]][0]([Tstar, loggstar, y['feh']])[0], self.ldgrids[self.filters[j]][1]([Tstar, loggstar, y['feh']])[0]]
 
                 for k in range(self.n):
 
@@ -696,7 +731,7 @@ class ExoSystem:
                             if self.ttvsectors['{0} {1}'.format(k+1, z+1)] != j:
                                 continue
 
-                            ttime = x['TT {0} {1}'.format(k+1, z+1)]
+                            ttime = y['TT {0} {1}'.format(k+1, z+1)]
 
                             pars[l][1] = ttime
 
@@ -720,7 +755,7 @@ class ExoSystem:
 
                 if self.detrend[j]:
 
-                    gp = set_gp_params(np.exp(x['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(x['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[j])
+                    gp = set_gp_params(np.exp(y['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(y['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[j])
 
                     gpf = gp.predict(resid)
 
@@ -816,6 +851,15 @@ class ExoSystem:
                 z[j] = 0.9 * z[j] / np.abs(z[j])
                 pos.append(z)
 
+            if k.split()[0] == 'e':
+                z = np.abs(np.random.normal(x[k], 0.001, self.nwalk))
+                j = np.where(z > 0.9)[0]
+                z[j] = 0.85
+                pos.append(z)
+
+            if k.split()[0] == 'w':
+                pos.append(np.random.normal(x[k], 1, self.nwalk))
+
             if 'F0' in k:
                 pos.append(np.random.normal(x[k], 0.001, self.nwalk))
 
@@ -896,6 +940,8 @@ class ExoSystem:
         self.flatten_chains()
 
         self.make_results(name)
+
+        ####continue here#######
 
         if self.fit_planets:
 
@@ -1037,7 +1083,7 @@ class ExoSystem:
 
         if self.fit_star:
 
-            self.starmod._derived_samples = self.misti(*[self.res[x] for x in ['eep','log10(age)','feh','distance','AV']])
+            self.starmod._derived_samples = self.misti(*[self.res[x] if x in self.res else [self.allpriors.fixed[x]]*n for x in ['eep','log10(age)','feh','distance','AV']])
             self.starmod._derived_samples["parallax"] = 1000.0 / self.res['distance']
             self.starmod._derived_samples["distance"] = self.res['distance']
             self.starmod._derived_samples["AV"] = self.res['AV']
@@ -1069,6 +1115,21 @@ class ExoSystem:
 
         if self.fit_planets:
 
+            if self.use_priors:
+
+                y = self.res | self.allpriors.fixed
+
+                for i in range(self.n):
+
+                    if 'e {0}'.format(i+1) in y:
+
+                        y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
+                        y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+
+            else:
+
+                y = self.res.copy()
+
             for i in range(self.n):
 
                 if self.is_transit[i] and self.fit_transit:
@@ -1085,36 +1146,38 @@ class ExoSystem:
 
                     else:
 
-                        p = np.exp(self.res['log(P) {0}'.format(i+1)])
+                        p = np.exp(y['log(P) {0}'.format(i+1)])
                         self.dres['P {0}'.format(i+1)] = p
 
-                    rp = self.res['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
+                    rp = y['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
                     self.dres['Rp {0}'.format(i+1)] = rp
 
                     if not self.fit_star:
 
-                        ars = np.exp(self.res['log(a/rs) {0}'.format(i+1)])
+                        ars = np.exp(y['log(a/rs) {0}'.format(i+1)])
                         self.dres['a/rs {0}'.format(i+1)] = ars
 
                         a = ars * rstar * (1*u.Rsun).to(u.AU).value
                         self.dres['a {0}'.format(i+1)] = a
 
-                    inc = np.arccos(self.res['cos(i) {0}'.format(i+1)]) * 180/np.pi
+                    inc = np.arccos(y['cos(i) {0}'.format(i+1)]) * 180/np.pi
                     self.dres['i {0}'.format(i+1)] = inc
 
 
                 elif self.is_rv[i] and self.fit_rv:
 
-                    p = np.exp(self.res['log(P) {0}'.format(i+1)])
+                    p = np.exp(y['log(P) {0}'.format(i+1)])
                     self.dres['P {0}'.format(i+1)] = p
 
                 if self.fit_ecc[i]:
 
-                    e = self.res['secw {0}'.format(i+1)]**2 + self.res['sesw {0}'.format(i+1)]**2
-                    self.dres['e {0}'.format(i+1)] = e
+                    if 'e {0}'.format(i+1) not in y:
 
-                    w = np.arctan2(self.res['sesw {0}'.format(i+1)], self.res['secw {0}'.format(i+1)]) * 180/np.pi
-                    self.dres['w {0}'.format(i+1)] = w
+                        e = y['secw {0}'.format(i+1)]**2 + y['sesw {0}'.format(i+1)]**2
+                        self.dres['e {0}'.format(i+1)] = e
+
+                        w = np.arctan2(y['sesw {0}'.format(i+1)], y['secw {0}'.format(i+1)]) * 180/np.pi
+                        self.dres['w {0}'.format(i+1)] = w
 
                 else:
 
@@ -1125,7 +1188,7 @@ class ExoSystem:
 
                 if self.is_rv[i] and self.fit_rv:
 
-                    k = np.exp(self.res['log(K) {0}'.format(i+1)])
+                    k = np.exp(y['log(K) {0}'.format(i+1)])
                     self.dres['K {0}'.format(i+1)] = k
 
                     if self.is_transit[i] and self.fit_transit:
@@ -1157,10 +1220,10 @@ class ExoSystem:
 
                 if self.is_transit[i] and self.fit_transit:
 
-                    b = ars * self.res['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w * np.pi/180))
+                    b = ars * y['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w * np.pi/180))
                     self.dres['b {0}'.format(i+1)] = b
 
-                    dur = p / np.pi * np.arcsin(np.sqrt((1 + self.res['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - self.res['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
+                    dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
                     self.dres['dur {0}'.format(i+1)] = dur
 
                     if not self.fit_star:
@@ -3092,7 +3155,22 @@ def lnGauss(data, model, err):
     return - 0.5 * ( (model - data) / err)**2 - np.log( np.sqrt(2 * np.pi) * err)
 
 
-def log_like(par: dict, exs: ExoSystem):
+def log_like(par_in: dict, exs: ExoSystem):
+
+    if exs.use_priors:
+
+        par = par_in | exs.allpriors.fixed
+
+        for i in range(exs.n):
+
+            if 'e {0}'.format(i+1) in par:
+
+                par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
+                par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
+
+    else:
+
+        par = par_in.copy()
 
     #check params
     if exs.fit_planets:
@@ -3343,7 +3421,15 @@ def log_like(par: dict, exs: ExoSystem):
     return like if not np.isnan(like) else -np.inf, np.array(ps), np.array(tcs)
 
 
-def log_like_staronly(par: dict, exs: ExoSystem):
+def log_like_staronly(par_in: dict, exs: ExoSystem):
+
+    if exs.use_priors:
+
+        par = par_in | exs.allpriors.fixed
+
+    else:
+
+        par = par_in.copy()
 
     #check feh
     if not -0.5 <= par['feh'] <= 0.5:

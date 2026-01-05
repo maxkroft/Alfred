@@ -49,17 +49,23 @@ class AllPriors:
     def __init__(self, tab: Table, x0: dict, fit_ttv):
 
         self.prior_dict = {}
+        self.fixed = {}
 
         searchvars = {'P': 'log(P)', 'a/rs': 'log(a/rs)', 'rhos': 'log(a/rs)', 'i': 'cos(i)', 'K': 'log(K)', 'e': 'secw', 'w': 'secw',
                       'rho_gp': 'log(rho_gp)', 'sigma_gp': 'log(sigma_gp)'}
         
-        star_vars = ['mstar', 'rstar', 'rhostar', 'log10(age)', 'AV']
+        star_vars = ['eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
 
         for i in range(len(tab)):
 
             var = tab['Variable'][i]
 
             if var in star_vars:
+
+                if var in star_vars[:5] and tab['Prior Type'][i] == 'F':
+                    
+                    self.fixed[var] = tab['Param 1'][i]
+
                 continue
 
             split = var.split()
@@ -73,6 +79,10 @@ class AllPriors:
             found = False
 
             if svar in ['log(P)','Tc'] and np.any(fit_ttv):
+
+                if tab['Prior Type'][i] == 'F':
+
+                    continue
 
                 if split[-1] == 'x':
 
@@ -113,6 +123,33 @@ class AllPriors:
                 print('Unable to apply prior to {0}, this variable is not being fit.'.format(var))
 
 
+        keys = list(self.fixed.keys())
+        for f in keys:
+
+            if f in self.prior_dict:
+
+                self.prior_dict.pop(f)
+
+            split = f.split()
+
+            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp']:
+
+                sf = ' '.join(['log({0})'.format(split[0])]+split[1:])
+
+                self.fixed[sf] = np.log(self.fixed.pop(f))
+
+            elif split[0] == 'age':
+
+                self.fixed['log10(age)'] = np.log10(self.fixed.pop(f))
+
+            elif split[0] == 'i':
+
+                sf = ' '.join(['cos(i)']+split[1:])
+
+                self.fixed[sf] = np.cos(self.fixed.pop(f))
+
+
+
     def set_up_prior(self, var, prior_type, params):
 
         if var not in self.prior_dict:
@@ -125,6 +162,10 @@ class AllPriors:
         elif prior_type == 'G':
 
             self.prior_dict[var].add_gaussian_prior(params[0], params[1])
+
+        elif prior_type == 'F':
+
+            self.fixed[var] = params[0]
 
 
     def apply(self, par: dict):
@@ -196,17 +237,37 @@ class AllPriors:
 
 def setup_star_priors(tab: Table, starmod: SingleStarModel):
 
-    var_convert = {'mstar': lambda x: starmod.set_prior(mass = x),
-                   'rstar': lambda x: starmod.set_prior(radius = x),
-                   'rhostar': lambda x: starmod.set_prior(density = x),
-                   'log10(age)': lambda x: starmod.set_prior(age = x),
-                   'AV': lambda x: starmod.set_prior(AV = x)}
+    set_priors = {'mstar': lambda x: starmod.set_prior(mass = x),
+                'rstar': lambda x: starmod.set_prior(radius = x),
+                'rhostar': lambda x: starmod.set_prior(density = x),
+                'eep': lambda x: starmod.set_prior(eep = x),
+                'log10(age)': lambda x: starmod.set_prior(age = x),
+                'feh': lambda x: starmod.set_prior(feh = x),
+                'distance': lambda x: starmod.set_prior(distance = x),
+                'AV': lambda x: starmod.set_prior(AV = x)}
+    
+    var_convert = {'mstar': 'mass',
+                   'rstar': 'radius',
+                   'rhostar': 'density',
+                   'eep': 'eep',
+                   'log10(age)': 'age',
+                   'feh': 'feh',
+                   'distance': 'distance',
+                   'AV': 'AV'}
 
-    for var in var_convert:
+    for var in set_priors:
 
         i = np.where(tab['Variable'] == var)[0]
 
         if len(i) == 0:
+
+            continue
+
+        elif np.any(tab['Prior Type'][i] == 'F'):
+
+            if var_convert[var] in starmod._priors:
+
+                starmod._priors.pop(var_convert[var])
 
             continue
 
@@ -235,6 +296,16 @@ def setup_star_priors(tab: Table, starmod: SingleStarModel):
 
             starprior = GaussianPrior(mean, std, bounds = bounds)
 
-        var_convert[var](starprior)
+        set_priors[var](starprior)
+
+    if 'age' in tab['Variable']:
+
+        i = np.where(tab['Variable'] == 'age')[0]
+
+        if tab['Prior Type'][i] == 'F':
+
+            if 'age' in starmod._priors:
+
+                starmod._priors.pop('age')
 
     return starmod
