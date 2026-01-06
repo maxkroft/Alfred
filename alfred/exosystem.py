@@ -1188,6 +1188,11 @@ class ExoSystem:
                         w = np.arctan2(y['sesw {0}'.format(i+1)], y['secw {0}'.format(i+1)]) * 180/np.pi
                         self.dres['w {0}'.format(i+1)] = w
 
+                    else:
+
+                        e = y['e {0}'.format(i+1)]
+                        w = y['w {0}'.format(i+1)] * 180/np.pi
+
                 else:
 
                     e = 0
@@ -1915,7 +1920,7 @@ class ExoSystem:
 
             for i in range(self.n):
 
-                if 'secw {0}'.format(i+1) not in y:
+                if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
 
                     y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
                     y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
@@ -2430,7 +2435,7 @@ class ExoSystem:
 
             for i in range(self.n):
 
-                if 'secw {0}'.format(i+1) not in y:
+                if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
 
                     y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
                     y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
@@ -3160,6 +3165,10 @@ def log_like(par_in: dict, exs: ExoSystem):
         par = par_in | exs.fixed
 
         for i in range(exs.n):
+
+            if  'w {0}'.format(i+1) in par_in and not -np.pi < par_in['w {0}'.format(i+1)] <= np.pi:
+
+                return -np.inf, [], []
 
             if 'e {0}'.format(i+1) in par:
 
