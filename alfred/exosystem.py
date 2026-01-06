@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.patheffects as pe
 import mplcursors
 import emcee
 import corner
@@ -580,10 +581,12 @@ class ExoSystem:
         if self.use_priors:
 
             self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+            
+            self.fixed = self.allpriors.fixed.copy()
 
             for i in range(self.n):
 
-                if 'e {0}'.format(i+1) in self.allpriors.fixed or 'w {0}'.format(i+1) in self.allpriors.fixed:
+                if 'e {0}'.format(i+1) in self.fixed or 'w {0}'.format(i+1) in self.fixed:
 
                     self.x0.pop('secw {0}'.format(i+1))
                     self.x0.pop('sesw {0}'.format(i+1))
@@ -591,7 +594,7 @@ class ExoSystem:
                     self.x0['e {0}'.format(i+1)] = 0.01
                     self.x0['w {0}'.format(i+1)] = np.pi/2
 
-            for f in self.allpriors.fixed:
+            for f in self.fixed:
 
                 if f in self.x0:
 
@@ -602,9 +605,9 @@ class ExoSystem:
         print('Initial parameters:')
         print(self.x0)
         
-        if len(self.allpriors.fixed) > 0:
+        if len(self.fixed) > 0:
             print('Fixed Parameters:')
-            print(self.allpriors.fixed)
+            print(self.fixed)
 
 
         if self.nwalk < len(keys) * 2:
@@ -634,7 +637,7 @@ class ExoSystem:
             
             if self.use_priors:
 
-                y = x | self.allpriors.fixed
+                y = x | self.fixed
 
                 for j in range(self.n):
 
@@ -941,8 +944,6 @@ class ExoSystem:
 
         self.make_results(name)
 
-        ####continue here#######
-
         if self.fit_planets:
 
             self.plot_pl_chains(name, show_plot = show_plots)
@@ -966,7 +967,6 @@ class ExoSystem:
         if self.fit_star:
 
             self.plot_star_corner(name, show_plot = show_plots)
-
 
         if self.fit_planets:
 
@@ -1058,6 +1058,9 @@ class ExoSystem:
         Combines results and derived_results into a single human-readable ascii table which is saved to Results/name.txt. Can be directly printed out
         by calling ExoSystem.print_results(name).
 
+        Writes out specific run settings (fit_transit, fit_rv, fit_star, fit_ld, use_priors, and fixed parameters if applicable) to the pickle file
+        Output/name_run_settings.p. These are loaded back in with ExoSystem.load_results and are used to tell plotting functions what to plot.
+
         Args:
             name (str): Name of the run. Sets the names of the output files from this function.
         """
@@ -1083,7 +1086,7 @@ class ExoSystem:
 
         if self.fit_star:
 
-            self.starmod._derived_samples = self.misti(*[self.res[x] if x in self.res else [self.allpriors.fixed[x]]*n for x in ['eep','log10(age)','feh','distance','AV']])
+            self.starmod._derived_samples = self.misti(*[self.res[x] if x in self.res else [self.fixed[x]]*n for x in ['eep','log10(age)','feh','distance','AV']])
             self.starmod._derived_samples["parallax"] = 1000.0 / self.res['distance']
             self.starmod._derived_samples["distance"] = self.res['distance']
             self.starmod._derived_samples["AV"] = self.res['AV']
@@ -1117,7 +1120,7 @@ class ExoSystem:
 
             if self.use_priors:
 
-                y = self.res | self.allpriors.fixed
+                y = self.res | self.fixed
 
                 for i in range(self.n):
 
@@ -1265,6 +1268,13 @@ class ExoSystem:
         tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
+        run_settings = {'fit_transit': self.fit_transit, 'fit_rv': self.fit_rv, 'fit_star': self.fit_star, 'fit_ld': self.fit_ld, 'use_priors': self.use_priors}
+        if self.use_priors:
+            run_settings['fixed'] = self.fixed
+
+        pickle.dump(run_settings, open(self.direc+'Output/'+name+'_run_settings.p', 'wb'))
+
+
     @property
     def results(self):
         """Dict which stores the flattened chains of fit parameters. Keys are the parameter names.
@@ -1312,6 +1322,8 @@ class ExoSystem:
         Attempts to load in unflattened, un-thinned MCMC chains if they exist. Paramater name map is saved to ExoSystem.parnames,
         chains are saved to ExoSystem.samples, log likelihood values are saved to ExoSystem.log_likes_full.
 
+        Also loads in some run settings from the run.
+
         Args:
             name (str): Name of the previous run to load in.
         """
@@ -1356,6 +1368,11 @@ class ExoSystem:
 
         try:
             self.load_samples(name)
+        except:
+            pass
+        
+        try:
+            self.load_run_settings(name)
         except:
             pass
 
@@ -1407,6 +1424,24 @@ class ExoSystem:
         self.log_likes = z['log_like']
         if 'blobs' in z:
             self.blobs = z['blobs']
+
+    
+    def load_run_settings(self, name: str):
+        """Loads in run settings from the run, specifically fit_transit, fit_rv, fit_star, fit_ld, use_priors, and any parameters which were fixed.
+        These are used to tell plotting functions what they need to plot.
+
+        Args:
+            name (str): Name of the previous run to load in.
+        """
+        
+        run_settings = pickle.load(open(self.direc+'/Output/'+name+'_run_settings.p', 'rb'))
+        self.fit_transit = run_settings['fit_transit']
+        self.fit_rv = run_settings['fit_rv']
+        self.fit_star = run_settings['fit_star']
+        self.fit_ld = run_settings['fit_ld']
+        self.use_priors = run_settings['use_priors']
+        if self.use_priors:
+            self.fixed = run_settings['fixed']
 
 
     def delete_run(self, name: str):
@@ -1510,107 +1545,50 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
-        fit_rv = False
 
-        if 'trend 0' in self.res:
-
-            fit_rv = True
-
-        fit_transit = False
-
-        if 'F0 {0}'.format(self.lcnames[0]) in self.res:
-
-            fit_transit = True
-
-        fit_star = False
-
-        if 'eep' in self.res:
-
-            fit_star = True
-
-        num = (self.n if fit_rv else self.nt) if fit_transit else self.nr
-
-        fig, ax = plt.subplots(4 + (3 if fit_transit else 0) + (1 if fit_rv else 0) - (1 if fit_star else 0), num, figsize = (7*self.n, 18), sharex = True, layout = 'constrained')
-
-        if num == 1:
-            ax = np.array([ax.T]).T
+        num1, num2 = 0, 0
+        vargrid = []
 
         for i in range(self.n):
 
-            if not ((fit_transit and self.is_transit[i]) or (fit_rv and self.is_rv[i])):
+            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i])):
 
                 continue
 
-            if fit_transit:
+            num2 += 1
+            vargrid.append([])
 
-                if fit_rv:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','secw','sesw','e','w']:
 
-                    j = i
+                if z+' {0}'.format(i+1) in self.parnames:
+                    vargrid[-1].append(z)
 
-                else:
+            num1 = max(num1, len(vargrid[-1]))
 
-                    j = np.sum(self.is_transit[:i])
-            
-            else:
+        fig, ax = plt.subplots(num1, num2, figsize = (7*num2, 18), sharex = True, layout = 'constrained')
 
-                j = np.sum(self.is_rv[:i])
+        if num2 == 1:
+            ax = np.array([ax.T]).T
+
+        j = 0
+        for i in range(self.n):
+
+            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i])):
+
+                continue
 
             ax[0][j].set_title('Planet {0}'.format(i+1))
 
-            if self.is_transit[i] and fit_transit:
+            for k in range(num1):
 
-                if not self.fit_ttv[i]:
+                v = self.parnames[vargrid[j][k]+' {0}'.format(i+1)]
+                ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
 
-                    v = self.parnames['log(P) {0}'.format(i+1)]
-                    ax[0][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-                    
-                    v = self.parnames['Tc {0}'.format(i+1)]
-                    ax[1][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-                v = self.parnames['ror {0}'.format(i+1)]
-                ax[2][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-                if not fit_star:
-                    v = self.parnames['log(a/rs) {0}'.format(i+1)]
-                    ax[3][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-                v = self.parnames['cos(i) {0}'.format(i+1)]
-                ax[4 - (1 if fit_star else 0)][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-            elif self.is_rv[i] and fit_rv:
-
-                v = self.parnames['log(P) {0}'.format(i+1)]
-                ax[0][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-                
-                v = self.parnames['Tc {0}'.format(i+1)]
-                ax[1][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-            if self.is_rv[i] and fit_rv:
-
-                v = self.parnames['log(K) {0}'.format(i+1)]
-                ax[2 + (3 if fit_transit else 0) - (1 if fit_star else 0)][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-            if self.fit_ecc[i] and ((self.is_transit[i] and fit_transit) or (self.is_rv[i] and fit_rv)):
-
-                v = self.parnames['secw {0}'.format(i+1)]
-                ax[2 + (3 if fit_transit else 0) + (1 if fit_rv else 0) - (1 if fit_star else 0)][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-                v = self.parnames['sesw {0}'.format(i+1)]
-                ax[3 + (3 if fit_transit else 0) + (1 if fit_rv else 0) - (1 if fit_star else 0)][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
-        ax[0][0].set_ylabel('log(P)')
-        ax[1][0].set_ylabel('Tc')
-        if fit_transit:
-            ax[2][0].set_ylabel('ror')
-            if not fit_star:
-                ax[3][0].set_ylabel('log(a/rs)')
-            ax[4 - (1 if fit_star else 0)][0].set_ylabel('cos(i)')
-        if fit_rv:
-            ax[2 + (3 if fit_transit else 0) - (1 if fit_star else 0)][0].set_ylabel('log(K)')
-        ax[2 + (3 if fit_transit else 0) + (1 if fit_rv else 0) - (1 if fit_star else 0)][0].set_ylabel('secw')
-        ax[3 + (3 if fit_transit else 0) + (1 if fit_rv else 0) - (1 if fit_star else 0)][0].set_ylabel('sesw')
+            j += 1
 
         fig.supxlabel('N Steps')
+        fig.supylabel('Parameter')
 
         fig.savefig(self.direc+'Plots/'+name+'/pl_chains.png')
 
@@ -1633,8 +1611,7 @@ class ExoSystem:
 
         n = 0
         for x in self.ttvi:
-            if len(self.ttvi[x]) > n:
-                n = len(self.ttvi[x])
+            n = max(n,len(self.ttvi[x]))
 
         fig, ax = plt.subplots(n, self.nttv, figsize = (7*self.nttv, 12), sharex = True, layout = 'constrained')
 
@@ -1654,9 +1631,10 @@ class ExoSystem:
             ax[0][k].set_title('Planet {0}'.format(i+1))
 
             for z in range(len(self.ttvi['{0}'.format(i+1)])):
-
-                v = self.parnames['TT {0} {1}'.format(i+1, z+1)]
-                ax[z][k].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                
+                if 'TT {0} {1}'.format(i+1, z+1) in self.parnames:
+                    v = self.parnames['TT {0} {1}'.format(i+1, z+1)]
+                    ax[z][k].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
 
         fig.supxlabel('N Steps')
@@ -1695,14 +1673,17 @@ class ExoSystem:
 
             ax[i][0].set_ylabel('{0}'.format(self.lcnames[i]))
 
-            v = self.parnames['F0 {0}'.format(self.lcnames[i])]
-            ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+            if 'F0 {0}'.format(self.lcnames[i]) in self.parnames:
+                v = self.parnames['F0 {0}'.format(self.lcnames[i])]
+                ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
-            v = self.parnames['log(rho_gp) {0}'.format(self.lcnames[i])]
-            ax[i][1].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+            if 'log(rho_gp) {0}'.format(self.lcnames[i]) in self.parnames:
+                v = self.parnames['log(rho_gp) {0}'.format(self.lcnames[i])]
+                ax[i][1].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
-            v = self.parnames['log(sigma_gp) {0}'.format(self.lcnames[i])]
-            ax[i][2].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+            if 'log(sigma_gp) {0}'.format(self.lcnames[i]) in self.parnames:
+                v = self.parnames['log(sigma_gp) {0}'.format(self.lcnames[i])]
+                ax[i][2].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
         ax[0][0].set_title('F0')
         ax[0][1].set_title('log(rho_gp)')
@@ -1733,9 +1714,10 @@ class ExoSystem:
 
         for i, z in enumerate(['eep','log10(age)','feh','distance','AV']):
 
-            v = self.parnames[z]
-            ax[i].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-            ax[i].set_ylabel(z)
+            if z in self.parnames:
+                v = self.parnames[z]
+                ax[i].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[i].set_ylabel(z)
 
         fig.supxlabel('N Steps')
 
@@ -1758,57 +1740,22 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
-        fit_rv = False
-
-        if 'trend 0' in self.res:
-
-            fit_rv = True
-
-        fit_transit = False
-
-        if 'F0 {0}'.format(self.lcnames[0]) in self.res:
-
-            fit_transit = True
-
-        fit_star = False
-
-        if 'eep' in self.res:
-
-            fit_star = True
-
         for i in range(self.n):
 
             labels = []
 
-            if self.is_transit[i] and fit_transit:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','secw','sesw','e','w']:
 
-                labels += ['ror {0}'.format(i+1), 'cos(i) {0}'.format(i+1)]
+                if z+' {0}'.format(i+1) in self.parnames:
 
-                if not fit_star:
+                    labels.append(z+' {0}'.format(i+1))
 
-                    labels.append('log(a/rs) {0}'.format(i+1))
+            if self.fit_transit and self.is_transit[i] and self.fit_ttv[i]:
 
-                if self.fit_ttv[i]:
+                for k in range(len(self.ttvi['{0}'.format(i+1)])):
 
-                    for k in range(len(self.ttvi['{0}'.format(i+1)])):
-
+                    if 'TT {0} {1}'.format(i+1, k+1) in self.parnames:
                         labels.append('TT {0} {1}'.format(i+1, k+1))
-
-                else:
-
-                    labels += ['log(P) {0}'.format(i+1), 'Tc {0}'.format(i+1)]
-
-            elif self.is_rv[i] and fit_rv:
-
-                labels += ['log(P) {0}'.format(i+1), 'Tc {0}'.format(i+1)]
-
-            if self.is_rv[i] and fit_rv:
-
-                labels.append('log(K) {0}'.format(i+1))
-
-            if self.fit_ecc[i] and ((self.is_transit[i] and fit_transit) or (self.is_rv[i] and fit_rv)):
-
-                labels += ['secw {0}'.format(i+1), 'sesw {0}'.format(i+1)]
 
             if not labels:
 
@@ -1841,7 +1788,12 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
-        labels = ['eep','log10(age)','feh','distance','AV']
+        labels = []
+
+        for z in ['eep','log10(age)','feh','distance','AV']:
+            if z in self.parnames:
+                labels.append(z)
+
         j = [self.parnames[x] for x in labels]
 
         fig = corner.corner(self.flat_samples[:,j], labels = labels)
@@ -1941,23 +1893,21 @@ class ExoSystem:
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
 
-        fit_rv = False
+        y = self.res | self.dres
 
-        if 'trend 0' in self.res:
+        n = len(y['log_like'])
 
-            fit_rv = True
+        if self.use_priors:
 
-        fit_ld = False
+            f = self.fixed.copy()
 
-        if 'u1 {0}'.format(self.filters[0]) in self.res:
+            for ff in f:
 
-            fit_ld = True
+                f[ff] = np.full((n), f[ff])
 
-        fit_star = False
+            y = y | f
 
-        if 'eep' in self.res:
-
-            fit_star = True
+        if self.fit_star:
 
             self.ldgrids = {}
 
@@ -1979,7 +1929,7 @@ class ExoSystem:
 
             self.misti = get_ichrone('mist')
 
-            rstar, mstar, Tstar, loggstar = self.misti.interp_value([self.res['eep'],self.res['log10(age)'],self.res['feh']],['radius','mass','Teff','logg']).T
+            rstar, mstar, Tstar, loggstar = self.misti.interp_value([y[x] for x in ['eep','log10(age)','feh']],['radius','mass','Teff','logg']).T
 
             arlist = []
             for j in range(self.n):
@@ -1988,15 +1938,15 @@ class ExoSystem:
                     arlist.append(np.nan)
                     continue
 
-                p = self.dres['P {0}'.format(j+1)]
+                p = y['P {0}'.format(j+1)]
 
-                if self.is_rv[j] and fit_rv:
+                if self.is_rv[j] and self.fit_rv:
 
                     e = 0
                     if self.fit_ecc[j]:
-                        e = self.res['secw {0}'.format(j+1)]**2 + self.res['sesw {0}'.format(j+1)]**2
+                        e = y['e {0}'.format(j+1)]
 
-                    mp = calc_m_from_k(p, np.exp(self.res['log(K) {0}'.format(j+1)]), e, np.arccos(self.res['cos(i) {0}'.format(j+1)]), mstar)
+                    mp = calc_m_from_k(p, y['K {0}'.format(j+1)], e, np.arccos(y['cos(i) {0}'.format(j+1)]), mstar)
 
                 else:
 
@@ -2014,18 +1964,16 @@ class ExoSystem:
 
             ld = np.array(self.ld[self.filters[i]])
 
-            if fit_ld:
+            if self.fit_ld:
 
-                ld = np.array([self.res['u1 {0}'.format(self.filters[i])], self.res['u2 {0}'.format(self.filters[i])]]).T
+                ld = np.array([y['u1 {0}'.format(self.filters[i])], y['u2 {0}'.format(self.filters[i])]]).T
 
-            if fit_star:
+            if self.fit_star:
 
-                starpars = np.array([Tstar, loggstar, self.res['feh']]).T
+                starpars = np.array([Tstar, loggstar, y['feh']]).T
                 ld = np.array([self.ldgrids[self.filters[i]][0](starpars)[0], self.ldgrids[self.filters[i]][1](starpars)[0]]).T
 
             detrend = self.detrend[i]
-
-            n = len(self.res['ror 1'])
 
             pars = []
             tcs = []
@@ -2037,16 +1985,16 @@ class ExoSystem:
                 
                 if self.fit_ttv[j]:
 
-                    p = self.dres['P {0}'.format(j+1)]
-                    tc = self.dres['Tc {0}'.format(j+1)]
-                    ror = self.res['ror {0}'.format(j+1)]
-                    if fit_star:
+                    p = y['P {0}'.format(j+1)]
+                    tc = y['Tc {0}'.format(j+1)]
+                    ror = y['ror {0}'.format(j+1)]
+                    if self.fit_star:
                         ar = arlist[j]
                     else:
-                        ar = np.exp(self.res['log(a/rs) {0}'.format(j+1)])
-                    inc = np.arccos(self.res['cos(i) {0}'.format(j+1)]) * 180/np.pi
-                    e = self.res['sqrt(e)cos(w) {0}'.format(j+1)]**2 + self.res['sqrt(e)sin(w) {0}'.format(j+1)]**2 if 'sqrt(e)cos(w) {0}'.format(j+1) in self.res else np.zeros(np.shape(self.res['ror {0}'.format(j+1)]))
-                    w = np.arctan2(self.res['sqrt(e)sin(w) {0}'.format(j+1)], self.res['sqrt(e)cos(w) {0}'.format(j+1)]) * 180/np.pi if 'sqrt(e)cos(w) {0}'.format(j+1) in self.res else np.full(np.shape(self.res['ror {0}'.format(j+1)]), 90)
+                        ar = y['a/rs {0}'.format(j+1)]
+                    inc = y['i {0}'.format(j+1)]
+                    e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
+                    w = y['w {0}'.format(j+1)] if 'w {0}'.format(j+1) in y else np.full((n), 90)
                     
                     pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
 
@@ -2054,11 +2002,11 @@ class ExoSystem:
 
                 else:
 
-                    pars.append(get_transit_params(self.res, j+1, ar = arlist[j] if fit_star else None).T)
-                    tcs.append(np.median(self.res['Tc {0}'.format(j+1)]))
+                    pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None).T)
+                    tcs.append(np.median(y['Tc {0}'.format(j+1)]))
 
 
-            mean = self.res['F0 {0}'.format(sec)]
+            mean = y['F0 {0}'.format(sec)]
 
             ttphase = np.linspace(-0.5, 0.5, 1000)
             phaseexp = 1/1000
@@ -2066,8 +2014,8 @@ class ExoSystem:
 
             if detrend:
 
-                rhogp = np.exp(self.res['log(rho_gp) {0}'.format(sec)])
-                sigmagp = np.exp(self.res['log(sigma_gp) {0}'.format(sec)])
+                rhogp = np.exp(y['log(rho_gp) {0}'.format(sec)])
+                sigmagp = np.exp(y['log(sigma_gp) {0}'.format(sec)])
 
                 kernel = terms.SHOTerm(rho = rhogp[0], sigma = sigmagp[0], Q = 1/np.sqrt(2))
                 gp = GaussianProcess(kernel = kernel)
@@ -2099,7 +2047,7 @@ class ExoSystem:
                         if self.ttvsectors['{0} {1}'.format(k+1, z+1)] != i:
                             continue
 
-                        ttime = np.median(self.res['TT {0} {1}'.format(k+1, z+1)])
+                        ttime = np.median(y['TT {0} {1}'.format(k+1, z+1)])
 
                         ind = np.where((self.tt[i] >= ttime - p/4) & (self.tt[i] <= ttime + p/4))
 
@@ -2157,7 +2105,7 @@ class ExoSystem:
                             if self.ttvsectors['{0} {1}'.format(k+1, ii+1)] != i:
                                 continue
 
-                            ttime = self.res['TT {0} {1}'.format(k+1, ii+1)][j]
+                            ttime = y['TT {0} {1}'.format(k+1, ii+1)][j]
 
                             pars[l][j][1] = ttime
 
@@ -2217,7 +2165,7 @@ class ExoSystem:
         """
         return self._lcm
 
-
+#########continue#################3
     def plot_full_lc(self, name: str, show_plot = True):
         """Plots full light curve fits for each data set. Saves to the folder in Plots set by name. Each data set plot is named
         transit_full_nickname.png, where nickname is the data set's nickname. Shows the plot if show_plot is True.
@@ -3159,7 +3107,7 @@ def log_like(par_in: dict, exs: ExoSystem):
 
     if exs.use_priors:
 
-        par = par_in | exs.allpriors.fixed
+        par = par_in | exs.fixed
 
         for i in range(exs.n):
 
@@ -3425,7 +3373,7 @@ def log_like_staronly(par_in: dict, exs: ExoSystem):
 
     if exs.use_priors:
 
-        par = par_in | exs.allpriors.fixed
+        par = par_in | exs.fixed
 
     else:
 
