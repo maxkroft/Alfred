@@ -991,8 +991,14 @@ class ExoSystem:
             self.plot_ttvs(name, show_plot = show_plots)
 
         if self.fit_star:
+            
+            y = self.res.copy()
 
-            mags = self.misti.interp_mag([self.res['eep'],self.res['log10(age)'],self.res['feh'],self.res['distance'],self.res['AV']], ['J','H','K','G','BP','RP','W1','W2','W3'])[3]
+            if self.use_priors:
+                
+                y = y | self.fixed
+
+            mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],y['distance'],y['AV']], ['J','H','K','G','BP','RP','W1','W2','W3'])[3]
             self.magfit = np.median(mags, axis = 0)
             self.magfiterr = np.diff(np.percentile(mags, [16,50,84], axis = 0), axis = 0)
 
@@ -1907,6 +1913,13 @@ class ExoSystem:
 
             y = y | f
 
+            for i in range(self.n):
+
+                if 'secw {0}'.format(i+1) not in y:
+
+                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
+                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+
         if self.fit_star:
 
             self.ldgrids = {}
@@ -2165,7 +2178,7 @@ class ExoSystem:
         """
         return self._lcm
 
-#########continue#################3
+
     def plot_full_lc(self, name: str, show_plot = True):
         """Plots full light curve fits for each data set. Saves to the folder in Plots set by name. Each data set plot is named
         transit_full_nickname.png, where nickname is the data set's nickname. Shows the plot if show_plot is True.
@@ -2196,7 +2209,7 @@ class ExoSystem:
 
             fm = self._lcm[sec]['fm']
             fm_err = self._lcm[sec]['fm_err']
-            mean = np.median(self.res['F0 {0}'.format(sec)])
+            mean = np.median(self.res['F0 {0}'.format(sec)] if 'F0 {0}'.format(sec) in self.res else self.fixed['F0 {0}'.format(sec)])
 
             if self.detrend[i]:
 
@@ -2280,13 +2293,15 @@ class ExoSystem:
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
 
+        y = self.res | self.dres
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
         for i in range(len(self.lcnames)):
 
             sec = self.lcnames[i]
-
-            detrend = False
-            if 'log(rho_gp) {0}'.format(sec) in self.res:
-                detrend = True
 
             alpha = 0.1
             if self.exptimes[i] == 1800/60/60/24:
@@ -2300,7 +2315,7 @@ class ExoSystem:
 
             fig, ax = plt.subplot_mosaic(mos, figsize = (14,6*self.nt), sharex = True, layout = 'constrained')
 
-            mean = np.median(self.res['F0 {0}'.format(sec)])
+            mean = np.median(y['F0 {0}'.format(sec)])
 
             for j in range(self.n):
 
@@ -2309,12 +2324,8 @@ class ExoSystem:
 
                 k = np.sum(self.is_transit[:j])
 
-                p = np.median(self.dres['P {0}'.format(j+1)])
-
-                if self.fit_ttv[j]:
-                    tc = np.median(self.dres['Tc {0}'.format(j+1)])
-                else:
-                    tc = np.median(self.res['Tc {0}'.format(j+1)])
+                p = np.median(y['P {0}'.format(j+1)])
+                tc = np.median(y['Tc {0}'.format(j+1)])
 
                 newt = self.tt[i].copy()
 
@@ -2325,15 +2336,14 @@ class ExoSystem:
                         if self.ttvsectors['{0} {1}'.format(j+1, z+1)] != i:
                             continue
 
-                        ttime = np.median(self.res['TT {0} {1}'.format(j+1, z+1)])
+                        ttime = np.median(y['TT {0} {1}'.format(j+1, z+1)])
 
                         ind = np.where((self.tt[i] >= ttime - 0.5) & (self.tt[i] <= ttime + 0.5))
 
                         newt[ind] -= ttime - (tc + p * self.ttvi['{0}'.format(j+1)][z])
 
 
-
-                other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if detrend else 0)
+                other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                 xfold = (newt - tc + 0.5 * p) % p - 0.5 * p
                 ttphase = self._lcm[sec]['ttphase']
                 fmphase = self._lcm[sec]['fmphase'][k]
@@ -2404,7 +2414,26 @@ class ExoSystem:
 
         print('\nGenerating RV models for plots.')
 
-        n = len(self.res['log_like'])
+        y = self.res | self.dres
+
+        n = len(y['log_like'])
+
+        if self.use_priors:
+
+            f = self.fixed.copy()
+
+            for ff in f:
+
+                f[ff] = np.full((n), f[ff])
+
+            y = y | f
+
+            for i in range(self.n):
+
+                if 'secw {0}'.format(i+1) not in y:
+
+                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
+                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
 
         pars = []
         ps = []
@@ -2415,29 +2444,21 @@ class ExoSystem:
             if not self.is_rv[i]:
                 continue
 
-            if 'log(P) {0}'.format(i+1) not in self.res:
-
-                pars.append(get_rv_params(self.res, i+1, self.dres['P {0}'.format(i+1)], self.dres['Tc {0}'.format(i+1)]).T)
-                ps.append(np.median(self.dres['P {0}'.format(i+1)]))
-                tcs.append(np.median(self.dres['Tc {0}'.format(i+1)]))
-
-            else:
-
-                pars.append(get_rv_params(self.res, i+1).T)
-                ps.append(np.median(self.dres['P {0}'.format(i+1)]))
-                tcs.append(np.median(self.res['Tc {0}'.format(i+1)]))
+            pars.append(get_rv_params(y, i+1).T)
+            ps.append(np.median(y['P {0}'.format(i+1)]))
+            tcs.append(np.median(y['Tc {0}'.format(i+1)]))
         
 
         bkg_order = 0
 
-        trend0 = self.res['trend 0']
+        trend0 = y['trend 0']
 
-        if 'trend 1' in self.res:
-            trend1 = self.res['trend 1']
+        if 'trend 1' in y:
+            trend1 = y['trend 1']
             bkg_order = 1
 
-        if 'trend 2' in self.res:
-            trend2 = self.res['trend 2']
+        if 'trend 2' in y:
+            trend2 = y['trend 2']
             bkg_order = 2
 
         rvm = []
@@ -2467,7 +2488,6 @@ class ExoSystem:
         bkgplot = np.median(trend0) * np.full(trplot.shape, 1) + (np.median(trend1) * (trplot - self.tr_ref) if bkg_order > 0 else 0) + (np.median(trend2) * (trplot - self.tr_ref)**2 if bkg_order > 1 else 0)
 
         rvallplot += bkgplot
-
 
         rvallplot_err = []
         rvmphase_err = [[] for i in range(self.nr)]
@@ -2563,6 +2583,12 @@ class ExoSystem:
         rvmphase_err = self._rvm['rvmphase_err']
         trphase = self._rvm['trphase']
 
+        y = self.res | self.dres
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
         rv = self.rv.copy()
         for i, k in enumerate(np.unique(self.which_rv)):
 
@@ -2570,7 +2596,7 @@ class ExoSystem:
 
             if i > 1:
 
-                rv[j] -= np.median(self.res['offset {0}'.format(self.rvnames[k])])
+                rv[j] -= np.median(y['offset {0}'.format(self.rvnames[k])])
 
             ax['a'].errorbar(self.tr[j], rv[j], yerr = self.rverr[j], fmt = '.', color = ['black','red','darkorange','green','blue','darkorchid'][i], label = self.rvnames[k], zorder = 3, markersize = 10, elinewidth = 2)
 
@@ -2625,12 +2651,9 @@ class ExoSystem:
 
             j = np.sum(self.is_rv[:i])
 
-            p = np.median(self.dres['P {0}'.format(i+1)])
+            p = np.median(y['P {0}'.format(i+1)])
             
-            if 'Tc {0}'.format(i+1) in self.res:
-                tc = np.median(self.res['Tc {0}'.format(i+1)])
-            else:
-                tc = np.median(self.dres['Tc {0}'.format(i+1)])
+            tc = np.median(y['Tc {0}'.format(i+1)])
 
             other = np.sum(rvm, axis = 0) - rvm[j]
 
@@ -2748,6 +2771,12 @@ class ExoSystem:
 
         self.initialize_ttvs(name = self.init_ttvs_name)
 
+        y = self.res | self.dres
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
         fig, ax = plt.subplots(self.nttv, figsize = (14, 6*self.nttv), sharex = True, layout = 'constrained')
 
         if self.nttv == 1:
@@ -2760,14 +2789,14 @@ class ExoSystem:
 
             j = np.sum(self.fit_ttv[:i])
 
-            p = self.dres['P {0}'.format(i+1)]
-            tc = self.dres['Tc {0}'.format(i+1)]
+            p = y['P {0}'.format(i+1)]
+            tc = y['Tc {0}'.format(i+1)]
 
             ax[j].axhline(0, c = 'red')
 
             for k in range(len(self.ttvi['{0}'.format(i+1)])):
 
-                tt = self.res['TT {0} {1}'.format(i+1,k+1)]
+                tt = y['TT {0} {1}'.format(i+1,k+1)]
                 ttmed = np.median(tt)
 
                 diff = ((tt - (tc + p * self.ttvi['{0}'.format(i+1)][k]))*u.day).to(u.min).value
@@ -2843,13 +2872,19 @@ class ExoSystem:
         k = len(self.res)-1
         n = len(self.tr.ravel())
 
+        y = self.res.copy()
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
         rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
         for i in np.unique(self.which_rv)[1:]:
 
             j = np.where(self.which_rv == i)[0]
 
-            rvm[j] += np.median(self.res['offset {0}'.format(self.rvnames[i])])
+            rvm[j] += np.median(y['offset {0}'.format(self.rvnames[i])])
 
         L = np.sum(lnGauss(self.rv, rvm, self.rverr))
 
@@ -2868,11 +2903,17 @@ class ExoSystem:
         curves using a GP, as underestimated errors will cause the GP to try to detrend to each individual point.
         """
 
+        y = self.res.copy()
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
         for i in range(len(self.tt)):
 
             sec = self.lcnames[i]
 
-            fm = np.sum(self._lcm[sec]['fm'], axis = 0) + np.median(self.res['F0 {0}'.format(sec)])
+            fm = np.sum(self._lcm[sec]['fm'], axis = 0) + np.median(y['F0 {0}'.format(sec)])
 
             if 'gpf' in self._lcm[sec]:
                 fm += self._lcm[sec]['gpf']
@@ -2893,6 +2934,12 @@ class ExoSystem:
         This is an alternative to using a jitter term in other fitting packages.
         """
 
+        y = self.res.copy()
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
         rvm = np.sum(self._rvm['rvm'], axis = 0) + self._rvm['bkg']
 
         rv = self.rv.copy()
@@ -2902,7 +2949,7 @@ class ExoSystem:
 
             if i > 0:
 
-                rv[j] -= np.median(self.res['offset {0}'.format(self.rvnames[i])])
+                rv[j] -= np.median(y['offset {0}'.format(self.rvnames[i])])
 
             resstd = np.std(rv[j] - rvm[j])
 
@@ -3050,8 +3097,11 @@ def get_transit_params(par, i, ar = None):
     if ar is None:
         ar = np.exp(par['log(a/rs) {0}'.format(i)])
     inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
-    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(np.shape(par['log(P) {0}'.format(i)]))
-    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(np.shape(par['log(P) {0}'.format(i)]), 90)
+
+    shape = np.shape(par['log(P) {0}'.format(i)])
+
+    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
+    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(shape, 90)
 
     return np.array([p, tc, ror, ar, inc, e, w])
 
@@ -3062,8 +3112,8 @@ def get_ttv_params(par, i, ttvi, ar = None):
     if ar is None:
         ar = np.exp(par['log(a/rs) {0}'.format(i)])
     inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
-    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(np.shape(par['ror {0}'.format(i)]))
-    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(np.shape(par['ror {0}'.format(i)]), 90)
+    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else 0
+    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else 90
 
     tts = [par['TT {0} {1}'.format(i, j+1)] for j in range(len(ttvi))]
 
