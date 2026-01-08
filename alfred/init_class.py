@@ -622,13 +622,12 @@ class Init_priors(InitFile):
         self.header_rows = ['name']
 
         self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT',
-                             'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'trend', 'offset',
+                             'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
                              'eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar', 'age']
         
         self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT']
         self.lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         self.ld_vars = ['u1', 'u2']
-        self.rv_vars = ['trend', 'offset']
         
         self.var_descriptions = ['natural log of the planet period in days',
                                  'planet period in days',
@@ -653,8 +652,10 @@ class Init_priors(InitFile):
                                  'light curve gaussian process standard deviation',
                                  'quadratic limb darkening linear term',
                                  'quadratic limb darkening non-linear term',
-                                 'RV data background trend in m/s (flat term), m/s per day (linear term), or m/s per day^2 (quadratic term)',
-                                 'RV offset in m/s (only used for second data set and on when there are multiple RV data sets)',
+                                 'RV system velocity in m/s',
+                                 '1st derivative of RV system velocity in m/s per day',
+                                 '2nd derivative of RV system velocity in m/s per day^2',
+                                 'RV offset in m/s, for additional data sets beyond the first',
                                  'equivalent evolutionary phase, used in fitting the star with isochrones',
                                  'log10 of stellar age in yr. This is used directly in fitting',
                                  'stellar age in yr.',
@@ -752,19 +753,12 @@ class Init_priors(InitFile):
             var += ' '
             var += filt
 
-        elif var == 'offset':
+        elif var == 'rv_offset':
 
             rv = input('RV dataset nickname to apply this prior to. Enter x to apply this prior to all RV datasets.')
 
             var += ' '
             var += rv
-
-        elif var == 'trend':
-
-            trend = input('Trend term order to apply this prior to. 0 (flat component), 1 (linear component), or 2 (quadratic component).')
-
-            var += ' '
-            var += trend
 
         row.append(var)
 

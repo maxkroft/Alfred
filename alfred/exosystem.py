@@ -569,14 +569,14 @@ class ExoSystem:
 
         if self.fit_rv:
             
-            self.x0['trend 0'] = 0
+            self.x0['gamma'] = 0
             if self.rv_bkg_order > 0:
-                self.x0['trend 1'] = 0
+                self.x0['gamma_dot'] = 0
             if self.rv_bkg_order > 1:
-                self.x0['trend 2'] = 0
+                self.x0['gamma_ddot'] = 0
 
             for i in np.unique(self.which_rv)[1:]:
-                self.x0['offset {0}'.format(self.rvnames[i])] = 0
+                self.x0['rv_offset {0}'.format(self.rvnames[i])] = 0
 
         if self.use_priors:
 
@@ -866,18 +866,19 @@ class ExoSystem:
             if 'F0' in k:
                 pos.append(np.random.normal(x[k], 0.001, self.nwalk))
 
-            if 'trend' in k:
-                if '0' in k:
-                    pos.append(np.random.normal(x[k], 0.1, self.nwalk))
-                if '1' in k:
-                    pos.append(np.random.normal(x[k], 0.01, self.nwalk))
-                if '2' in k:
-                    pos.append(np.random.normal(x[k], 0.001, self.nwalk))
+            if k == 'gamma':
+                pos.append(np.random.normal(x[k], 0.1, self.nwalk))
+
+            if k == 'gamma_dot':
+                pos.append(np.random.normal(x[k], 0.01, self.nwalk))
+
+            if k == 'gamma_ddot':
+                pos.append(np.random.normal(x[k], 0.001, self.nwalk))
 
             if '_gp' in k:
                 pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01*np.exp(x[k]), self.nwalk)))
 
-            if 'offset' in k:
+            if 'rv_offset' in k:
                 pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
             if k in ['u1','u2']:
@@ -1303,7 +1304,10 @@ class ExoSystem:
             - F0 x:
             - log(rho_gp) x:
             - log(sigma_gp) x:
-            - trend x:
+            - gamma:
+            - gamma_dot:
+            - gamma_ddot:
+            - rv_offset x:
             - u1 x:
             - u2 x:
             - eep:
@@ -2456,14 +2460,14 @@ class ExoSystem:
 
         bkg_order = 0
 
-        trend0 = y['trend 0']
+        trend0 = y['gamma']
 
-        if 'trend 1' in y:
-            trend1 = y['trend 1']
+        if 'gamma_dot' in y:
+            trend1 = y['gamma_dot']
             bkg_order = 1
 
-        if 'trend 2' in y:
-            trend2 = y['trend 2']
+        if 'gamma_ddot' in y:
+            trend2 = y['gamma_ddot']
             bkg_order = 2
 
         rvm = []
@@ -2601,7 +2605,7 @@ class ExoSystem:
 
             if i > 1:
 
-                rv[j] -= np.median(y['offset {0}'.format(self.rvnames[k])])
+                rv[j] -= np.median(y['rv_offset {0}'.format(self.rvnames[k])])
 
             ax['a'].errorbar(self.tr[j], rv[j], yerr = self.rverr[j], fmt = '.', color = ['black','red','darkorange','green','blue','darkorchid'][i], label = self.rvnames[k], zorder = 3, markersize = 10, elinewidth = 2)
 
@@ -2889,7 +2893,7 @@ class ExoSystem:
 
             j = np.where(self.which_rv == i)[0]
 
-            rvm[j] += np.median(y['offset {0}'.format(self.rvnames[i])])
+            rvm[j] += np.median(y['rv_offset {0}'.format(self.rvnames[i])])
 
         L = np.sum(lnGauss(self.rv, rvm, self.rverr))
 
@@ -2954,7 +2958,7 @@ class ExoSystem:
 
             if i > 0:
 
-                rv[j] -= np.median(y['offset {0}'.format(self.rvnames[i])])
+                rv[j] -= np.median(y['rv_offset {0}'.format(self.rvnames[i])])
 
             resstd = np.std(rv[j] - rvm[j])
 
@@ -3117,8 +3121,11 @@ def get_ttv_params(par, i, ttvi, ar = None):
     if ar is None:
         ar = np.exp(par['log(a/rs) {0}'.format(i)])
     inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
-    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else 0
-    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else 90
+
+    shape = np.shape(par['log(P) {0}'.format(i)])
+
+    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
+    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(shape, 90)
 
     tts = [par['TT {0} {1}'.format(i, j+1)] for j in range(len(ttvi))]
 
@@ -3403,13 +3410,13 @@ def log_like(par_in: dict, exs: ExoSystem):
 
     if exs.fit_rv:
 
-        rvm = np.array([par['trend 0']]*len(exs.tr)) + (par['trend 1'] * (exs.tr - exs.tr_ref) if exs.rv_bkg_order > 0 else 0) + (par['trend 2'] * (exs.tr - exs.tr_ref)**2 if exs.rv_bkg_order > 1 else 0)
+        rvm = np.array([par['gamma']]*len(exs.tr)) + (par['gamma_dot'] * (exs.tr - exs.tr_ref) if exs.rv_bkg_order > 0 else 0) + (par['gamma_ddot'] * (exs.tr - exs.tr_ref)**2 if exs.rv_bkg_order > 1 else 0)
 
         for i in np.unique(exs.which_rv)[1:]:
 
             j = np.where(exs.which_rv == i)[0]
 
-            rvm[j] += par['offset {0}'.format(exs.rvnames[i])]
+            rvm[j] += par['rv_offset {0}'.format(exs.rvnames[i])]
 
         for i in range(exs.n):
 
