@@ -6,7 +6,7 @@ import mplcursors
 import emcee
 import corner
 import batman
-from scipy.stats import linregress
+from scipy.stats import linregress, truncnorm
 from celerite2 import GaussianProcess, terms
 from scipy.optimize import minimize
 from astropy.table import Table
@@ -828,82 +828,149 @@ class ExoSystem:
             self.parnames[k] = i
 
             if 'log(P)' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.0001, self.nwalk)))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/0.0001, (np.exp(ub)-np.exp(x[k]))/0.0001, loc = np.exp(x[k]), scale = 0.0001, size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.0001, self.nwalk)))
 
             if 'Tc' in k:
-                pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/0.0001, (ub-x[k])/0.0001, loc = x[k], scale = 0.0001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
 
             if 'TT' in k:
-                pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/0.0001, (ub-x[k])/0.0001, loc = x[k], scale = 0.0001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
 
             if 'ror' in k:
-                pos.append(np.random.normal(x[k], 0.1*x[k], self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/(0.1*x[k]), (ub-x[k])/(0.1*x[k]), loc = x[k], scale = 0.1*x[k], size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.1*x[k], self.nwalk))
 
             if 'log(a/rs)' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.1, self.nwalk)))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/0.1, (np.exp(ub)-np.exp(x[k]))/0.1, loc = np.exp(x[k]), scale = 0.1, size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.1, self.nwalk)))
 
             if 'cos(i)' in k:
-                pos.append(np.abs(np.random.normal(x[k], 0.001, self.nwalk)))
+                lb, ub = 0, 1
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
 
             if 'log(K)' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01, self.nwalk)))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/0.01, (np.exp(ub)-np.exp(x[k]))/0.01, loc = np.exp(x[k]), scale = 0.01, size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01, self.nwalk)))
 
             if 'secw' in k or 'sesw' in k:
-                z = np.random.normal(x[k], 0.01, self.nwalk)
-                j = np.where(np.abs(z) > 1)[0]
-                z[j] = 0.9 * z[j] / np.abs(z[j])
-                pos.append(z)
+                lb, ub = -1, 1
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
 
             if k.split()[0] == 'e':
-                z = np.abs(np.random.normal(x[k], 0.001, self.nwalk))
-                j = np.where(z > 0.9)[0]
-                z[j] = 0.85
-                pos.append(z)
+                lb, ub = 0, 0.9
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
 
             if k.split()[0] == 'w':
-                pos.append(np.random.normal(x[k], 1, self.nwalk))
+                lb, ub = -np.pi, np.pi
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-x[k])/1, (ub-x[k])/1, loc = x[k], scale = 1, size = self.nwalk))
 
             if 'F0' in k:
-                pos.append(np.random.normal(x[k], 0.001, self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.001, self.nwalk))
 
             if k == 'gamma':
-                pos.append(np.random.normal(x[k], 0.1, self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/0.1, (ub-x[k])/0.1, loc = x[k], scale = 0.1, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
             if k == 'gamma_dot':
-                pos.append(np.random.normal(x[k], 0.01, self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.01, self.nwalk))
 
             if k == 'gamma_ddot':
-                pos.append(np.random.normal(x[k], 0.001, self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.001, self.nwalk))
 
             if '_gp' in k:
-                pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01*np.exp(x[k]), self.nwalk)))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/(0.01*np.exp(x[k])), (np.exp(ub)-np.exp(x[k]))/(0.01*np.exp(x[k])), loc = np.exp(x[k]), scale = 0.01*np.exp(x[k]), size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01*np.exp(x[k]), self.nwalk)))
 
             if 'rv_offset' in k:
-                pos.append(np.random.normal(x[k], 0.1, self.nwalk))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-x[k])/0.1, (ub-x[k])/0.1, loc = x[k], scale = 0.1, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
             if k in ['u1','u2']:
-                z = np.abs(np.random.normal(x[k], 0.01, self.nwalk))
-                j = np.where(z > 1)[0]
-                z[j] = 0.9 * z[j]
-                pos.append(z)
+                lb, ub = 0, 1
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
 
             if k == 'eep':
-                pos.append(np.random.normal(x[k], 1, self.nwalk))
+                pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
             if k == 'log10(age)':
-                pos.append(np.log10(np.random.normal(10**x[k], 10**x[k]/100, self.nwalk)))
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log10(truncnorm.rvs((10**lb-10**x[k])/(10**x[k]/100), (10**ub-10**x[k])/(10**x[k]/100), loc = 10**x[k], scale = 10**x[k]/100, size = self.nwalk)))
+                else:
+                    pos.append(np.log10(np.random.normal(10**x[k], 10**x[k]/100, self.nwalk)))
 
             if k == 'feh':
-                z = np.random.normal(x[k], 0.01, self.nwalk)
-                j = np.where(np.abs(z) > 0.5)[0]
-                z[j] = 0.45 * np.sign(z[j])
-                pos.append(z)
+                lb, ub = -0.5, 0.5
+                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
 
             if k == 'distance':
                 pos.append(np.random.normal(x[k], 1, self.nwalk))
 
             if k == 'AV':
-                pos.append(np.abs(np.random.normal(x[k], 0.01, self.nwalk)))
+                lb, ub = 0, np.inf
+                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
 
 
         pos = np.transpose(np.array(pos))

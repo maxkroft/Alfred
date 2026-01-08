@@ -9,6 +9,8 @@ class Priors:
     def __init__(self):
 
         self.prior_funcs = []
+        self.lbound = -np.inf
+        self.ubound = np.inf
 
 
     def add_gaussian_prior(self, mean, std):
@@ -21,6 +23,9 @@ class Priors:
 
     
     def add_uniform_prior(self, lower, upper):
+
+        self.lbound = max(self.lbound, lower)
+        self.ubound = min(self.ubound, upper)
 
         def uniform_prior(x):
 
@@ -42,6 +47,11 @@ class Priors:
             loglike += np.sum(prior(x))
 
         return loglike
+    
+
+    def bounds(self):
+
+        return self.lbound, self.ubound
     
 
 class AllPriors:
@@ -232,6 +242,110 @@ class AllPriors:
                 log_like += self.prior_dict[var].apply_priors(x)
 
         return log_like
+    
+
+    def get_bounds(self, var: str):
+
+        logvars = {'log(P)':'P', 'log(a/rs)':'a/rs', 'log(K)':'K', 'log(rho_gp)':'rho_gp', 'log(sigma_gp)':'sigma_gp'}
+
+        lbound, ubound = -np.inf, np.inf
+
+        if var in self.prior_dict:
+                
+                l, u = self.prior_dict[var].bounds()
+                lbound = max(lbound, l)
+                ubound = min(ubound, u)
+
+        if var == 'log10(age)' and 'age' in self.prior_dict:
+
+            l, u = self.prior_dict['age'].bounds()
+            lbound = max(lbound, np.log10(l))
+            ubound = min(ubound, np.log10(u))
+
+        elif var[:4] == 'log(':
+
+            svar = ' '.join([logvars[var.split()[0]]]+var.split()[1:])
+
+            if svar in self.prior_dict:
+
+                l, u = self.prior_dict[svar].bounds()
+                lbound = max(lbound, np.log(l))
+                ubound = min(ubound, np.log(u))
+
+            if var.split()[0] == 'log(a/rs)':
+
+                svar = ' '.join(['rhos']+var.split()[1:])
+
+                if svar in self.prior_dict:
+
+                    lr, ur = self.get_bounds(svar)
+                    lr = max(lr, 0)
+
+                    svar = ' '.join(['log(P)']+var.split()[1:])
+
+                    lp, up = self.get_bounds(svar)
+                    lp = np.exp(lp)
+                    up = np.exp(up)
+
+                    lbound = max(lbound, 52.86425121092176*lr**(1/3)*lp**(2/3))
+                    ubound = min(ubound, 52.86425121092176*ur**(1/3)*up**(2/3))
+
+        elif var[:6] == 'cos(i)':
+
+            svar = ' '.join(['cos(i)']+var.split()[1:])
+
+            if svar in self.prior_dict:
+
+                l, u = self.prior_dict[svar].bounds()
+                l = max(l, 0)
+                u = min(u, np.pi/2)
+                lbound = max(lbound, np.cos(u))
+                ubound = min(ubound, np.cos(l))
+
+        elif var[:4] == 'secw' or var[:4] == 'sesw':
+
+            el, eu = 0, 0.9
+            wl, wu = -np.pi, np.pi
+            
+            svar = ' '.join(['e']+var.split()[1:])
+            if svar in self.prior_dict:
+                el2, eu2 = self.prior_dict[svar].bounds()
+                el = max(el, el2)
+                eu = min(eu, eu2)
+            
+            svar = ' '.join(['w']+var.split()[1:])
+            if svar in self.prior_dict:
+                wl2, wu2 = self.prior_dict[svar].bounds()
+                wl = max(wl, wl2)
+                wu = min(wu, wu2)
+
+            if var[:4] == 'secw':
+
+                blist = [np.sqrt(el)*np.cos(wl), np.sqrt(el)*np.cos(wu), np.sqrt(eu)*np.cos(wl), np.sqrt(eu)*np.cos(wu)]
+
+                if wl < 0 < wu:
+                    blist.append(np.sqrt(eu))
+                    blist.append(np.sqrt(el))
+
+                lbound = max(lbound, min(blist))
+                ubound = min(ubound, max(blist))
+
+            else:
+
+                blist = [np.sqrt(el)*np.sin(wl), np.sqrt(el)*np.sin(wu), np.sqrt(eu)*np.sin(wl), np.sqrt(eu)*np.sin(eu)]
+
+                if wl < -np.pi/2 < wu:
+                    blist.append(-np.sqrt(eu))
+                    blist.append(-np.sqrt(el))
+
+                if wl < np.pi/2 < wu:
+                    blist.append(np.sqrt(eu))
+                    blist.append(np.sqrt(el))
+
+                lbound = max(lbound, min(blist))
+                ubound = min(ubound, max(blist))
+
+        return lbound, ubound
     
 
 
