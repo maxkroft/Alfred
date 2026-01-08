@@ -1217,7 +1217,7 @@ class ExoSystem:
                     else:
 
                         mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
-                        self.dres['Mp sini {0}'.format(i+1)] = mp
+                        self.dres['Mpsini {0}'.format(i+1)] = mp
 
                 if self.fit_star or (self.is_rv[i] and self.fit_rv):
 
@@ -1269,15 +1269,24 @@ class ExoSystem:
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
 
+        par_units = {'log(P)': 'days', 'Tc': 'BJD-2457000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'secw': '', 'sesw': '',
+                     'TT': 'BJD-2457000', 'F0': '', 'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day',
+                     'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex', 'distance': 'pc',
+                     'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2',
+                     'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'deg',
+                     'K': 'm/s', 'Mp': 'Mearth', 'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'dur': 'hr',
+                     'rhos': 'g/cm^3', 'TSM': ''}
+
+
         out = []
         for x in self.res:
             if x == 'log_like':
                 continue
-            out.append([x, np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
+            out.append([x, par_units[x], np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
         for x in self.dres:
-            out.append([x, np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
+            out.append([x, par_units[x], np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
 
-        tab = Table(rows = out, names = ['Parameter','Median','-Error','+Error'])
+        tab = Table(rows = out, names = ['Parameter','Units','Median','-Error','+Error'])
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
         run_settings = {'fit_transit': self.fit_transit, 'fit_rv': self.fit_rv, 'fit_star': self.fit_star, 'fit_ld': self.fit_ld, 'use_priors': self.use_priors}
@@ -1295,7 +1304,7 @@ class ExoSystem:
             - log(P) x:
             - Tc x:
             - ror x:
-            - log(a/Rs) x:
+            - log(a/rs) x:
             - cos(i) x:
             - log(K) x:
             - secw x:
@@ -1489,6 +1498,9 @@ class ExoSystem:
 
         if os.path.exists(self.direc+'Output/'+name+'_magfit.p'):
             os.remove(self.direc+'Output/'+name+'_magfit.p')
+
+        if os.path.exists(self.direc+'Output/'+name+'_run_settings.p'):
+            os.remove(self.direc+'Output/'+name+'_run_settings.p')
 
         if os.path.exists(self.direc+'Results/'+name+'.txt'):
             os.remove(self.direc+'Results/'+name+'.txt')
