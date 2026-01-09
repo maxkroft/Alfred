@@ -316,14 +316,14 @@ class ExoSystem:
         points in a round is less than 10. Clipped points are masked out, and masks are saved in the Masks folder. During each round, masked
         points are shown in a plot before continuing. MCMC is performed with a joint likelihood function on all of the specified data.
         
-        When fitting stellar parameters only, runs ExoSystem.fit_star_only instead. See documentation on that function for more details.
-        When fitting stellar parameters simultaneously with planet parameters, runs a star-only fit first using the isochrones multinest fit
-        function, or an emcee wrapper on isochrones if multinest isn't installed, to get physical starting values for the stellar parameters.
+        When fitting stellar parameters simultaneously with planet parameters, runs a star-only fit first to get physical starting values
+        for the stellar parameters.
         
         Flattened and thinned MCMC chains are stored to pickle files ending in _res.p in the Output folder, as well as chains of derived parameters
         in a pickle file ending in _dres.p. A human readable table of median derived parameters, as well as their upper and lower
         uncertainties, is saved to the Results folder and printed at the end. Plots of the MCMC chains and corner plots are generated and
-        saved to a folder in the Plots folder, along with plots of the best fit models to the data.
+        saved to a folder in the Plots folder, along with plots of the best fit models to the data. Some run settings (e.g. fit_transit) are saved in
+        a pickle file ending in _run_settings.p.
 
         Args:
             name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
@@ -979,15 +979,13 @@ class ExoSystem:
         sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
 
         print('\nRunning MCMC burn-in.')
-        #burn in
+
         state = sampler.run_mcmc(pos, self.nburn, progress = True)
         sampler.reset()
 
         print('\nRunning MCMC sampling.')
-        #run
-        sampler.run_mcmc(state, self.nrun, progress = True)
 
-        # print(sampler.get_autocorr_time(quiet = True))
+        sampler.run_mcmc(state, self.nrun, progress = True)
 
         self.samples = sampler.get_chain()
 
@@ -1362,41 +1360,67 @@ class ExoSystem:
 
         pickle.dump(run_settings, open(self.direc+'Output/'+name+'_run_settings.p', 'wb'))
 
-
     @property
     def results(self):
         """Dict which stores the flattened chains of fit parameters. Keys are the parameter names.
 
         Potential fit parameters:
-            - log(P) x:
-            - Tc x:
-            - ror x:
-            - log(a/rs) x:
-            - cos(i) x:
-            - log(K) x:
-            - secw x:
-            - sesw x:
-            - TT x y:
-            - F0 x:
-            - log(rho_gp) x:
-            - log(sigma_gp) x:
-            - gamma:
-            - gamma_dot:
-            - gamma_ddot:
-            - rv_offset x:
-            - u1 x:
-            - u2 x:
-            - eep:
-            - log10(age):
-            - feh:
-            - distance:
-            - AV:
+            - log(P) x: Natural log of the orbital period, in days, for planet number x.
+            - Tc x: Time of conjunction, in BJD-2457000, for planet number x.
+            - ror x: Planet to star radius ratio, for planet number x.
+            - log(a/rs) x: Natural log of the orbital semi-major axis to stellar radius ratio, for planet number x.
+            - cos(i) x: Cosine of the orbital inclination, restricted between 0 and 90 degrees, for planet number x.
+            - log(K) x: Natural log of the RV semi-amplitude, in m/s, for planet number x.
+            - secw x: Square root of the eccentricity times the cosine of the argument of periastron, for planet number x.
+            - sesw x: Square root of the eccentricity times the sine of the argument of periastron, for planet number x.
+            - TT x y: Transit time (when fitting for TTVs), in BJD-2457000, for planet number x transit number y.
+            - F0 x: Baseline flux value, for transit data set x.
+            - log(rho_gp) x: Natural log of the GP period, in days, for transit data set x.
+            - log(sigma_gp) x: Natural log of the GP standard deviation, for transit data set x.
+            - gamma: RV systemic velocity, in m/s.
+            - gamma_dot: 1st derivative of the RV systemic velocity, in m/s/day.
+            - gamma_ddot: 2nd derivative of the RV systemic velocity, in m/s/day^2.
+            - rv_offset x: RV offset relative to first data set, in m/s, for RV data set x.
+            - u1 x: Linear coefficient for quadratic limb darkening, for filter x.
+            - u2 x: Non-linear coefficient for quadratic limb darkening, for filter x.
+            - eep: Equivalent evolutionary phase, used to interpolate across MIST models for stellar fitting.
+            - log10(age): Log base 10 of the stellar age, in yr.
+            - feh: Stellar metallicity, in dex.
+            - distance: Distance to the system, in pc.
+            - AV: Visual band extinction to the system, in mags.
         """
         return self.res
     
     @property
     def derived_results(self):
-        """Dict which stores flat chains of derived parameters. Keys are the parameter names, e.g. Teq 1, Mp 2, etc.
+        """Dict which stores flat chains of derived parameters. Keys are the parameter names.
+
+        Potential derived parameters:
+            - P x: Orbital period, in days, for planet number x.
+            - Rp x: Planetary radius, in earth radii, for planet number x.
+            - a/rs x: Orbital semi-major axis to stellar radius ratio, for planet number x.
+            - a x: Orbital semi-major axis, in AU, for planet number x.
+            - i x: Orbital inclination, in degrees, for planet number x (restricted between 0 and 90 degrees).
+            - e x: Orbital eccentricity, for planet number x.
+            - w x: Orbital argument of periastron, in degrees, for planet number x.
+            - K x: RV semi-amplitude, in m/s, for planet number x.
+            - Mp x: Planetary mass, in earth masses, for planet number x.
+            - Mpsini x: Planetary mass times the sine of the orbital inclination, in earth masses, for planet number x (used when transit wasn't fit).
+            - rhop x: Planetary mean density, in g/cm^3, for planet number x.
+            - teq x: Planetary equilibrium temperature (zero-albedo blackbody), in K, for planet number x.
+            - sinc x: Insolation flux reaching the planet, in units of Earth insolation flux, for planet number x.
+            - b x: Transit impact parameter, for planet number x.
+            - dur x: Transit duration, in hours, for planet number x.
+            - rhos x: Implied stellar density from transit of planet number x, in g/cm^3.
+            - TSM x: Transmission spectroscopy metric, for planet number x.
+            - rstar: Stellar radius, in solar radii.
+            - mstar: Stellar mass, in solar masses.
+            - mstar_init: Initial stellar mass at the zero-age main sequence point, in solar masses.
+            - rhostar: Mean stellar density from stellar fitting, in g/cm^3.
+            - Tstar: Stellar effective temperature, in K.
+            - loggstar: Natural log of the stellar surface gravity, in cm/s^2.
+            - Lstar: Stellar bolometric luminosity, in solar luminosities.
+            - Mbolstar: Stellar bolometric magnitude, in mags.
         """
         return self.dres
 
@@ -1578,6 +1602,12 @@ class ExoSystem:
 
     def initialize_ttvs(self, name: str):
         """Loads in an Init_ttvs file if it exists, otherwise prompts the user to create one. Then, sets up initial variables for fitting ttvs.
+        These are:
+        - self.ttvs0: A dict with keys being planet numbers, and the values being a sorted array of all observed transit times.
+        - self.ttvsectors: A dict with keys being the planet number followed by the transit number (1-indexed), and the values being the index of the
+            transit data set which the transit occurs in.
+        - self.ttvi: A dict with keys being planet numbers, and the values being an array of integers representing the number of periods occurring
+            between the first observed transit and each transit being fit.
 
         Args:
             name (str): Name of the Init_ttvs file.
@@ -1606,6 +1636,7 @@ class ExoSystem:
                     break
 
                 del_ind = []
+                sectors = []
 
                 for z in range(len(self.ttvs0[i+1])):
 
@@ -1615,7 +1646,7 @@ class ExoSystem:
 
                         if np.min(self.tt[l]) <= self.ttvs0[i+1][z] <= np.max(self.tt[l]):
 
-                            self.ttvsectors['{0} {1}'.format(i+1, z+1)] = l
+                            sectors.append(l)
                             found = True
                             break
 
@@ -1624,6 +1655,9 @@ class ExoSystem:
                         del_ind.append(z)
 
                 self.ttvs0[i+1] = np.delete(self.ttvs0[i+1], del_ind)
+                
+                for z in range(len(sectors)):
+                    self.ttvsectors['{0} {1}'.format(i+1, z+1)] = sectors[z]
 
                 ttvi0 = np.round((np.array(self.ttvs0[i+1]) - self.ttvs0[i+1][0]) / self.p[i], 0).astype(int)
                 self.ttvi['{0}'.format(i+1)] = ttvi0
@@ -2974,7 +3008,7 @@ class ExoSystem:
 
             rvm[j] += np.median(y['rv_offset {0}'.format(self.rvnames[i])])
 
-        L = np.sum(lnGauss(self.rv, rvm, self.rverr))
+        L = np.sum(lnNorm(self.rv, rvm, self.rverr))
 
         BIC = k * np.log(n) - 2 * L
 
@@ -3086,7 +3120,7 @@ class ExoSystem:
                 best fit model (True). If True, uses whatever model is currently in ExoSystem.rv_mod. Default is True.
 
         Returns:
-            The frequency grid, the periodogram power at each frequency, and the Lomb-Scargle object as a tuple. Allows you to calculate the maxmimum power
+            ArrayLike: The frequency grid, the periodogram power at each frequency, and the Lomb-Scargle object as a tuple. Allows you to calculate the maxmimum power
             frequency, or make other plots.
         """
 
@@ -3129,7 +3163,20 @@ class ExoSystem:
 
 
 
-def calc_m_from_k(p, k, e, inc, mstar):
+def calc_m_from_k(p: np.typing.ArrayLike, k: np.typing.ArrayLike, e: np.typing.ArrayLike, inc: np.typing.ArrayLike, mstar: np.typing.ArrayLike) -> np.typing.ArrayLike:
+        """Calculates the planet mass from the orbital period, RV semi-amplitude, eccentricity, inclination, and stellar mass. Does not make the
+        assumption that the planet mass is much smaller than the stellar mass, so it is still valid even in brown dwarf-M dwarf scenarios.
+
+        Args:
+            p (ArrayLike): Orbital period in years.
+            k (ArrayLike): RV semi-amplitude in m/s.
+            e (ArrayLike): Orbital eccentricity.
+            inc (ArrayLike): Orbital inclination in radians.
+            mstar (ArrayLike): Stellar mass in solar masses.
+
+        Returns:
+            ArrayLike: The planet mass in Earth masses.
+        """
 
         sini = np.sin(inc)
         
@@ -3141,10 +3188,28 @@ def calc_m_from_k(p, k, e, inc, mstar):
         return m
 
 
-def lightCurve(par, t, ld, expt, ss):
-        
-        #par = [p, tc, ror, a/rs, i, e, w]
-                
+def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: float, ss: int) -> np.typing.ArrayLike:
+        """Generates a model transit light curve using batman.
+
+        Args:
+            par (ndarray): Array of transit parameters. Parameters must be specifically in this order.
+                - Orbital period in same units as t.
+                - Time of conjunction in same units as t.
+                - Planet to star radius ratio.
+                - Orbital semi-major axis to stellar radius ratio.
+                - Orbital inclination in degrees.
+                - Orbital eccentricity. Should not be over 0.9 or batman has issues.
+                - Argument of periastron in degrees.
+
+            t (ArrayLike): Times at which to calculate the transit model.
+            ld (list): A list only containing the linear and non-linear quadratic limb darkening coefficients, in that order.
+            expt (float): The exposure time of each point. Used for supersampling.
+            ss (int): Number of supersamples per exposure. For each point, this many points are generated across the whole exposure time, then averaged.
+
+        Returns:
+            ArrayLike: The model transit light curve at each of the input times, with a baseline of 0 flux.
+        """
+                        
         params = batman.TransitParams()
         
         params.per = par[0]
@@ -3165,9 +3230,22 @@ def lightCurve(par, t, ld, expt, ss):
         return flux-1
 
 
-def rvModel(par, t):
+def rvModel(par: np.typing.NDArray, t: np.typing.ArrayLike) -> np.typing.ArrayLike:
+    """Generates model RVs using _rvModel. This is compiled with cython to run faster for large amounts of data.
 
-    #par = [p, tc, k, e, w]
+        Args:
+            par (Array): Array of RV parameters. Parameters must be specifically in this order.
+                - Orbital period in same units as t.
+                - Time of conjunction in same units as t.
+                - RV semi-amplitude. Returns model RV points in same units as this.
+                - Orbital eccentricity. Should not be over 0.9 or batman has issues.
+                - Argument of periastron in radians.
+
+            t (ArrayLike): Times at which to calculate the RV model.
+
+        Returns:
+            ArrayLike: The model RVs at each of the input times, centered at 0.
+    """
 
     par = np.array(par, dtype = float)
     t = np.array(t, dtype = float)
@@ -3177,7 +3255,18 @@ def rvModel(par, t):
     return rv
 
 
-def get_transit_params(par, i, ar = None):
+def get_transit_params(par: dict, i: int, ar: np.typing.ArrayLike = None) -> np.typing.NDArray:
+    """Generates the specific list of transit parameters needed for the lightCurve function from the parameter dict used in fitting.
+
+    Args:
+        par (dict): Dictionary of fit parameters.
+        i (int): Planet number.
+        ar (ArrayLike, optional): Direct input for the semi-major axis to stellar radius ratio if it is not being fit for (during stellar fitting).
+            Default is None, in which case the value is pulled from par.
+    
+    Returns:
+        ndarray: Array of transit parameters that can be input directly into lightCurve.
+    """
 
     p = np.exp(par['log(P) {0}'.format(i)])
     tc = par['Tc {0}'.format(i)]
@@ -3194,7 +3283,21 @@ def get_transit_params(par, i, ar = None):
     return np.array([p, tc, ror, ar, inc, e, w])
 
 
-def get_ttv_params(par, i, ttvi, ar = None):
+def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], ar: np.typing.ArrayLike = None) -> np.typing.NDArray:
+    """Generates the specific list of transit parameters needed for the lightCurve function from the parameter dict used in fitting, in the case
+    when the planet is being fit for TTVs. Calculates the period and time of conjunction using linear regression on the transit times.
+
+    Args:
+        par (dict): Dictionary of fit parameters.
+        i (int): Planet number.
+        ttvi (ndarray): Array of integers representing the number of periods that have occurred between the first observed transit and each
+            observed transit that is being fit.
+        ar (ArrayLike, optional): Direct input for the semi-major axis to stellar radius ratio if it is not being fit for (during stellar fitting).
+            Default is None, in which case the value is pulled from par.
+        
+    Returns:
+        ndarray: Array of transit parameters that can be input directly into lightCurve.
+    """
 
     ror = par['ror {0}'.format(i)]
     if ar is None:
@@ -3215,7 +3318,20 @@ def get_ttv_params(par, i, ttvi, ar = None):
     return np.array([p, tc, ror, ar, inc, e, w])
 
 
-def get_rv_params(par, i, p = None, tc = None):
+def get_rv_params(par: dict, i: int, p: np.typing.ArrayLike = None, tc: np.typing.ArrayLike = None) -> np.typing.NDArray:
+    """Generates the specific list of RV parameters needed for the rvModel function from the parameter dict used in fitting.
+
+    Args:
+        par (dict): Dictionary of fit parameters.
+        i (int): Planet number.
+        p (ArrayLike, optional): Direct input for the orbital period if it is not being fit for (if the planet is being fit for ttvs).
+            Default is None, in which case the value is pulled from par.
+        tc (ArrayLike, optional): Direct input for the time of conjunction if it is not being fit for (if the planet is being fit for ttvs).
+            Default is None, in which case the value is pulled from par.
+    
+    Returns:
+        ndarray: Array of RV parameters that can be input directly into rvModel.
+    """
 
     if p is None:
         p = np.exp(par['log(P) {0}'.format(i)])
@@ -3231,7 +3347,19 @@ def get_rv_params(par, i, p = None, tc = None):
     return np.array([p, tc, k, e, w])
 
 
-def set_gp_params(rho, sigma, t, ferr, gp: GaussianProcess):
+def set_gp_params(rho: float, sigma: float, t: np.typing.ArrayLike, ferr: np.typing.ArrayLike, gp: GaussianProcess) -> GaussianProcess:
+    """Updates a GP object with new parameters, then computes the factorization of the covariance matrix on the data.
+
+    Args:
+        rho (float): The period of the GP in days.
+        sigma (float): The standard deviation of the GP.
+        t (ArrayLike): The times of the data points.
+        ferr (ArrayLike): The flux uncertainties of the data points.
+        gp (GaussianProcess): The GP to update and then return.
+
+    Returns:
+        GaussianProcess: Returns the input GP, with updated parameters and a recomputed factorization.
+    """
 
     gp.kernel = terms.SHOTerm(rho = rho, sigma = sigma, Q = 1/np.sqrt(2))
     gp.compute(t, yerr = ferr)
@@ -3239,12 +3367,38 @@ def set_gp_params(rho, sigma, t, ferr, gp: GaussianProcess):
     return gp
 
 
-def lnGauss(data, model, err):
+def lnNorm(data: np.typing.ArrayLike, model: np.typing.ArrayLike, err: np.typing.ArrayLike) -> np.typing.ArrayLike:
+    """Computes the natural log of a normal distribution pdf. Used for the log likelihood.
+
+    Args:
+        data (ArrayLike): The observed values.
+        model (ArrayLike): The predicted values.
+        err (ArrayLike): The uncertainties in the observed values.
+
+    Returns:
+        ArrayLike: The log probability of each input point.
+    """
     
     return - 0.5 * ( (model - data) / err)**2 - np.log( np.sqrt(2 * np.pi) * err)
 
 
-def log_like(par_in: dict, exs: ExoSystem):
+def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, np.typing.ArrayLike]:
+    """The log likelihood function for fitting.
+
+    Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood and for stellar
+    fitting using the isochrones MIST star model. Generates transit and RV models, then calculates log likelihood relative to data using lnNorm.
+
+    Args:
+        par_in (dict): Dictionary of fit parameters.
+        exs (ExoSystem): The exosystem object currently being used to fit. Stores all of the options, data sets, etc.
+
+    Returns:
+        tuple: A tuple of the log likelihood, an array of periods of any planets that are fit for ttvs, and an array of conjunction times of any planets
+            that are fit for ttvs. The former is the primary return for running MCMC with emcee. The latter two are saved as "blobs" in the emcee
+            sampler object, and are used to track the period and time of conjunction at each step rather than recalculating the linear regression
+            after the fact, since these are not directly fit parameters. If any parameter is out of bounds or any portion of the log likelihood is nan,
+            returns negative infinity and empty lists.
+    """
 
     if exs.use_priors:
 
@@ -3265,7 +3419,6 @@ def log_like(par_in: dict, exs: ExoSystem):
 
         par = par_in.copy()
 
-    #check params
     if exs.fit_planets:
 
         if exs.order_a and exs.fit_transit:
@@ -3275,11 +3428,9 @@ def log_like(par_in: dict, exs: ExoSystem):
         
             if exs.is_transit[i] and exs.fit_transit:
 
-                #check cosi
                 if not 0 <= par['cos(i) {0}'.format(i+1)] <= 1:
                     return -np.inf, [], []
                 
-                #check ror
                 if not 0 <= par['ror {0}'.format(i+1)] <= 1:
                     return -np.inf, [], []
                 
@@ -3289,19 +3440,16 @@ def log_like(par_in: dict, exs: ExoSystem):
                 
             if exs.fit_ecc[i]:
 
-                #check e
                 if par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2 > 0.9:
                     return -np.inf, [], []
                 
 
-        #check a order
         if exs.fit_transit and exs.order_a:
             logadiff = np.diff(np.array(logalist)[exs.transitsortorder])
             if np.any(logadiff <= 0):
                 return -np.inf, [], []
 
 
-        #check ld
         if exs.fit_transit and exs.fit_ld:
             if not 0 <= par['u1'] <= 1 or not 0 <= par['u2'] <= 1:
                 return -np.inf, [], []
@@ -3312,11 +3460,9 @@ def log_like(par_in: dict, exs: ExoSystem):
 
     if exs.fit_star:
 
-        #check feh
         if not -0.5 <= par['feh'] <= 0.5:
             return -np.inf, [], []
         
-        #check AV
         if par['AV'] < 0:
             return -np.inf, [], []
 
@@ -3485,7 +3631,7 @@ def log_like(par_in: dict, exs: ExoSystem):
 
             else:
 
-                like += np.sum(lnGauss(exs.f[i], fm, exs.ferr[i]))
+                like += np.sum(lnNorm(exs.f[i], fm, exs.ferr[i]))
 
     if exs.fit_rv:
 
@@ -3507,14 +3653,23 @@ def log_like(par_in: dict, exs: ExoSystem):
             rvm += rvModel(rpars[j], exs.tr)
 
 
-        like += np.sum(lnGauss(exs.rv, rvm, exs.rverr))
+        like += np.sum(lnNorm(exs.rv, rvm, exs.rverr))
 
 
 
     return like if not np.isnan(like) else -np.inf, np.array(ps), np.array(tcs)
 
 
-def log_like_staronly(par_in: dict, exs: ExoSystem):
+def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
+    """The log likelihood function for fitting stellar parameters only. Used for the initial parameter estimation before a main fit.
+
+    Args:
+        par_in (dict): Dictionary of fit parameters.
+        exs (ExoSystem): The exosystem object currently being used to fit. Stores all of the options, data sets, etc.
+
+    Returns:
+        float: The log likelihood. Returns negative infinity if any parameter is out of bounds or any of the log likelihood functions return nan.
+    """
 
     if exs.use_priors:
 
@@ -3524,11 +3679,9 @@ def log_like_staronly(par_in: dict, exs: ExoSystem):
 
         par = par_in.copy()
 
-    #check feh
     if not -0.5 <= par['feh'] <= 0.5:
         return -np.inf
     
-    #check AV
     if par['AV'] < 0:
         return -np.inf
 
