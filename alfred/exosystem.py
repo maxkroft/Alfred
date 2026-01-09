@@ -1349,9 +1349,9 @@ class ExoSystem:
         for x in self.res:
             if x == 'log_like':
                 continue
-            out.append([x, par_units[x], np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
+            out.append([x, par_units[x.split()[0]], np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
         for x in self.dres:
-            out.append([x, par_units[x], np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
+            out.append([x, par_units[x.split()[0]], np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
 
         tab = Table(rows = out, names = ['Parameter','Units','Median','-Error','+Error'])
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
