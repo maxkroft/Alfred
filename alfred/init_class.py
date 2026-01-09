@@ -9,8 +9,16 @@ from alfred.ld_grids import calc_ld, ld_grid_list
 
 
 class InitFile:
+    """Super class for the other init file classes.
+    """
 
-    def __init__(self, direc, name):
+    def __init__(self, direc: str, name: str):
+        """Initializes an InitFile object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str): The name of the init file. If it does not end in .txt, this is appended to the name.
+        """
 
         self.direc = direc
 
@@ -19,6 +27,8 @@ class InitFile:
         self.name = name
     
     def from_file(self):
+        """Loads an an InitFile table from a previously created file. This is stored in self.table.
+        """
 
         self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
                                 header_rows = self.header_rows, converters = {'*': [int, float, bool, str]})
@@ -34,6 +44,16 @@ class InitFile:
         if len(newname) < 4 or newname[-4:] != '.txt':
             newname += '.txt'
         self.name = newname
+
+    @property
+    def table(self):
+        """The table storing the init file information.
+        """
+        return self._table
+    
+    @table.setter
+    def table(self, tab: Table):
+        self._table = tab
 
 
 
