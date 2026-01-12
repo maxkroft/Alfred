@@ -4,6 +4,7 @@ import shutil
 import os
 from astroquery.vizier import Vizier
 from astropy import units as u
+from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
 
@@ -26,8 +27,11 @@ class InitFile:
             name += '.txt'
         self.name = name
     
-    def from_file(self):
-        """Loads an an InitFile table from a previously created file. This is stored in self.table.
+    def from_file(self) -> Self:
+        """Loads an an InitFile table from a previously created file. This is stored in .table.
+
+        Returns:
+            InitFile: The whole InitFile object is returned by this function.
         """
 
         self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
@@ -35,11 +39,18 @@ class InitFile:
         return self
 
     def save(self):
+        """Saves the current table out to the directory and name of this object. Will overwrite an existing file of the same name.
+        """
 
         self.table.write(self.direc +'/' + self.name, format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|',
                          delimiter_pad = ' ', bookend = True, header_rows = self.header_rows)
         
-    def rename(self, newname):
+    def rename(self, newname: str):
+        """Renames this object to the new name. Appends .txt if it is not there.
+
+        Args:
+            newname (str): The new name for this object and its file.
+        """
 
         if len(newname) < 4 or newname[-4:] != '.txt':
             newname += '.txt'
@@ -58,15 +69,36 @@ class InitFile:
 
 
 class Init_lcs(InitFile):
+    """Class for creating, loading, and editing light curve initialization files. Inherits from InitFile. Contains information for loading light curve
+    data, as well as information about each data set such as the filter or exposure time. Currently supports data in .fits, .npz, .dat, and .txt files,
+    with the latter two assumed to be ascii tables with a header row. Each data set is given a nickname by the user for differentiating them during
+    and after fitting.
+    """
 
-    def __init__(self, direc, name = 'init_lcs.txt'):
+    def __init__(self, direc: str, name: str = 'init_lcs.txt'):
+        """Initializes an Init_lcs object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_lcs.txt'.
+        """
 
         super().__init__(direc, name)
 
         self.header_rows = ['name', 'unit']
 
 
-    def create(self, empty = False):
+    def create(self, empty: bool = False) -> Self:
+        """Creates an Init_lcs table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+        and file.
+
+        Args:
+            empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
+                using Init_lcs.add_lc_file, or manually with either astropy Table methods or in the txt file. Default is False.
+
+        Returns:
+            Init_lcs: The whole Init_lcs object after creating the table.
+        """
 
         self.table = Table(names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter','Detrend'], 
                            units = [None,None,None,None,None,None,'BJD',None,'s',None,None],
@@ -98,6 +130,8 @@ class Init_lcs(InitFile):
 
 
     def add_lc_file(self):
+        """Adds a new row to the Init_lcs table for a new light curve file. Prompts the user to fill it in. Easier than adding rows manually.
+        """
 
         row = []
 
@@ -148,15 +182,35 @@ class Init_lcs(InitFile):
 
 
 class Init_rv(InitFile):
+    """Class for creating, loading, and editing RV data initialization files. Inherits from InitFile. Contains information for loading RV data.
+    Currently supports data in .csv files or ascii tables with headers. Each data set is given a nickname by the user for differentiating them during
+    and after fitting.
+    """
 
-    def __init__(self, direc, name = 'init_rv.txt'):
+    def __init__(self, direc: str, name: str = 'init_rv.txt'):
+        """Initializes an Init_rv object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_rv.txt'.
+        """
 
         super().__init__(direc, name)
 
         self.header_rows = ['name', 'unit']
 
 
-    def create(self, empty = False):
+    def create(self, empty: bool = False) -> Self:
+        """Creates an Init_rv table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+        and file.
+
+        Args:
+            empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
+                using Init_rv.add_rv_file, or manually with either astropy Table methods or in the txt file. Default is False.
+
+        Returns:
+            Init_rv: The whole Init_rv object after creating the table.
+        """
 
         self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
                            units = [None, None, None, None, None, 'BJD', None, None],
@@ -188,6 +242,8 @@ class Init_rv(InitFile):
 
 
     def add_rv_file(self):
+        """Adds a new row to the Init_rv table for a new RV data file. Prompts the user to fill it in. Easier than adding rows manually.
+        """
 
         row = []
 
@@ -231,15 +287,31 @@ class Init_rv(InitFile):
 
 
 class Init_star(InitFile):
+    """Class for creating, loading, and editing stellar parameter initialization files. Inherits from InitFile. Contains physical stellar parameters,
+    such as the effective temperature, and measured parameters, such as the parallax or various photometric values. All of these are also supplied with
+    uncertainties.
+    """
 
-    def __init__(self, direc, name = 'init_star.txt'):
+    def __init__(self, direc: str, name: str = 'init_star.txt'):
+        """Initializes an Init_star object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_star.txt'.
+        """
 
         super().__init__(direc, name)
 
         self.header_rows = ['name', 'unit']
 
 
-    def create(self):
+    def create(self) -> Self:
+        """Creates an Init_star table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+        and file. There is a prompt option to get some parameters automatically with astroquery, assuming vizier isn't down.
+
+        Returns:
+            Init_star: The whole Init_star object after creating the table.
+        """
 
         x = input('Creating star initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
 
@@ -382,15 +454,35 @@ class Init_star(InitFile):
 
     
 class Init_ld(InitFile):
+    """Class for creating, loading, and editing limb darkening initialization files. Inherits from InitFile. Currently only supports quadratic limb
+    darkening. Contains the two quadratic limb darkening parameters for this star in each assigned filter. These are only used when the limb darkening
+    parameters are not being fit, and the stellar parameters are not being fit.
+    """
 
-    def __init__(self, direc, name = 'init_ld.txt'):
+    def __init__(self, direc: str, name: str = 'init_ld.txt'):
+        """Initializes an Init_ld object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_ld.txt'.
+        """
 
         super().__init__(direc, name)
 
         self.header_rows = ['name']
 
 
-    def create(self, empty = False):
+    def create(self, empty: bool = False) -> Self:
+        """Creates an Init_ld table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+        and file.
+
+        Args:
+            empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
+                using Init_ld.add_ld_params, or manually with either astropy Table methods or in the txt file. Default is False.
+
+        Returns:
+            Init_ld: The whole Init_ld object after creating the table.
+        """
 
         self.table = Table(names = ['u1','u2','Filter'], dtype = [float,float,str])
 
@@ -420,8 +512,13 @@ class Init_ld(InitFile):
 
 
     def add_ld_params(self):
+        """Adds a set of limb darkening parameters to the Init_ld table for a new filter. Prompts the user to fill it in. Easier than adding rows
+        manually. There is a prompt to automatically generate the parameters from existing grids given the stellar parameters. By default, the only
+        grids included are for the TESS filter and the Kepler filter, but more grids can be generated with alfred.generate_ld_grid if the user has
+        exoctk installed.
+        """
 
-        autogen = input('Auto-generate limb darkening parameters from existing grids? y/n').lower()
+        autogen = input('Auto-generate quadratic limb darkening parameters from existing grids? y/n').lower()
 
         if autogen == 'y':
 
@@ -438,7 +535,7 @@ class Init_ld(InitFile):
 
                 elif filt not in ld_grid_list:
 
-                    z = input('Filter is not recognized. Enter to try again. Type "stop" to exit.')
+                    z = input('Filter is not recognized. If you have exoctk installed, you can make a grid for this filter using alfred.generate_ld_grid. Enter to try again. Type "stop" to exit.')
                     if z.lower() == 'stop':
                         return
 
@@ -474,15 +571,31 @@ class Init_ld(InitFile):
 
 
 class Init_planets(InitFile):
+    """Class for creating, loading, and editing planet parameter initialization files. Inherits from InitFile. Contains information on what kinds of
+    parameters to fit for the planet, as well as initial guess for the parameters. Planets are labeled during fitting as 1-indexed numbers from the
+    ordering in this file.
+    """
 
-    def __init__(self, direc, name = 'init_planets.txt'):
+    def __init__(self, direc: str, name: str = 'init_planets.txt'):
+        """Initializes an Init_planets object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_planets.txt'.
+        """
 
         super().__init__(direc, name)
 
         self.header_rows = ['name', 'unit']
 
 
-    def create(self):
+    def create(self) -> Self:
+        """Creates an Init_planets table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
+        directory and file.
+
+        Returns:
+            Init_planets: The whole Init_planets object after creating the table.
+        """
 
         self.table = Table(names = ['Transiting', 'RV Signal', 'Fit TTVs', 'Fit Ecc', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)'],
             units = [None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None],
@@ -508,6 +621,8 @@ class Init_planets(InitFile):
 
 
     def add_planet(self):
+        """Adds a new row to the Init_planets table for a new planet. Prompts the user to fill it in. Easier than adding rows manually.
+        """
 
         row = []
 
@@ -578,15 +693,30 @@ class Init_planets(InitFile):
 
 
 class Init_ttvs(InitFile):
+    """Class for creating, loading, and editing TTV initialization files. Inherits from InitFile. Contains initial estimates for all of the transit
+    times for each planet which is being fit for TTVs. These will only be utilized if the planet has fit TTVs set to true in the Init_planets file.
+    """
 
-    def __init__(self, direc, name = 'init_ttvs.txt'):
+    def __init__(self, direc: str, name: str = 'init_ttvs.txt'):
+        """Initializes an Init_ttvs object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_ttvs.txt'.
+        """
 
         super().__init__(direc, name)
 
         self.header_rows = ['name']
 
 
-    def create(self):
+    def create(self) -> Self:
+        """Creates an Init_ttvs table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
+        directory and file.
+
+        Returns:
+            Init_ttvs: The whole Init_ttvs object after creating the table.
+        """
 
         self.table = Table()
 
@@ -610,6 +740,9 @@ class Init_ttvs(InitFile):
 
 
     def add_transit_times(self):
+        """Adds a new column to the Init_ttvs table for a new planet's TTVs. Prompts the user to fill it in. Recommended to only use this function
+        rather than adding columns manually, because any existing columns must all be adjusted to the same length.
+        """
 
         col = []
 
@@ -634,8 +767,19 @@ class Init_ttvs(InitFile):
 
 
 class Init_priors(InitFile):
+    """Class for creating, loading, and editing prior initialization files. Inherits from InitFile. Contains any priors the user wishes to apply to the
+    fit. Currently supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), and fixed priors (fixing a
+    parameter at a specific value so it is not fit). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances
+    of a type of parameter in the fit (e.g. i x, the inclination of all planets).
+    """
 
-    def __init__(self, direc, name = 'init_priors.txt'):
+    def __init__(self, direc: str, name: str = 'init_priors.txt'):
+        """Initializes an Init_priors object with a directory and a name.
+
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_priors.txt'.
+        """
 
         super().__init__(direc, name)
 
@@ -688,13 +832,21 @@ class Init_priors(InitFile):
         
     
     def var_help(self):
+        """Prints out all parameters which can have priors set on them, as well as descriptions of what they are and what units they should be in.
+        """
 
         for i in range(len(self.var_descriptions)):
 
             print(self.allowed_vars[i], '-', self.var_descriptions[i])
 
     
-    def create(self):
+    def create(self) -> Self:
+        """Creates an Init_priors table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+        and file.
+
+        Returns:
+            Init_priors: The whole Init_priors object after creating the table.
+        """
 
         self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
             dtype = [str, str, float, float])
@@ -719,6 +871,11 @@ class Init_priors(InitFile):
     
 
     def add_prior(self):
+        """Adds a new row to the Init_priors table for a new prior. Prompts the user to fill it in. Easier than adding rows manually. Currently supported
+        priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), and fixed priors (fixing a parameter at a
+        specific value so it is not fit). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances of a type
+        of parameter in the fit (e.g. i x, the inclination of all planets).
+        """
 
         row = []
 
@@ -828,11 +985,10 @@ class Init_priors(InitFile):
 
 
 def create_folder(direc: str):
-    """Creates a new folder for an exoplanet system to fit with this code. Helps you make the initialization file.
+    """Creates a new folder for an exoplanet system to fit with alfred. Helps you make the initialization files.
 
-    ### Parameters
-    1. dir : str
-        - The absolute path to the new directory to create the folder for this system.
+    Args:
+        dir (str): The absolute path to the new directory to create the folder for this system.
     """
 
     if os.path.exists(direc):

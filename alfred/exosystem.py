@@ -238,14 +238,42 @@ class ExoSystem:
                 f0 = dat[tab_lcs['Flux Col'][i]]
                 ferr0 = dat[tab_lcs['Err Col'][i]]
 
+                try:
+                    q = dat[tab_lcs['Quality Col'][i]]
+                except:
+                    q = np.zeros_like(ferr0)
+                
+                j = np.where((np.isnan(f0)) | (q != 0))[0]
+                tt0 = np.delete(tt0, j)
+                f0 = np.delete(f0, j)
+                ferr0 = np.delete(ferr0, j)
 
-            elif name[-4:] == '.dat':
+                scale = np.median(f0)
+                f0 = f0/scale
+                ferr0 = ferr0/scale
 
-                dat = Table.read(self.direc+'/'+name, format = 'ascii.no_header')
 
-                tt0 = dat['col1']
-                f0 = dat['col2']
-                ferr0 = dat['col3']
+            elif name[-4:] in ['.dat', '.txt']:
+
+                dat = Table.read(self.direc+'/'+name, format = 'ascii')
+
+                tt0 = dat[tab_lcs['Time Col']]
+                f0 = dat[tab_lcs['Flux Col']]
+                ferr0 = dat[tab_lcs['Err Col']]
+
+                try:
+                    q = dat[tab_lcs['Quality Col'][i]]
+                except:
+                    q = np.zeros_like(ferr0)
+                
+                j = np.where((np.isnan(f0)) | (q != 0))[0]
+                tt0 = np.delete(tt0, j)
+                f0 = np.delete(f0, j)
+                ferr0 = np.delete(ferr0, j)
+
+                scale = np.median(f0)
+                f0 = f0/scale
+                ferr0 = ferr0/scale
 
 
             self.tt.append(np.array(tt0)+tab_lcs['Time Offset'][i]-2450000)
@@ -272,8 +300,11 @@ class ExoSystem:
         for i, name in enumerate(self.rvfiles):
 
             if os.path.exists(self.direc + name):
-            
-                rvdata = Table.read(self.direc + name)
+                
+                try:
+                    rvdata = Table.read(self.direc + name)
+                except:
+                    rvdata = Table.read(self.direc + name, format = 'ascii')
                 
                 rvdata.sort(tab_rv['Time Col'][i])
 
