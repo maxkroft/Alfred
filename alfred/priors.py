@@ -5,15 +5,27 @@ from isochrones.priors import FlatPrior, GaussianPrior
 
 
 class Priors:
+    """Class for holding prior functions for a specific variable and applying them.
+    """
 
     def __init__(self):
+        """Initializes a Priors object with a list to hold functions and default lower and upper bounds on the variable of negative and positive
+        infinity, respectively.
+        """
 
         self.prior_funcs = []
         self.lbound = -np.inf
         self.ubound = np.inf
 
 
-    def add_gaussian_prior(self, mean, std):
+    def add_gaussian_prior(self, mean: float, std: float):
+        """Adds a Gaussian prior function to the list of priors with the given parameters. The prior function returns the log of the prior value for
+        a given trial value to be added to the log likelihood during fitting.
+
+        Args:
+            mean (float): The mean of the Gaussian distribution.
+            std (float): The standard deviation of the Gaussian distribution.
+        """
 
         def gaussian_prior(x):
 
@@ -22,7 +34,10 @@ class Priors:
         self.prior_funcs.append(gaussian_prior)
 
     
-    def add_uniform_prior(self, lower, upper):
+    def add_uniform_prior(self, lower: float, upper: float):
+        """Adds a uniform prior function to the list of priors with the given bounds. The prior function returns negative infinity if the given trial
+        value is out of the bounds, otherwise 0. Updates the lower and upper bounds of the Priors object.
+        """
 
         self.lbound = max(self.lbound, lower)
         self.ubound = min(self.ubound, upper)
@@ -38,7 +53,15 @@ class Priors:
         self.prior_funcs.append(uniform_prior)
 
 
-    def apply_priors(self, x):
+    def apply_priors(self, x: float) -> float:
+        """Applies all priors in the list of functions to the given trial value, and returns the log likelihood value to be added during fitting.
+
+        Args:
+            x (float): The value to apply the priors to.
+
+        Returns:
+            float: The log likelihood value from the priors.
+        """
 
         loglike = 0
 
@@ -49,14 +72,32 @@ class Priors:
         return loglike
     
 
-    def bounds(self):
+    def bounds(self) -> tuple[float, float]:
+        """Retrieves the boundaries on this parameter set by any priors.
+        
+        Returns:
+            tuple: The lower and upper boundaries of this variable given the set of priors stored.
+        """
 
         return self.lbound, self.ubound
     
 
 class AllPriors:
+    """A class for parsing the Init_priors tables into actual priors, and applying them to all parameters. Stores a dict of Priors objects for each
+    parameter and a dict of all fixed parameters.
+    """
 
-    def __init__(self, tab: Table, x0: dict, fit_ttv):
+    def __init__(self, tab: Table, x0: dict, fit_ttv: np.typing.NDArray):
+        """Initializes an AllPriors object from an Init_priors table and a list of fit parameters. Parses the table into actual priors for any relevant
+        parameters. Sets up a dict of fixed parameters and their values.
+
+        Args:
+            tab (Table): The table from an Init_priors object with a list of priors to set up.
+            x0 (dict): A dict with initial values for all fit parameters from an ExoSystem fit, used to determine which variables are being fit for and
+                require priors to be set up.
+            fit_ttv (ndarray): An array of bools for each planet. They represent whether or not each planet is being fit for TTVs. Priors can be placed
+            on P and Tc for a planet even if they are fit for TTVs and don't directly have those in the fit parameters.
+        """
 
         self.prior_dict = {}
         self.fixed = {}
@@ -160,7 +201,15 @@ class AllPriors:
 
 
 
-    def set_up_prior(self, var, prior_type, params):
+    def set_up_prior(self, var: str, prior_type: str, params: list):
+        """Sets up a Priors object for a parameter in the dict of Priors, if one doesn't exist already. Then adds the given prior to that object with
+        the given parameters.
+
+        Args:
+            var (str): The parameter the prior is for.
+            prior_type (str): The type of prior to set up.
+            params (list): A list of the parameters required to set up the prior (e.g. mean and std for a Gaussian prior).
+        """
 
         if var not in self.prior_dict:
             self.prior_dict[var] = Priors()
@@ -178,7 +227,15 @@ class AllPriors:
             self.fixed[var] = params[0]
 
 
-    def apply(self, par: dict):
+    def apply(self, par: dict) -> float:
+        """Applies all priors to all fit parameters and returns the total log likelihood.
+
+        Args:
+            par (dict): A dict of the fit parameters from the ExoSystem fit.
+
+        Returns:
+            float: The total log likelihood from the priors.
+        """
 
         log_like = 0
 
@@ -244,7 +301,17 @@ class AllPriors:
         return log_like
     
 
-    def get_bounds(self, var: str):
+    def get_bounds(self, var: str) -> tuple[float, float]:
+        """Gets the bounds on a fit parameter, if there are any from uniform priors. Used for setting up truncated Gaussians when
+        initializing the MCMC chains to ensure they do not leave any bounds. Combines bounds from any variations on the actual fitted parameter, for
+        instance P to log(P) or e to secw.
+
+        Args:
+            var (str): The parameter to get the bounds for.
+
+        Returns:
+            tuple: The lower and upper bounds on this fit parameter.
+        """
 
         logvars = {'log(P)':'P', 'log(a/rs)':'a/rs', 'log(K)':'K', 'log(rho_gp)':'rho_gp', 'log(sigma_gp)':'sigma_gp'}
 
@@ -349,7 +416,18 @@ class AllPriors:
     
 
 
-def setup_star_priors(tab: Table, starmod: SingleStarModel):
+def setup_star_priors(tab: Table, starmod: SingleStarModel) -> SingleStarModel:
+    """Sets up any priors on the stellar parameters that are directly fit for using the internal priors functionality from isochrones. Will replace
+    the default priors on those parameters. Only one prior can be applied to each parameter, with the exception of Gaussian plus uniform, which is
+    interpreted as a truncated Gaussian.
+
+    Args:
+        tab (Table): The table from an Init_priors object.
+        starmod (SingleStarModel): The isochrones starmodel object being used in the ExoSystem fit.
+
+    Returns:
+        SingleStarModel: Returns the updated starmodel object that was input.
+    """
 
     set_priors = {'mstar': lambda x: starmod.set_prior(mass = x),
                 'rstar': lambda x: starmod.set_prior(radius = x),
