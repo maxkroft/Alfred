@@ -1636,9 +1636,9 @@ class ExoSystem:
         These are:
         - self.ttvs0: A dict with keys being planet numbers, and the values being a sorted array of all observed transit times.
         - self.ttvsectors: A dict with keys being the planet number followed by the transit number (1-indexed), and the values being the index of the
-            transit data set which the transit occurs in.
+        transit data set which the transit occurs in.
         - self.ttvi: A dict with keys being planet numbers, and the values being an array of integers representing the number of periods occurring
-            between the first observed transit and each transit being fit.
+        between the first observed transit and each transit being fit.
 
         Args:
             name (str): Name of the Init_ttvs file.
