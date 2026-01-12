@@ -1449,7 +1449,7 @@ class ExoSystem:
             - mstar_init: Initial stellar mass at the zero-age main sequence point, in solar masses.
             - rhostar: Mean stellar density from stellar fitting, in g/cm^3.
             - Tstar: Stellar effective temperature, in K.
-            - loggstar: Natural log of the stellar surface gravity, in cm/s^2.
+            - loggstar: log10 of the stellar surface gravity, in cm/s^2.
             - Lstar: Stellar bolometric luminosity, in solar luminosities.
             - Mbolstar: Stellar bolometric magnitude, in mags.
         """

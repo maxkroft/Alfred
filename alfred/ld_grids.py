@@ -15,7 +15,15 @@ for fname in os.listdir(ld_grid_dir):
         ld_grid_list.append(fname[:-7])
 
 
-def generate_ld_grid(filter, filter_nickname):
+def generate_ld_grid(filter: str, filter_nickname: str):
+    """Generate a limb darkening grid for a new filter. Saves it as a pickle in the alfred ld_grids folder. Must have exoctk installed to run this.
+
+    Args:
+        filter (str): The filter to generate the grid for. Must be one of the filters compatible with svo_filters. Run svo_filter.svo.filters() to see a
+            list of allowed filters.
+        filter_nickname (str): The name you want to give to this grid. This is what the pickle file will be named, and the filter name you should use
+            in Init_lcs files and Init_ld files.
+    """
 
     if not exoctk_inst:
         print('Cannot generate new limb darkening grids without installing exoctk and its data. See optional installation instructions in the docs.')
@@ -58,7 +66,16 @@ def generate_ld_grid(filter, filter_nickname):
     pickle.dump(d, open(os.path.dirname(os.path.realpath(__file__))+'/ld_grids/{0}_grid.p'.format(filter_nickname), 'wb'))
 
 
-def load_ld_grid(filter_name: str):
+def load_ld_grid(filter_name: str) -> tuple[LinearNDInterpolator, LinearNDInterpolator]:
+    """Loads in a pickle file for a limb darkening grid, sets up the interpolators for each limb darkening parameters, and returns those. By default,
+    the only available filters included with alfred are TESS and Kepler. To generate more, install exoctk and run generate_ld_grid.
+
+    Args:
+        filter_name (str): The name of the filter. This must be the name of the pickle file (before _grid).
+
+    Returns:
+        tuple: The interpolator objects for the two quadratic limb darkening parameters.
+    """
 
     try:
 
@@ -69,7 +86,7 @@ def load_ld_grid(filter_name: str):
         print('Please use one of the following filters with limb darkening grids available:\n{0}'.format(ld_grid_list))
         print('Or run generate_ld_grid to create a new grid using a valid svo filter name and nickname {0}.'.format(filter_name))
         print('Note that this requires installation of exoctk and its data. See optional installation instructions in the docs.')
-        print('Available svo filters can be found by calling svo.filters().')
+        print('Available svo filters can be found by calling svo_filters.svo.filters().')
         raise
 
     interpu1 = LinearNDInterpolator(grid['coords'], grid['u1'])
@@ -78,7 +95,19 @@ def load_ld_grid(filter_name: str):
     return interpu1, interpu2
 
 
-def calc_ld(filter_name: str, T, logg, feh):
+def calc_ld(filter_name: str, T: float, logg: float, feh: float) -> tuple[float, float]:
+    """Calculates limb darkening parameters from a grid given the input stellar parameters.
+
+    Args:
+        filter_name (str): The name of the filter to generate the limb darkening parameters in. Must have an existing grid in alfred. By default, only
+            TESS and Kepler are included. More can be generated with exoctk installed and by running generate_ld_grid.
+        T (float): The stellar effective temperature in K.
+        logg (float): The log10 of the stellar surface gravity in cm/s^2.
+        feh (float): Stellar metallicity in dex.
+
+    Returns:
+        tuple: The two quadratic limb darkening parameters.
+    """
 
     interpu1, interpu2 = load_ld_grid(filter_name)
 
