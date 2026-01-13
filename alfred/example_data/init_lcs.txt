@@ -1,0 +1,4 @@
+|           File | Nickname | Time Col | Flux Col | Err Col | Quality Col | Time Offset | Err Scale | Exp Time | Filter | Detrend |
+|                |          |          |          |         |             |         BJD |           |        s |        |         |
+| -------------- | -------- | -------- | -------- | ------- | ----------- | ----------- | --------- | -------- | ------ | ------- |
+| lc_example.csv |       LC |        t |        f |    ferr |        None |     2450000 |       1.0 |    120.0 |   TESS |   False |

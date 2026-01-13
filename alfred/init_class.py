@@ -70,7 +70,7 @@ class InitFile:
 
 class Init_lcs(InitFile):
     """Class for creating, loading, and editing light curve initialization files. Inherits from InitFile. Contains information for loading light curve
-    data, as well as information about each data set such as the filter or exposure time. Currently supports data in .fits, .npz, .dat, and .txt files,
+    data, as well as information about each data set such as the filter or exposure time. Currently supports data in .fits, .npz, .csv, .dat, and .txt files,
     with the latter two assumed to be ascii tables with a header row. Each data set is given a nickname by the user for differentiating them during
     and after fitting.
     """
@@ -817,8 +817,8 @@ class Init_priors(InitFile):
                                  'quadratic limb darkening linear term',
                                  'quadratic limb darkening non-linear term',
                                  'RV systemic velocity in m/s',
-                                 '1st derivative of RV systemic velocity in m/s per day',
-                                 '2nd derivative of RV systemic velocity in m/s per day^2',
+                                 '1st derivative of RV systemic velocity in m/s per day, relative to time of first RV point',
+                                 '2nd derivative of RV systemic velocity in m/s per day^2, relative to time of first RV point',
                                  'RV offset in m/s, for additional data sets beyond the first',
                                  'equivalent evolutionary phase, used in fitting the star with isochrones',
                                  'log10 of stellar age in yr. This is used directly in fitting',

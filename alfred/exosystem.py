@@ -252,14 +252,36 @@ class ExoSystem:
                 f0 = f0/scale
                 ferr0 = ferr0/scale
 
+            elif name[-4:] == '.csv':
+
+                dat = Table.read(self.direc+'/'+name)
+
+                tt0 = dat[tab_lcs['Time Col'][i]]
+                f0 = dat[tab_lcs['Flux Col'][i]]
+                ferr0 = dat[tab_lcs['Err Col'][i]]
+
+                try:
+                    q = dat[tab_lcs['Quality Col'][i]]
+                except:
+                    q = np.zeros_like(ferr0)
+                
+                j = np.where((np.isnan(f0)) | (q != 0))[0]
+                tt0 = np.delete(tt0, j)
+                f0 = np.delete(f0, j)
+                ferr0 = np.delete(ferr0, j)
+
+                scale = np.median(f0)
+                f0 = f0/scale
+                ferr0 = ferr0/scale
+
 
             elif name[-4:] in ['.dat', '.txt']:
 
                 dat = Table.read(self.direc+'/'+name, format = 'ascii')
 
-                tt0 = dat[tab_lcs['Time Col']]
-                f0 = dat[tab_lcs['Flux Col']]
-                ferr0 = dat[tab_lcs['Err Col']]
+                tt0 = dat[tab_lcs['Time Col'][i]]
+                f0 = dat[tab_lcs['Flux Col'][i]]
+                ferr0 = dat[tab_lcs['Err Col'][i]]
 
                 try:
                     q = dat[tab_lcs['Quality Col'][i]]
@@ -333,13 +355,14 @@ class ExoSystem:
             self.rverr = self.rverr[o]
             self.which_rv = self.which_rv[o]
 
-            self.tr_ref = (np.max(self.tr) + np.min(self.tr))/2
+            self.tr_ref = np.min(self.tr)
             self.tr_plot = np.linspace(np.min(self.tr)-5, np.max(self.tr+5), 1000)
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk = 0, fit_ld = False, use_priors = False,
-            rv_bkg_order = 0, star_run: str = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False) -> None:
+    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk: int = 0, fit_ld: bool = False,
+            use_priors: bool = False, rv_bkg_order: int = 0, star_run: str = None, save_samples: bool = False, sigma_clip: float = 5,
+            lc_supersample_size: int = 600, show_plots: bool = True, order_a: bool = False, skip_state_check: bool = False) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -394,7 +417,7 @@ class ExoSystem:
                 if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
                 and these take up additional storage. Default is False.
             
-            sigma_clip (int, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
+            sigma_clip (float, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
                 sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
                 that probably shouldn't be, increase this parameter and run it again. To turn off sigma clipping set this parameter to 0. Default is 5.
             
@@ -415,6 +438,9 @@ class ExoSystem:
                 planets. If True, restricts the semi-major axis of each planet to be greater than those of planets with shorter orbital periods. If
                 fitting the stellar parameters, overrides this to False, since the stellar mass is instead used to set semi-major axes. Default is
                 False.
+
+            skip_state_check (bool, optional): Passed to the emcee sampler. Whether or not to skip checking whether the initial parameters can fully
+                explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
         """
 
 
@@ -636,7 +662,7 @@ class ExoSystem:
         print('Initial parameters:')
         print(self.x0)
         
-        if len(self.fixed) > 0:
+        if self.use_priors and len(self.fixed) > 0:
             print('Fixed Parameters:')
             print(self.fixed)
 
@@ -1016,7 +1042,7 @@ class ExoSystem:
 
         print('\nRunning MCMC sampling.')
 
-        sampler.run_mcmc(state, self.nrun, progress = True)
+        sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
 
         self.samples = sampler.get_chain()
 
@@ -1410,8 +1436,8 @@ class ExoSystem:
         - log(rho_gp) x: Natural log of the GP period, in days, for transit data set x.
         - log(sigma_gp) x: Natural log of the GP standard deviation, for transit data set x.
         - gamma: RV systemic velocity, in m/s.
-        - gamma_dot: 1st derivative of the RV systemic velocity, in m/s/day.
-        - gamma_ddot: 2nd derivative of the RV systemic velocity, in m/s/day^2.
+        - gamma_dot: 1st derivative of the RV systemic velocity, in m/s/day. Relative to time of first RV measurement.
+        - gamma_ddot: 2nd derivative of the RV systemic velocity, in m/s/day^2. Relative to time of first RV measurement.
         - rv_offset x: RV offset relative to first data set, in m/s, for RV data set x.
         - u1 x: Linear coefficient for quadratic limb darkening, for filter x.
         - u2 x: Non-linear coefficient for quadratic limb darkening, for filter x.
