@@ -3,9 +3,6 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-.. image:: Alfred.png
-   :width: 200px
-   :align: center
 
 
 Alfred documentation

@@ -32,3 +32,7 @@ html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 
 autoclass_content = 'both'
+
+autodoc_member_order = 'bysource'
+
+html_logo = 'Alfred.png'
