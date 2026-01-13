@@ -1396,29 +1396,30 @@ class ExoSystem:
         """Dict which stores the flattened chains of fit parameters. Keys are the parameter names.
 
         Potential fit parameters:
-            - log(P) x: Natural log of the orbital period, in days, for planet number x.
-            - Tc x: Time of conjunction, in BJD-2457000, for planet number x.
-            - ror x: Planet to star radius ratio, for planet number x.
-            - log(a/rs) x: Natural log of the orbital semi-major axis to stellar radius ratio, for planet number x.
-            - cos(i) x: Cosine of the orbital inclination, restricted between 0 and 90 degrees, for planet number x.
-            - log(K) x: Natural log of the RV semi-amplitude, in m/s, for planet number x.
-            - secw x: Square root of the eccentricity times the cosine of the argument of periastron, for planet number x.
-            - sesw x: Square root of the eccentricity times the sine of the argument of periastron, for planet number x.
-            - TT x y: Transit time (when fitting for TTVs), in BJD-2457000, for planet number x transit number y.
-            - F0 x: Baseline flux value, for transit data set x.
-            - log(rho_gp) x: Natural log of the GP period, in days, for transit data set x.
-            - log(sigma_gp) x: Natural log of the GP standard deviation, for transit data set x.
-            - gamma: RV systemic velocity, in m/s.
-            - gamma_dot: 1st derivative of the RV systemic velocity, in m/s/day.
-            - gamma_ddot: 2nd derivative of the RV systemic velocity, in m/s/day^2.
-            - rv_offset x: RV offset relative to first data set, in m/s, for RV data set x.
-            - u1 x: Linear coefficient for quadratic limb darkening, for filter x.
-            - u2 x: Non-linear coefficient for quadratic limb darkening, for filter x.
-            - eep: Equivalent evolutionary phase, used to interpolate across MIST models for stellar fitting.
-            - log10(age): Log base 10 of the stellar age, in yr.
-            - feh: Stellar metallicity, in dex.
-            - distance: Distance to the system, in pc.
-            - AV: Visual band extinction to the system, in mags.
+
+        - log(P) x: Natural log of the orbital period, in days, for planet number x.
+        - Tc x: Time of conjunction, in BJD-2457000, for planet number x.
+        - ror x: Planet to star radius ratio, for planet number x.
+        - log(a/rs) x: Natural log of the orbital semi-major axis to stellar radius ratio, for planet number x.
+        - cos(i) x: Cosine of the orbital inclination, restricted between 0 and 90 degrees, for planet number x.
+        - log(K) x: Natural log of the RV semi-amplitude, in m/s, for planet number x.
+        - secw x: Square root of the eccentricity times the cosine of the argument of periastron, for planet number x.
+        - sesw x: Square root of the eccentricity times the sine of the argument of periastron, for planet number x.
+        - TT x y: Transit time (when fitting for TTVs), in BJD-2457000, for planet number x transit number y.
+        - F0 x: Baseline flux value, for transit data set x.
+        - log(rho_gp) x: Natural log of the GP period, in days, for transit data set x.
+        - log(sigma_gp) x: Natural log of the GP standard deviation, for transit data set x.
+        - gamma: RV systemic velocity, in m/s.
+        - gamma_dot: 1st derivative of the RV systemic velocity, in m/s/day.
+        - gamma_ddot: 2nd derivative of the RV systemic velocity, in m/s/day^2.
+        - rv_offset x: RV offset relative to first data set, in m/s, for RV data set x.
+        - u1 x: Linear coefficient for quadratic limb darkening, for filter x.
+        - u2 x: Non-linear coefficient for quadratic limb darkening, for filter x.
+        - eep: Equivalent evolutionary phase, used to interpolate across MIST models for stellar fitting.
+        - log10(age): Log base 10 of the stellar age, in yr.
+        - feh: Stellar metallicity, in dex.
+        - distance: Distance to the system, in pc.
+        - AV: Visual band extinction to the system, in mags.
         """
         return self.res
     
@@ -1427,31 +1428,32 @@ class ExoSystem:
         """Dict which stores flat chains of derived parameters. Keys are the parameter names.
 
         Potential derived parameters:
-            - P x: Orbital period, in days, for planet number x.
-            - Rp x: Planetary radius, in earth radii, for planet number x.
-            - a/rs x: Orbital semi-major axis to stellar radius ratio, for planet number x.
-            - a x: Orbital semi-major axis, in AU, for planet number x.
-            - i x: Orbital inclination, in degrees, for planet number x (restricted between 0 and 90 degrees).
-            - e x: Orbital eccentricity, for planet number x.
-            - w x: Orbital argument of periastron, in degrees, for planet number x.
-            - K x: RV semi-amplitude, in m/s, for planet number x.
-            - Mp x: Planetary mass, in earth masses, for planet number x.
-            - Mpsini x: Planetary mass times the sine of the orbital inclination, in earth masses, for planet number x (used when transit wasn't fit).
-            - rhop x: Planetary mean density, in g/cm^3, for planet number x.
-            - teq x: Planetary equilibrium temperature (zero-albedo blackbody), in K, for planet number x.
-            - sinc x: Insolation flux reaching the planet, in units of Earth insolation flux, for planet number x.
-            - b x: Transit impact parameter, for planet number x.
-            - dur x: Transit duration, in hours, for planet number x.
-            - rhos x: Implied stellar density from transit of planet number x, in g/cm^3.
-            - TSM x: Transmission spectroscopy metric, for planet number x.
-            - rstar: Stellar radius, in solar radii.
-            - mstar: Stellar mass, in solar masses.
-            - mstar_init: Initial stellar mass at the zero-age main sequence point, in solar masses.
-            - rhostar: Mean stellar density from stellar fitting, in g/cm^3.
-            - Tstar: Stellar effective temperature, in K.
-            - loggstar: log10 of the stellar surface gravity, in cm/s^2.
-            - Lstar: Stellar bolometric luminosity, in solar luminosities.
-            - Mbolstar: Stellar bolometric magnitude, in mags.
+    
+        - P x: Orbital period, in days, for planet number x.
+        - Rp x: Planetary radius, in earth radii, for planet number x.
+        - a/rs x: Orbital semi-major axis to stellar radius ratio, for planet number x.
+        - a x: Orbital semi-major axis, in AU, for planet number x.
+        - i x: Orbital inclination, in degrees, for planet number x (restricted between 0 and 90 degrees).
+        - e x: Orbital eccentricity, for planet number x.
+        - w x: Orbital argument of periastron, in degrees, for planet number x.
+        - K x: RV semi-amplitude, in m/s, for planet number x.
+        - Mp x: Planetary mass, in earth masses, for planet number x.
+        - Mpsini x: Planetary mass times the sine of the orbital inclination, in earth masses, for planet number x (used when transit wasn't fit).
+        - rhop x: Planetary mean density, in g/cm^3, for planet number x.
+        - teq x: Planetary equilibrium temperature (zero-albedo blackbody), in K, for planet number x.
+        - sinc x: Insolation flux reaching the planet, in units of Earth insolation flux, for planet number x.
+        - b x: Transit impact parameter, for planet number x.
+        - dur x: Transit duration, in hours, for planet number x.
+        - rhos x: Implied stellar density from transit of planet number x, in g/cm^3.
+        - TSM x: Transmission spectroscopy metric, for planet number x.
+        - rstar: Stellar radius, in solar radii.
+        - mstar: Stellar mass, in solar masses.
+        - mstar_init: Initial stellar mass at the zero-age main sequence point, in solar masses.
+        - rhostar: Mean stellar density from stellar fitting, in g/cm^3.
+        - Tstar: Stellar effective temperature, in K.
+        - loggstar: log10 of the stellar surface gravity, in cm/s^2.
+        - Lstar: Stellar bolometric luminosity, in solar luminosities.
+        - Mbolstar: Stellar bolometric magnitude, in mags.
         """
         return self.dres
 
@@ -2314,20 +2316,21 @@ class ExoSystem:
         """Stores the best fit model light curves.
 
         fm is a dict, with a key for each light curve data set using their nicknames. These keys correspond to their own dicts with the following keys:
-            - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
-                each planet at the times of this data set.
-            - fm_err: A 3d numpy array of the 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
-                error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
-                corresponding to a different planet.
-            - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
-            - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
-                1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
-            - ttphase: A 1d numpy array of phase folded times.
-            - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
-                model light curve for each planet, at the times of ttphase.
-            - fmphase_err: A 3d numpy array of the 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
-                lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
-                with each row corresponding to a different planet.
+
+        - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
+          each planet at the times of this data set.
+        - fm_err: A 3d numpy array of the 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
+          error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
+          corresponding to a different planet.
+        - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
+        - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
+          1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
+        - ttphase: A 1d numpy array of phase folded times.
+        - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
+          model light curve for each planet, at the times of ttphase.
+        - fmphase_err: A 3d numpy array of the 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
+          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
+          with each row corresponding to a different planet.
         """
         return self._lcm
 
@@ -2677,23 +2680,24 @@ class ExoSystem:
         """Stores the best fit radial velocity models.
 
         rvm is a dict,  with the following keys:
-            - rvm: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
-                at the times of the RV data.
-            - bkg: A 1d numpy array of the values of the background polynomial trend at the times of the RV data.
-            - trplot: A 1d numpy array of more finely sampled times to make plotted models look smooth.
-            - rvmplot: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
-                at the times of trplot, for smooth plotting.
-            - bkgplot: A 1d numpy array of the values of the background polynomial trend at the times of trplot, for smooth plotting.
-            - rvallplot: A 1d numpy array of the full best fit RV model at the times of trplot, for smooth plotting. It is the sum of all planet
-                components and the background polynomial.
-            - rvallplot_err: A 2d numpy array of the 1 sigma uncertainties on rvallplot. In the 0th axis, the 0 index is a 1d array corresponding to
-                the lower 1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
-            - trphase: A 1d numpy array of phase folded times.
-            - rvmphase: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit phase-folded RV
-                model for each planet, at the times of trphase.
-            - rvmphase_err: A 3d numpy array of the 1 sigma uncertainties on rvmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
-                lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like rvmphase,
-                with each row corresponding to a different planet.
+
+        - rvm: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
+          at the times of the RV data.
+        - bkg: A 1d numpy array of the values of the background polynomial trend at the times of the RV data.
+        - trplot: A 1d numpy array of more finely sampled times to make plotted models look smooth.
+        - rvmplot: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
+          at the times of trplot, for smooth plotting.
+        - bkgplot: A 1d numpy array of the values of the background polynomial trend at the times of trplot, for smooth plotting.
+        - rvallplot: A 1d numpy array of the full best fit RV model at the times of trplot, for smooth plotting. It is the sum of all planet
+          components and the background polynomial.
+        - rvallplot_err: A 2d numpy array of the 1 sigma uncertainties on rvallplot. In the 0th axis, the 0 index is a 1d array corresponding to
+          the lower 1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
+        - trphase: A 1d numpy array of phase folded times.
+        - rvmphase: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit phase-folded RV
+          model for each planet, at the times of trphase.
+        - rvmphase_err: A 3d numpy array of the 1 sigma uncertainties on rvmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
+          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like rvmphase,
+          with each row corresponding to a different planet.
         """
         return self._rvm
 
@@ -2984,7 +2988,7 @@ class ExoSystem:
 
         Args:
             parname (str): The name of the parameter whose chains will be plotted. See the parameters that were fit in this run with
-            ExoSystem.parnames.
+                ExoSystem.parnames.
         """
 
         k = self.parnames[parname]
@@ -3425,10 +3429,10 @@ def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, 
 
     Returns:
         tuple: A tuple of the log likelihood, an array of periods of any planets that are fit for ttvs, and an array of conjunction times of any planets
-            that are fit for ttvs. The former is the primary return for running MCMC with emcee. The latter two are saved as "blobs" in the emcee
-            sampler object, and are used to track the period and time of conjunction at each step rather than recalculating the linear regression
-            after the fact, since these are not directly fit parameters. If any parameter is out of bounds or any portion of the log likelihood is nan,
-            returns negative infinity and empty lists.
+        that are fit for ttvs. The former is the primary return for running MCMC with emcee. The latter two are saved as "blobs" in the emcee
+        sampler object, and are used to track the period and time of conjunction at each step rather than recalculating the linear regression
+        after the fact, since these are not directly fit parameters. If any parameter is out of bounds or any portion of the log likelihood is nan,
+        returns negative infinity and empty lists.
     """
 
     if exs.use_priors:
