@@ -4,6 +4,8 @@ from alfred._rv_func import _rvModel
 
 
 def test_rvModel():
+    """Test to make sure _rvModel c/cython function is compiled and works.
+    """
 
     par = np.array([5.56, 100, 11, 0.23, 1.2], dtype = float)
     t = np.array([99,100,101], dtype = float)
