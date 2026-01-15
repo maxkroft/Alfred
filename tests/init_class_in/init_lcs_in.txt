@@ -1,0 +1,13 @@
+
+skip
+fake_lc.csv
+fake data
+time
+flux
+err
+q
+0
+120
+filt
+False
+n
