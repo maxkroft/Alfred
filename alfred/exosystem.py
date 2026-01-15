@@ -691,7 +691,10 @@ class ExoSystem:
 
             if not self.fit_transit or self.sigma_clip == 0:
                 break
-            
+
+            if not os.path.isdir(self.direc+'Plots/'+name+'/sigma_clip'):
+                os.mkdir(self.direc+'Plots/'+name+'/sigma_clip')            
+
             if self.use_priors:
 
                 y = x | self.fixed
@@ -839,17 +842,26 @@ class ExoSystem:
 
                     ax[0].scatter(self.tt[j], self.f[j], c = 'black', marker = '.', zorder = 1)
                     ax[0].plot(self.tt[j], gpf + mean, c = 'mediumseagreen', zorder = 2)
+                    ax[0].set_rasterized(True)
 
                 ax[0+z].scatter(self.tt[j], self.f[j] - gpf, c = 'black', marker = '.', zorder = 1)
                 ax[0+z].plot(self.tt[j], fm, c = 'mediumseagreen', zorder = 2)
+                ax[0+z].set_rasterized(True)
 
                 ax[1+z].scatter(self.tt[j][mask], (self.f[j] - gpf - fm)[mask], c = 'black', marker = '.', zorder = 1)
                 ax[1+z].scatter(self.tt[j][~mask], (self.f[j] - gpf - fm)[~mask], c = 'red', marker = 'x', zorder = 2)
                 ax[1+z].axhline(0, c = 'mediumseagreen', zorder = 3)
+                ax[1+z].set_rasterized(True)
 
                 ax[0].set_title('{0} Clipped {1}'.format(self.lcnames[j], c))
 
-                plt.show()
+                fig.savefig(self.direc+'Plots/'+name+'/sigma_clip/'+'{0}_clip_{1}.png'.format(self.lcnames[j], i+1))
+
+                if show_plots:
+                    plt.show()
+
+                else:
+                    plt.close()
 
                 k = np.where(self.masks[j])[0]
                 self.masks[j][k[~mask]] = False
