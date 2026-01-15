@@ -1,5 +1,5 @@
 import numpy as np
-from astropy.table import Table
+from astropy.table import Table, Column
 import shutil
 import os
 from astroquery.vizier import Vizier
@@ -755,14 +755,18 @@ class Init_ttvs(InitFile):
             tt = input('Transit time {0} for planet {1} (BJD-2450000): '.format(i, num))
             col.append(tt)
 
-        if n > len(self.table):
+        if len(self.table.columns) > 0:
 
-            self.table.add_rows([[np.nan]*len(self.table.columns)]*(n-len(self.table)))
+            if n > len(self.table):
+                
+                for i in range(n-len(self.table)):
+                    self.table.add_row([np.nan]*len(self.table.columns))
 
-        elif n < len(self.table):
+            elif n < len(self.table):
 
-            col += [np.nan]*(len(self.table)-n)
+                col += [np.nan]*(len(self.table)-n)
 
+        col = Column(col, dtype = float)
         self.table.add_column(col, name = num)
 
 
