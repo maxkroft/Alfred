@@ -360,9 +360,9 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk: int = 0, fit_ld: bool = False,
-            use_priors: bool = False, rv_bkg_order: int = 0, star_run: str = None, save_samples: bool = False, sigma_clip: float = 5,
-            lc_supersample_size: int = 600, show_plots: bool = True, order_a: bool = False, skip_state_check: bool = False) -> None:
+    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk: int = 0, fit_ld = False,
+            use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False, sigma_clip: float = 5,
+            lc_supersample_size: int = 600, show_plots = True, order_a = False, skip_state_check = False) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -657,7 +657,7 @@ class ExoSystem:
 
                     self.x0.pop(f)
 
-        keys = list(self.x0.keys())
+        self.keys = list(self.x0.keys())
 
         print('Initial parameters:')
         print(self.x0)
@@ -667,8 +667,8 @@ class ExoSystem:
             print(self.fixed)
 
 
-        if self.nwalk < len(keys) * 2:
-            self.nwalk = len(keys) * 2
+        if self.nwalk < len(self.keys) * 2:
+            self.nwalk = len(self.keys) * 2
 
         if self.fit_transit:
 
@@ -678,392 +678,30 @@ class ExoSystem:
 
             self.masks = [np.ones(len(self.tt[i]), dtype = bool) for i in range(len(self.tt))]
         
-        if self.fit_transit:
-            print('\nStarting sigma clipping of lightcurves.')
 
+        if self.fit_transit and self.sigma_clip != 0:
+            
+            self.sigma_clip(name, show_plots)
 
-        clipped = [0]*len(self.tt)
+        else:
 
-        for i in range(10):
+            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead', args = (self,))
+            x = {k:v for k,v in zip(self.keys, res.x)}
 
-            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(keys, x)}, *args)[0], [self.x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
-            x = {k:v for k,v in zip(keys, res.x)}
-
-            if not self.fit_transit or self.sigma_clip == 0:
-                break
-
-            if not os.path.isdir(self.direc+'Plots/'+name+'/sigma_clip'):
-                os.mkdir(self.direc+'Plots/'+name+'/sigma_clip')            
-
-            if self.use_priors:
-
-                y = x | self.fixed
-
-                for j in range(self.n):
-
-                    if 'e {0}'.format(j+1) in y:
-
-                        y['secw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.cos(y['w {0}'.format(j+1)])
-                        y['sesw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.sin(y['w {0}'.format(j+1)])
-
-            else:
-
-                y = x.copy()
-
-            if self.fit_star:
-
-                rstar, mstar, Tstar, loggstar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg'])
-
-                arlist = []
-                for j in range(self.n):
-
-                    if not self.is_transit[j]:
-                        arlist.append(np.nan)
-                        continue
-
-                    if self.fit_ttv[j]:
-
-                        p = get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = 1)[0]
-
-                    else:
-
-                        p = np.exp(y['log(P) {0}'.format(j+1)])
-
-                    if self.is_rv[j] and self.fit_rv:
-
-                        e = 0
-                        if self.fit_ecc[j]:
-                            e = y['secw {0}'.format(j+1)]**2 + y['sesw {0}'.format(j+1)]**2
-
-                        mp = calc_m_from_k(p, np.exp(y['log(K) {0}'.format(j+1)]), e, np.arccos(y['cos(i) {0}'.format(j+1)]), mstar)
-
-                    else:
-
-                        mp = 0
-
-                    ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
-
-                    arlist.append(ar)
-
-            pars = []
-            for j in range(self.n):
-
-                if not self.is_transit[j]:
-                    continue
-
-                if self.fit_ttv[j]:
-
-                    pars.append(get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = arlist[j] if self.fit_star else None))
-
-                else:
-
-                    pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None))
-
-
-            lastclipped = 0
-
-            for j in range(len(self.tt)):
-
-                mean = y['F0 {0}'.format(self.lcnames[j])]
-
-                fm = mean
-
-                ld = self.ld[self.filters[j]]
-
-                if self.fit_ld:
-
-                    ld = [y['u1 {0}'.format(self.filters[j])], y['u2 {0}'.format(self.filters[j])]]
-
-                if self.fit_star:
-
-                    ld = [self.ldgrids[self.filters[j]][0]([Tstar, loggstar, y['feh']])[0], self.ldgrids[self.filters[j]][1]([Tstar, loggstar, y['feh']])[0]]
-
-                for k in range(self.n):
-
-                    if not self.is_transit[k]:
-                        continue
-
-                    l = np.sum(self.is_transit[:k])
-
-                    if self.fit_ttv[k]:
-
-                        p = pars[l][0]
-
-                        for z in range(len(self.ttvi['{0}'.format(k+1)])):
-
-                            if self.ttvsectors['{0} {1}'.format(k+1, z+1)] != j:
-                                continue
-
-                            ttime = y['TT {0} {1}'.format(k+1, z+1)]
-
-                            pars[l][1] = ttime
-
-                            ind = np.where((self.tt[j] >= ttime - p/4) & (self.tt[j] <= ttime + p/4))
-
-                            fm0 = np.zeros(len(self.tt[j]))
-
-                            lc = lightCurve(pars[l], self.tt[j][ind], ld, self.exptimes[j], self.supersamples[j])
-
-                            fm0[ind] += lc
-
-                            fm += fm0
-
-                    else:
-
-                        fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j])
-
-                resid = self.f[j] - fm
-
-                gpf = 0
-
-                if self.detrend[j]:
-
-                    gp = set_gp_params(np.exp(y['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(y['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[j])
-
-                    gpf = gp.predict(resid)
-
-                    resid = self.f[j] - fm - gpf
-
-                rms = np.sqrt(np.median(resid**2))
-
-                mask = abs(resid) < self.sigma_clip * rms
-
-                c = np.sum(~mask)
-                lastclipped += c
-                clipped[j] += c
-
-                fig, ax = plt.subplots(3 if self.detrend[j] else 2, sharex = True)
-
-                z = 0
-
-                if self.detrend[j]:
-
-                    z = 1
-
-                    ax[0].scatter(self.tt[j], self.f[j], c = 'black', marker = '.', zorder = 1)
-                    ax[0].plot(self.tt[j], gpf + mean, c = 'mediumseagreen', zorder = 2)
-                    ax[0].set_rasterized(True)
-
-                ax[0+z].scatter(self.tt[j], self.f[j] - gpf, c = 'black', marker = '.', zorder = 1)
-                ax[0+z].plot(self.tt[j], fm, c = 'mediumseagreen', zorder = 2)
-                ax[0+z].set_rasterized(True)
-
-                ax[1+z].scatter(self.tt[j][mask], (self.f[j] - gpf - fm)[mask], c = 'black', marker = '.', zorder = 1)
-                ax[1+z].scatter(self.tt[j][~mask], (self.f[j] - gpf - fm)[~mask], c = 'red', marker = 'x', zorder = 2)
-                ax[1+z].axhline(0, c = 'mediumseagreen', zorder = 3)
-                ax[1+z].set_rasterized(True)
-
-                ax[0].set_title('{0} Clipped {1}'.format(self.lcnames[j], c))
-
-                fig.savefig(self.direc+'Plots/'+name+'/sigma_clip/'+'{0}_clip_{1}.png'.format(self.lcnames[j], i+1))
-
-                if show_plots:
-                    plt.show()
-
-                else:
-                    plt.close()
-
-                k = np.where(self.masks[j])[0]
-                self.masks[j][k[~mask]] = False
-
-                self.tt[j] = self.tt[j][mask]
-                self.f[j] = self.f[j][mask]
-                self.ferr[j] = self.ferr[j][mask]
-
-
-
-            if lastclipped < 10:
-                break
 
         if self.fit_transit:
-            print('\nTotal points clipped:')
-            print('All light curves: {0}'.format(np.sum(clipped)))
-            for i in range(len(self.tt)):
-                print('{0}: {1}'.format(self.lcnames[i], clipped[i]))
+            pickle.dump(self.masks, open(self.direc+'Masks/'+name+'_masks.p', 'wb'))
+        
 
         self.x = x
         print('\nInitial parameters after optimization:')
         print(x)
 
-        if self.fit_transit:
-            pickle.dump(self.masks, open(self.direc+'Masks/'+name+'_masks.p', 'wb'))
+        
+        pos = self.initialize_chains()
 
-        self.parnames = {}
-
-        pos = []
-
-        for i, k in enumerate(keys):
-
-            self.parnames[k] = i
-
-            if 'log(P)' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/0.0001, (np.exp(ub)-np.exp(x[k]))/0.0001, loc = np.exp(x[k]), scale = 0.0001, size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.0001, self.nwalk)))
-
-            if 'Tc' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/0.0001, (ub-x[k])/0.0001, loc = x[k], scale = 0.0001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
-
-            if 'TT' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/0.0001, (ub-x[k])/0.0001, loc = x[k], scale = 0.0001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.0001, self.nwalk))
-
-            if 'ror' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/(0.1*x[k]), (ub-x[k])/(0.1*x[k]), loc = x[k], scale = 0.1*x[k], size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.1*x[k], self.nwalk))
-
-            if 'log(a/rs)' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/0.1, (np.exp(ub)-np.exp(x[k]))/0.1, loc = np.exp(x[k]), scale = 0.1, size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.1, self.nwalk)))
-
-            if 'cos(i)' in k:
-                lb, ub = 0, 1
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
-
-            if 'log(K)' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/0.01, (np.exp(ub)-np.exp(x[k]))/0.01, loc = np.exp(x[k]), scale = 0.01, size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01, self.nwalk)))
-
-            if 'secw' in k or 'sesw' in k:
-                lb, ub = -1, 1
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
-
-            if k.split()[0] == 'e':
-                lb, ub = 0, 0.9
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
-
-            if k.split()[0] == 'w':
-                lb, ub = -np.pi, np.pi
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-x[k])/1, (ub-x[k])/1, loc = x[k], scale = 1, size = self.nwalk))
-
-            if 'F0' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.001, self.nwalk))
-
-            if k == 'gamma':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/0.1, (ub-x[k])/0.1, loc = x[k], scale = 0.1, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.1, self.nwalk))
-
-            if k == 'gamma_dot':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.01, self.nwalk))
-
-            if k == 'gamma_ddot':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/0.001, (ub-x[k])/0.001, loc = x[k], scale = 0.001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.001, self.nwalk))
-
-            if '_gp' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(x[k]))/(0.01*np.exp(x[k])), (np.exp(ub)-np.exp(x[k]))/(0.01*np.exp(x[k])), loc = np.exp(x[k]), scale = 0.01*np.exp(x[k]), size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(x[k]), 0.01*np.exp(x[k]), self.nwalk)))
-
-            if 'rv_offset' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-x[k])/0.1, (ub-x[k])/0.1, loc = x[k], scale = 0.1, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(x[k], 0.1, self.nwalk))
-
-            if k in ['u1','u2']:
-                lb, ub = 0, 1
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
-
-            if k == 'eep':
-                pos.append(np.random.normal(x[k], 0.1, self.nwalk))
-
-            if k == 'log10(age)':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log10(truncnorm.rvs((10**lb-10**x[k])/(10**x[k]/100), (10**ub-10**x[k])/(10**x[k]/100), loc = 10**x[k], scale = 10**x[k]/100, size = self.nwalk)))
-                else:
-                    pos.append(np.log10(np.random.normal(10**x[k], 10**x[k]/100, self.nwalk)))
-
-            if k == 'feh':
-                lb, ub = -0.5, 0.5
-                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
-
-            if k == 'distance':
-                pos.append(np.random.normal(x[k], 1, self.nwalk))
-
-            if k == 'AV':
-                lb, ub = 0, np.inf
-                pos.append(truncnorm.rvs((lb-x[k])/0.01, (ub-x[k])/0.01, loc = x[k], scale = 0.01, size = self.nwalk))
-
-
-        pos = np.transpose(np.array(pos))
-
-
-        sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
-
-        print('\nRunning MCMC burn-in.')
-
-        state = sampler.run_mcmc(pos, self.nburn, progress = True)
-        sampler.reset()
-
-        print('\nRunning MCMC sampling.')
-
-        sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
-
-        self.samples = sampler.get_chain()
-
-        self.log_likes = sampler.get_log_prob()
-
-        if self.fit_transit and np.any(self.fit_ttv):
-
-            self.blobs = sampler.get_blobs()
-
+        self.run_sampler(pos, skip_state_check)
+        
         if save_samples:
 
             z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
@@ -1167,6 +805,412 @@ class ExoSystem:
         print('')
 
         return x
+
+
+    def sigma_clip(self, name: str, show_plots: bool):
+        """Not meant to be run on its own. Performs sigma clipping on the light curve data, with a threshold set by the sigma_clip parameter in fit.
+        Initial fits are done using scipy minimize on the log likelihood function. Stops after 10 iterations or when the number of clipped points in an
+        iteration is under 10 per data set. Saves plots to Plots/name/sigma_clip/.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save the plots to.
+            
+            show_plot (bool): Whether or not to show the plots.
+        """
+
+        print('\nStarting sigma clipping of lightcurves.')
+
+        clipped = [0]*len(self.tt)
+
+        for i in range(10):
+
+            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead', args = (self,))
+            x = {k:v for k,v in zip(self.keys, res.x)}
+
+            if not os.path.isdir(self.direc+'Plots/'+name+'/sigma_clip'):
+                os.mkdir(self.direc+'Plots/'+name+'/sigma_clip')            
+
+            if self.use_priors:
+
+                y = x | self.fixed
+
+                for j in range(self.n):
+
+                    if 'e {0}'.format(j+1) in y:
+
+                        y['secw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.cos(y['w {0}'.format(j+1)])
+                        y['sesw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.sin(y['w {0}'.format(j+1)])
+
+            else:
+
+                y = x.copy()
+
+            if self.fit_star:
+
+                rstar, mstar, Tstar, loggstar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg'])
+
+                arlist = []
+                for j in range(self.n):
+
+                    if not self.is_transit[j]:
+                        arlist.append(np.nan)
+                        continue
+
+                    if self.fit_ttv[j]:
+
+                        p = get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = 1)[0]
+
+                    else:
+
+                        p = np.exp(y['log(P) {0}'.format(j+1)])
+
+                    if self.is_rv[j] and self.fit_rv:
+
+                        e = 0
+                        if self.fit_ecc[j]:
+                            e = y['secw {0}'.format(j+1)]**2 + y['sesw {0}'.format(j+1)]**2
+
+                        mp = calc_m_from_k(p, np.exp(y['log(K) {0}'.format(j+1)]), e, np.arccos(y['cos(i) {0}'.format(j+1)]), mstar)
+
+                    else:
+
+                        mp = 0
+
+                    ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+
+                    arlist.append(ar)
+
+            pars = []
+            for j in range(self.n):
+
+                if not self.is_transit[j]:
+                    continue
+
+                if self.fit_ttv[j]:
+
+                    pars.append(get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = arlist[j] if self.fit_star else None))
+
+                else:
+
+                    pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None))
+
+
+            lastclipped = [0]*len(self.tt)
+
+            for j in range(len(self.tt)):
+
+                mean = y['F0 {0}'.format(self.lcnames[j])]
+
+                fm = mean
+
+                ld = self.ld[self.filters[j]]
+
+                if self.fit_ld:
+
+                    ld = [y['u1 {0}'.format(self.filters[j])], y['u2 {0}'.format(self.filters[j])]]
+
+                if self.fit_star:
+
+                    ld = [self.ldgrids[self.filters[j]][0]([Tstar, loggstar, y['feh']])[0], self.ldgrids[self.filters[j]][1]([Tstar, loggstar, y['feh']])[0]]
+
+                for k in range(self.n):
+
+                    if not self.is_transit[k]:
+                        continue
+
+                    l = np.sum(self.is_transit[:k])
+
+                    if self.fit_ttv[k]:
+
+                        p = pars[l][0]
+
+                        for z in range(len(self.ttvi['{0}'.format(k+1)])):
+
+                            if self.ttvsectors['{0} {1}'.format(k+1, z+1)] != j:
+                                continue
+
+                            ttime = y['TT {0} {1}'.format(k+1, z+1)]
+
+                            pars[l][1] = ttime
+
+                            ind = np.where((self.tt[j] >= ttime - p/4) & (self.tt[j] <= ttime + p/4))
+
+                            fm0 = np.zeros(len(self.tt[j]))
+
+                            lc = lightCurve(pars[l], self.tt[j][ind], ld, self.exptimes[j], self.supersamples[j])
+
+                            fm0[ind] += lc
+
+                            fm += fm0
+
+                    else:
+
+                        fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j])
+
+                resid = self.f[j] - fm
+
+                gpf = 0
+
+                if self.detrend[j]:
+
+                    gp = set_gp_params(np.exp(y['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(y['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[j])
+
+                    gpf = gp.predict(resid)
+
+                    resid = self.f[j] - fm - gpf
+
+                rms = np.sqrt(np.median(resid**2))
+
+                mask = abs(resid) < self.sigma_clip * rms
+
+                c = np.sum(~mask)
+                lastclipped[j] = c
+                clipped[j] += c
+
+                fig, ax = plt.subplots(3 if self.detrend[j] else 2, sharex = True)
+
+                z = 0
+
+                if self.detrend[j]:
+
+                    z = 1
+
+                    ax[0].scatter(self.tt[j], self.f[j], c = 'black', marker = '.', zorder = 1)
+                    ax[0].plot(self.tt[j], gpf + mean, c = 'mediumseagreen', zorder = 2)
+                    ax[0].set_rasterized(True)
+
+                ax[0+z].scatter(self.tt[j], self.f[j] - gpf, c = 'black', marker = '.', zorder = 1)
+                ax[0+z].plot(self.tt[j], fm, c = 'mediumseagreen', zorder = 2)
+                ax[0+z].set_rasterized(True)
+
+                ax[1+z].scatter(self.tt[j][mask], (self.f[j] - gpf - fm)[mask], c = 'black', marker = '.', zorder = 1)
+                ax[1+z].scatter(self.tt[j][~mask], (self.f[j] - gpf - fm)[~mask], c = 'red', marker = 'x', zorder = 2)
+                ax[1+z].axhline(0, c = 'mediumseagreen', zorder = 3)
+                ax[1+z].set_rasterized(True)
+
+                ax[0].set_title('{0} Clipped {1}'.format(self.lcnames[j], c))
+
+                fig.savefig(self.direc+'Plots/'+name+'/sigma_clip/'+'{0}_clip_{1}.png'.format(self.lcnames[j], i+1))
+
+                if show_plots:
+                    plt.show()
+
+                else:
+                    plt.close()
+
+                k = np.where(self.masks[j])[0]
+                self.masks[j][k[~mask]] = False
+
+                self.tt[j] = self.tt[j][mask]
+                self.f[j] = self.f[j][mask]
+                self.ferr[j] = self.ferr[j][mask]
+
+
+            if np.all(np.array(lastclipped) < 10):
+                break
+
+        if self.fit_transit:
+            print('\nTotal points clipped:')
+            print('All light curves: {0}'.format(np.sum(clipped)))
+            for i in range(len(self.tt)):
+                print('{0}: {1}'.format(self.lcnames[i], clipped[i]))
+
+
+    def initialize_chains(self) -> np.typing.NDArray:
+        """Not meant to be run on its own. Initializes random positions for the MCMC chains around the initial best fits from optimization. Ensures
+        that parameters stay within their bounds when applicable using truncated Gaussian distributions. Otherwise, just uses Gaussian distributions
+        to add a little variance to the chains. Also builds a dict, self.parnames, along the way which keeps track of the index of each parameter
+        in the pos array.
+
+        Returns:
+            ndarray: The initial walker positions.
+        """
+
+        self.parnames = {}
+
+        pos = []
+
+        for i, k in enumerate(self.keys):
+
+            self.parnames[k] = i
+
+            if 'log(P)' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.0001, (np.exp(ub)-np.exp(self.x[k]))/0.0001, loc = np.exp(self.x[k]), scale = 0.0001, size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.0001, self.nwalk)))
+
+            if 'Tc' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/0.0001, (ub-self.x[k])/0.0001, loc = self.x[k], scale = 0.0001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.0001, self.nwalk))
+
+            if 'TT' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/0.0001, (ub-self.x[k])/0.0001, loc = self.x[k], scale = 0.0001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.0001, self.nwalk))
+
+            if 'ror' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/(0.1*self.x[k]), (ub-self.x[k])/(0.1*self.x[k]), loc = self.x[k], scale = 0.1*self.x[k], size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.1*self.x[k], self.nwalk))
+
+            if 'log(a/rs)' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.1, (np.exp(ub)-np.exp(self.x[k]))/0.1, loc = np.exp(self.x[k]), scale = 0.1, size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.1, self.nwalk)))
+
+            if 'cos(i)' in k:
+                lb, ub = 0, 1
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+
+            if 'log(K)' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.01, (np.exp(ub)-np.exp(self.x[k]))/0.01, loc = np.exp(self.x[k]), scale = 0.01, size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01, self.nwalk)))
+
+            if 'secw' in k or 'sesw' in k:
+                lb, ub = -1, 1
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+
+            if k.split()[0] == 'e':
+                lb, ub = 0, 0.9
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+
+            if k.split()[0] == 'w':
+                lb, ub = -np.pi, np.pi
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-self.x[k])/1, (ub-self.x[k])/1, loc = self.x[k], scale = 1, size = self.nwalk))
+
+            if 'F0' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
+
+            if k == 'gamma':
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/0.1, (ub-self.x[k])/0.1, loc = self.x[k], scale = 0.1, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
+
+            if k == 'gamma_dot':
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.01, self.nwalk))
+
+            if k == 'gamma_ddot':
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
+
+            if '_gp' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/(0.01*np.exp(self.x[k])), (np.exp(ub)-np.exp(self.x[k]))/(0.01*np.exp(self.x[k])), loc = np.exp(self.x[k]), scale = 0.01*np.exp(self.x[k]), size = self.nwalk)))
+                else:
+                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), self.nwalk)))
+
+            if 'rv_offset' in k:
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(truncnorm.rvs((lb-self.x[k])/0.1, (ub-self.x[k])/0.1, loc = self.x[k], scale = 0.1, size = self.nwalk))
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
+
+            if k in ['u1','u2']:
+                lb, ub = 0, 1
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+
+            if k == 'eep':
+                pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
+
+            if k == 'log10(age)':
+                if self.use_priors:
+                    lb, ub = self.allpriors.get_bounds(k)
+                    pos.append(np.log10(truncnorm.rvs((10**lb-10**self.x[k])/(10**self.x[k]/100), (10**ub-10**self.x[k])/(10**self.x[k]/100), loc = 10**self.x[k], scale = 10**self.x[k]/100, size = self.nwalk)))
+                else:
+                    pos.append(np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, self.nwalk)))
+
+            if k == 'feh':
+                lb, ub = -0.5, 0.5
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+
+            if k == 'distance':
+                pos.append(np.random.normal(self.x[k], 1, self.nwalk))
+
+            if k == 'AV':
+                lb, ub = 0, np.inf
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+
+
+        pos = np.transpose(np.array(pos))
+
+        return pos
+
+
+    def run_sampler(self, pos: np.typing.NDArray, skip_state_check: bool):
+        """Not meant to be run on its own. Runs the MCMC sampler for burn-in and sample steps using emcee.
+
+        Args:
+            pos (ndarray): The initial positions of the chains generated by initialize_chains.
+            skip_state_check (bool): Whether or not to skip the initial state check after the burn-in.
+        """
+
+        sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(self.x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
+
+        print('\nRunning MCMC burn-in.')
+
+        state = sampler.run_mcmc(pos, self.nburn, progress = True)
+        sampler.reset()
+
+        print('\nRunning MCMC sampling.')
+
+        sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
+
+        self.samples = sampler.get_chain()
+
+        self.log_likes = sampler.get_log_prob()
+
+        if self.fit_transit and np.any(self.fit_ttv):
+
+            self.blobs = sampler.get_blobs()
 
 
     def flatten_chains(self):
