@@ -318,10 +318,10 @@ class AllPriors:
         lbound, ubound = -np.inf, np.inf
 
         if var in self.prior_dict:
-                
-                l, u = self.prior_dict[var].bounds()
-                lbound = max(lbound, l)
-                ubound = min(ubound, u)
+            
+            l, u = self.prior_dict[var].bounds()
+            lbound = max(lbound, l)
+            ubound = min(ubound, u)
 
         if var == 'log10(age)' and 'age' in self.prior_dict:
 
@@ -399,7 +399,7 @@ class AllPriors:
 
             else:
 
-                blist = [np.sqrt(el)*np.sin(wl), np.sqrt(el)*np.sin(wu), np.sqrt(eu)*np.sin(wl), np.sqrt(eu)*np.sin(eu)]
+                blist = [np.sqrt(el)*np.sin(wl), np.sqrt(el)*np.sin(wu), np.sqrt(eu)*np.sin(wl), np.sqrt(eu)*np.sin(wu)]
 
                 if wl < -np.pi/2 < wu:
                     blist.append(-np.sqrt(eu))
