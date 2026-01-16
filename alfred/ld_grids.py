@@ -95,15 +95,15 @@ def load_ld_grid(filter_name: str) -> tuple[LinearNDInterpolator, LinearNDInterp
     return interpu1, interpu2
 
 
-def calc_ld(filter_name: str, T: float, logg: float, feh: float) -> tuple[float, float]:
+def calc_ld(filter_name: str, T: np.typing.ArrayLike, logg: np.typing.ArrayLike, feh: np.typing.ArrayLike) -> tuple[np.typing.NDArray, np.typing.NDArray]:
     """Calculates limb darkening parameters from a grid given the input stellar parameters.
 
     Args:
         filter_name (str): The name of the filter to generate the limb darkening parameters in. Must have an existing grid in alfred. By default, only
             TESS and Kepler are included. More can be generated with exoctk installed and by running generate_ld_grid.
-        T (float): The stellar effective temperature in K.
-        logg (float): The log10 of the stellar surface gravity in cm/s^2.
-        feh (float): Stellar metallicity in dex.
+        T (ArrayLike): The stellar effective temperature in K.
+        logg (ArrayLike): The log10 of the stellar surface gravity in cm/s^2.
+        feh (ArrayLike): Stellar metallicity in dex.
 
     Returns:
         tuple: The two quadratic limb darkening parameters.
