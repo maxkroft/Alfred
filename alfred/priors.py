@@ -369,7 +369,7 @@ class AllPriors:
                 lbound = max(lbound, np.cos(u))
                 ubound = min(ubound, np.cos(l))
 
-        elif var[:4] == 'secw' or var[:4] == 'sesw':
+        elif var[:4] in ['secw','sesw']:
 
             el, eu = 0, 0.9
             wl, wu = -np.pi, np.pi
@@ -411,6 +411,41 @@ class AllPriors:
 
                 lbound = max(lbound, min(blist))
                 ubound = min(ubound, max(blist))
+
+        elif var.split()[0] in ['e','w']:
+
+            secwl, secwu = -1, 1
+            seswl, seswu = -1, 1
+
+            svar = ' '.join(['secw']+var.split()[1:])
+            if svar in self.prior_dict:
+                secwl2, secwu2 = self.prior_dict[svar].bounds()
+                secwl = max(secwl, secwl2)
+                secwu = min(secwu, secwu2)
+
+            svar = ' '.join(['sesw']+var.split()[1:])
+            if svar in self.prior_dict:
+                seswl2, seswu2 = self.prior_dict[svar].bounds()
+                seswl = max(seswl, seswl2)
+                seswu = min(seswu, seswu2)
+
+            if var.split()[0] == 'e':
+
+                lbound = max(lbound, secwl**2 + seswl**2)
+                ubound = min(ubound, secwu**2 + seswu**2)
+
+            else:
+
+                if secwl < 0:
+
+                    lbound = max(lbound, -np.pi)
+                    ubound = min(ubound, np.pi)
+
+                else:
+
+                    lbound = max(lbound, min(np.arctan2(seswl,secwl), np.arctan2(seswl,secwu)))
+                    ubound = min(ubound, max(np.arctan2(seswu,secwl), np.arctan2(seswu,secwu)))
+
 
         return lbound, ubound
     
