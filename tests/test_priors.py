@@ -1,9 +1,10 @@
 from astropy.table import Table
 import numpy as np
+import pytest
 
 from alfred import priors
 
-
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_all_priors():
     """Tests initializing an AllPriors object, ensuring that the correct prior functions and fixed values are stored. Tests applying the priors to
     get a log likelihood. Tests retrieving bounds from variables and transforming those bounds to new variables. Tests Priors object functionality

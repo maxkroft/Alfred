@@ -34,3 +34,8 @@ version = {attr = "alfred.__version__"}
 
 [tool.setuptools.packages]
 find = {}
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning"
+]
