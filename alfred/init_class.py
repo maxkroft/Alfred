@@ -214,7 +214,7 @@ class Init_rv(InitFile):
 
         self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
                            units = [None, None, None, None, None, 'BJD', None, None],
-                           dtype = [str,str,str,str,str,int,float,str])
+                           dtype = [str,str,str,str,str,float,float,str])
 
         if not empty:
 
@@ -549,7 +549,7 @@ class Init_ld(InitFile):
 
             u1, u2 = calc_ld(filt, T, logg, feh)
 
-            row = [filt, u1, u2]
+            row = [u1, u2, filt]
 
             self.table.add_row(row)
 

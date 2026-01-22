@@ -681,21 +681,20 @@ class ExoSystem:
 
         if self.fit_transit and self.sigma_clip != 0:
             
-            self.sigma_clip(name, show_plots)
+            self.run_sigma_clip(name, show_plots)
 
         else:
 
             res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead', args = (self,))
-            x = {k:v for k,v in zip(self.keys, res.x)}
+            self.x = {k:v for k,v in zip(self.keys, res.x)}
 
 
         if self.fit_transit:
             pickle.dump(self.masks, open(self.direc+'Masks/'+name+'_masks.p', 'wb'))
         
 
-        self.x = x
         print('\nInitial parameters after optimization:')
-        print(x)
+        print(self.x)
 
         
         pos = self.initialize_chains()
@@ -807,7 +806,7 @@ class ExoSystem:
         return x
 
 
-    def sigma_clip(self, name: str, show_plots: bool):
+    def run_sigma_clip(self, name: str, show_plots: bool):
         """Not meant to be run on its own. Performs sigma clipping on the light curve data, with a threshold set by the sigma_clip parameter in fit.
         Initial fits are done using scipy minimize on the log likelihood function. Stops after 10 iterations or when the number of clipped points in an
         iteration is under 10 per data set. Saves plots to Plots/name/sigma_clip/.
@@ -1009,11 +1008,12 @@ class ExoSystem:
             if np.all(np.array(lastclipped) < 10):
                 break
 
-        if self.fit_transit:
-            print('\nTotal points clipped:')
-            print('All light curves: {0}'.format(np.sum(clipped)))
-            for i in range(len(self.tt)):
-                print('{0}: {1}'.format(self.lcnames[i], clipped[i]))
+        print('\nTotal points clipped:')
+        print('All light curves: {0}'.format(np.sum(clipped)))
+        for i in range(len(self.tt)):
+            print('{0}: {1}'.format(self.lcnames[i], clipped[i]))
+
+        self.x = x
 
 
     def initialize_chains(self) -> np.typing.NDArray:
