@@ -1405,11 +1405,13 @@ class ExoSystem:
                     ars = (a*u.AU).to(u.Rsun).value / rstar
                     self.dres['a/rs {0}'.format(i+1)] = ars
 
-                teq = (1/4)**(1/4) * T * ars**(-1/2)
-                self.dres['teq {0}'.format(i+1)] = teq
+                if (self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]):
 
-                sinc = (constants.sigma_sb * (T * u.K)**4 * ars**(-2) / einsol).to(u.dimensionless_unscaled)
-                self.dres['sinc {0}'.format(i+1)] = sinc
+                    teq = (1/4)**(1/4) * T * ars**(-1/2)
+                    self.dres['teq {0}'.format(i+1)] = teq
+
+                    sinc = (constants.sigma_sb * (T * u.K)**4 * ars**(-2) / einsol).to(u.dimensionless_unscaled)
+                    self.dres['sinc {0}'.format(i+1)] = sinc
 
                 if self.is_transit[i] and self.fit_transit:
 
