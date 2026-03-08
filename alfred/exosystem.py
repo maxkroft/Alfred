@@ -1824,7 +1824,7 @@ class ExoSystem:
 
             ax[0][j].set_title('Planet {0}'.format(i+1))
 
-            for k in range(num1):
+            for k in range(len(vargrid[j])):
 
                 v = self.parnames[vargrid[j][k]+' {0}'.format(i+1)]
                 ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
