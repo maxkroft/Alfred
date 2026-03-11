@@ -122,7 +122,7 @@ class Init_lcs(InitFile):
         
         else:
 
-            self.table.add_row(['None','None','None','None','None','None',np.nan,np.nan,np.nan,'None',False])
+            self.table.add_row(['None','None','None','None','None','None',0,np.nan,np.nan,'None',False])
 
         self.save()
 
