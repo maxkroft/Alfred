@@ -1426,7 +1426,7 @@ class ExoSystem:
         Args:
             name (str): Name of the run. Sets the folder in Plots to save the plots to.
 
-            show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
+            show_plots (bool, optional): Whether or not to show plots. Plots are saved regardless. Default is True.
         """
 
         if self.fit_planets:
@@ -1480,7 +1480,6 @@ class ExoSystem:
             self.gen_magfit(name)
 
             self.plot_sed_fit(name, show_plot = show_plots)
-
 
     @property
     def results(self):
@@ -3071,7 +3070,7 @@ class ExoSystem:
         """Allows you to examine the chains of a specific parameter. Hovering over a chain with your mouse will highlight it and display the index
         of the chain in the 1 axis (0-indexed) of ExoSystem.samples.
 
-        Useful for identifying the index of an outlier chain so that you can remove it.
+        Useful for identifying the index of an outlier chain so that you can remove it using ExoSystem.remove_chains.
 
         Must have the full samples of the run available as Exosystem.samples. Either this is from having just run a fit with this ExoSystem object,
         or from loading in the results of a previous run which had save_samples set to True.
@@ -3096,6 +3095,39 @@ class ExoSystem:
         ax.set_title('Mouse over a chain to see its index.')
 
         plt.show()
+
+
+    def remove_chains(self, name: str, idxs: np.typing.ArrayLike, show_plots: bool = True):
+        """Removes chains of the specified indices from samples, log_likes, and the lists of derived periods and tcs in a ttv fit. Then, reruns
+        ExoSystem.calc_gelman_rubin, ExoSystem.flatten_chains, ExoSystem.make_results, and ExoSystem.make_plots.
+
+        One way to find outlier chains is by running ExoSystem.examine_chains first, then hovering over the plot to get indices of the outliers.
+
+        Must have the full samples of the run available as Exosystem.samples. Either this is from having just run a fit with this ExoSystem object,
+        or from loading in the results of a previous run which had save_samples set to True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save the plots to, as well as the names of the output pickle files.
+
+            idxs (ArrayLike): Indices of the chains to be removed.
+
+            show_plots (bool, optional): Whether or not to show plots. Plots are saved regardless. Default is True.
+        """
+
+        self.samples = np.delete(self.samples, idxs, axis = 1)
+        self.log_likes = np.delete(self.log_likes, idxs, axis = 1)
+
+        if hasattr(self, 'blobs'):
+            self.blobs = np.delete(self.blobs, idxs, axis = 1)
+
+        self.calc_gelman_rubin()
+
+        self.flatten_chains()
+
+        self.make_results(name)
+
+        self.make_plots(name, show_plots)
+        
 
 
     def print_results(self, name: str):
