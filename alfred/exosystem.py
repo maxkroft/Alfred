@@ -2912,11 +2912,7 @@ class ExoSystem:
                 ax['c{0}'.format(j)].set_ylabel('RV [m/s]', fontsize = 20)
 
             else:
-                ax['c{0}'.format(j)].sharey(ax['c{0}'.format(j-1)])
                 plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
-
-            if j%2 == 0 and j > 0:
-                ax['c{0}'.format(j)].sharey(ax['c0'])
 
 
             for ii, kk in enumerate(np.unique(self.which_rv)):
@@ -2944,11 +2940,7 @@ class ExoSystem:
                 ax['d{0}'.format(j)].set_ylabel('Resid. [m/s]', fontsize = 20)
 
             else:
-                ax['d{0}'.format(j)].sharey(ax['d{0}'.format(j-1)])
                 plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
-
-            if j%2 == 0 and j > 0:
-                ax['d{0}'.format(j)].sharey(ax['d0'])
 
         
         fig.savefig(self.direc+'Plots/'+name+'/rv.png')
