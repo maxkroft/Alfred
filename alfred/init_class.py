@@ -180,6 +180,8 @@ class Init_lcs(InitFile):
 
         self.table.add_row(row)
 
+        self.save()
+
 
 class Init_rv(InitFile):
     """Class for creating, loading, and editing RV data initialization files. Inherits from InitFile. Contains information for loading RV data.
@@ -284,6 +286,8 @@ class Init_rv(InitFile):
         row.append(mskms)
 
         self.table.add_row(row)
+
+        self.save()
 
 
 class Init_star(InitFile):
@@ -569,6 +573,8 @@ class Init_ld(InitFile):
 
             self.table.add_row(row)
 
+        self.save()
+
 
 class Init_planets(InitFile):
     """Class for creating, loading, and editing planet parameter initialization files. Inherits from InitFile. Contains information on what kinds of
@@ -691,6 +697,8 @@ class Init_planets(InitFile):
 
         self.table.add_row(row)
 
+        self.save()
+
 
 class Init_ttvs(InitFile):
     """Class for creating, loading, and editing TTV initialization files. Inherits from InitFile. Contains initial estimates for all of the transit
@@ -768,6 +776,8 @@ class Init_ttvs(InitFile):
 
         col = Column(col, dtype = float)
         self.table.add_column(col, name = num)
+
+        self.save()
 
 
 class Init_priors(InitFile):
@@ -985,6 +995,8 @@ class Init_priors(InitFile):
 
         self.table.add_row(row)
 
+        self.save()
+
 
 
 
@@ -1023,9 +1035,15 @@ def create_folder(direc: str):
 
     if x.lower() == 'y':
 
-        Init_lcs(direc).create()
+        try:
+            Init_lcs(direc).create()
+        except:
+            print('Something went wrong with Init_lcs.create(). This will need to be rerun.')
 
-        Init_ld(direc).create()
+        try:
+            Init_ld(direc).create()
+        except:
+            print('Something went wrong with Init_ld.create(). This will need to be rerun.')
 
     else:
 
@@ -1040,7 +1058,10 @@ def create_folder(direc: str):
 
     if x.lower() == 'y':
 
-        Init_rv(direc).create()
+        try:
+            Init_rv(direc).create()
+        except:
+            print('Something went wrong with Init_rv.create(). This will need to be rerun.')
 
     else:
 
@@ -1048,8 +1069,13 @@ def create_folder(direc: str):
 
         _ = input('Once you have these, run the function create_init_rv. Press any key to continue.')
 
-    
-    Init_star(direc).create()
+    try:
+        Init_star(direc).create()
+    except:
+        print('Something went wrong with Init_star.create(). This will need to be rerun.')
 
-    Init_planets(direc).create()
+    try:
+        Init_planets(direc).create()
+    except:
+        print('Something went wrong with Init_planets.create(). This will need to be rerun.')
 
