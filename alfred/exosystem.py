@@ -3129,7 +3129,6 @@ class ExoSystem:
         self.make_plots(name, show_plots)
         
 
-
     def print_results(self, name: str):
         """Loads in and prints out the results table from Results/name.txt that was created by Exosystem.make_results(name).
 
