@@ -2463,7 +2463,6 @@ class ExoSystem:
                 ax['a'].text(0.01, 0.99, 'Raw', fontsize = 20, ha = 'left', va = 'top', transform = ax['a'].transAxes)
 
                 ax['a'].tick_params(axis = 'both', labelsize = 15)
-                ax['a'].set_yticks(ticks = ax['a'].get_yticks(), labels = np.round((np.array(ax['a'].get_yticks())-1)*1000, 1))
                 ax['a'].set_title(str(sec), fontsize = 20)
 
             ax['b'].errorbar(self.tt[i], self.f[i] - (gpf if self.detrend[i] else 0), yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
@@ -2484,7 +2483,6 @@ class ExoSystem:
             ax['b'].legend(fontsize = 15)
 
             if not self.detrend[i]:
-                ax['b'].set_yticks(ticks = ax['b'].get_yticks(), labels = np.round((np.array(ax['b'].get_yticks())-1)*1000, 1))
                 ax['b'].set_title(str(sec), fontsize = 20)
 
             mod = np.sum(fm, axis = 0) + mean + (gpf if self.detrend[i] else 0)
@@ -2494,7 +2492,6 @@ class ExoSystem:
             ax['c'].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['c'].transAxes)
 
             ax['c'].tick_params(axis = 'both', labelsize = 15)
-            ax['c'].set_yticks(ticks = ax['c'].get_yticks(), labels = np.round(np.array(ax['c'].get_yticks())*1000, 1))
             ax['b'].sharex(ax['c'])
             plt.setp(ax['b'].get_xticklabels(), visible = False)
             ax['c'].set_xlabel('Time [BJD-2450000]', fontsize = 20)
@@ -2504,7 +2501,7 @@ class ExoSystem:
                 ax['a'].sharex(ax['c'])
                 plt.setp(ax['a'].get_xticklabels(), visible = False)
 
-            fig.supylabel('Relative Flux [ppt]', fontsize = 20)
+            fig.supylabel('Relative Flux', fontsize = 20)
 
             for a in ax:
                 ax[a].set_rasterized(True)
@@ -2616,7 +2613,6 @@ class ExoSystem:
 
                 ax['a{0}'.format(j)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
 
-                ax['a{0}'.format(j)].set_yticks(ticks = ax['a{0}'.format(j)].get_yticks()[1:-1], labels = np.round((np.array(ax['a{0}'.format(j)].get_yticks()[1:-1])-1)*1000, 1))
                 ax['a{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
 
                 ax['b{0}'.format(j)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
@@ -2624,13 +2620,12 @@ class ExoSystem:
 
                 ax['b{0}'.format(j)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['b{0}'.format(j)].transAxes)
 
-                ax['b{0}'.format(j)].set_yticks(ticks = ax['b{0}'.format(j)].get_yticks(), labels = np.round(np.array(ax['b{0}'.format(j)].get_yticks())*1000, 1))
                 ax['b{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
 
             ax['a0'].set_xlim(-0.5,0.5)
             ax['a0'].set_title(str(sec), fontsize = 20)
             ax['b{0}'.format(self.nt-1)].set_xlabel('Time since $T_{C}$ [days]', fontsize = 20)
-            fig.supylabel('Relative Flux [ppt]', fontsize = 20)
+            fig.supylabel('Relative Flux', fontsize = 20)
 
             for a in ax:
                 ax[a].set_rasterized(True)
