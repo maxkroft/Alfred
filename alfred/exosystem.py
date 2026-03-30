@@ -1392,8 +1392,8 @@ class ExoSystem:
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
 
-        par_units = {'log(P)': 'days', 'Tc': 'BJD-2457000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'secw': '', 'sesw': '',
-                     'TT': 'BJD-2457000', 'F0': '', 'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day',
+        par_units = {'log(P)': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'secw': '', 'sesw': '',
+                     'TT': 'BJD-2450000', 'F0': '', 'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day',
                      'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex', 'distance': 'pc',
                      'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2',
                      'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'deg',
@@ -2908,9 +2908,6 @@ class ExoSystem:
             if j%2 == 0:
                 ax['c{0}'.format(j)].set_ylabel('RV [m/s]', fontsize = 20)
 
-            else:
-                plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
-
 
             for ii, kk in enumerate(np.unique(self.which_rv)):
 
@@ -2935,9 +2932,6 @@ class ExoSystem:
 
             if j%2 == 0:
                 ax['d{0}'.format(j)].set_ylabel('Resid. [m/s]', fontsize = 20)
-
-            else:
-                plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
 
         
         fig.savefig(self.direc+'Plots/'+name+'/rv.png')
