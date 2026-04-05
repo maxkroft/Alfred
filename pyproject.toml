@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools >= 61.0",
+    "setuptools >= 62.3.0",
     "cython",
     "numpy"
     ]
@@ -9,6 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "Alfred"
 dynamic = ["version"]
+authors = [{name = "Max Kroft"}]
 dependencies = [
     "numpy",
     "matplotlib",
@@ -34,6 +35,9 @@ version = {attr = "alfred.__version__"}
 
 [tool.setuptools.packages]
 find = {}
+
+[tool.setuptools.package-data]
+alfred = ["ld_grids/*"]
 
 [tool.pytest.ini_options]
 filterwarnings = [
