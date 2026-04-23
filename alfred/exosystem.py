@@ -720,7 +720,7 @@ class ExoSystem:
         self.make_plots(name, show_plots)
 
         print('')
-        self.print_results(name)
+        self.restab.pprint_all()
 
 
     def initial_star_fit(self):
@@ -1177,13 +1177,13 @@ class ExoSystem:
 
     def make_results(self, name: str):
         """Converts flat_samples and flat_log_likes into a dict that stores the chains of parameters that were directly fit, as well as the log
-        likelihood of each sample. Saves these to the pickle file Output/name_res.p. Accessible through ExoSystem.results.
+        likelihood of each sample. Saves these to the pickle file Output/name_res.p. Accessible through ExoSystem.chains.
 
         Also creates a dict of flat chains of derived parameters (e.g. period from log(period), or planet equilibrium temperature). Saves these to the
-        pickle file Output/name_dres.p. Accessible through ExoSystem.derived_results.
+        pickle file Output/name_dres.p. Accessible through ExoSystem.derived_chains.
 
-        Combines results and derived_results into a single human-readable ascii table which is saved to Results/name.txt. Can be directly printed out
-        by calling ExoSystem.print_results(name).
+        Combines results and derived_results into a single human-readable ascii table which is saved to Results/name.txt. The astropy table can be
+        directly accesed through ExoSystem.results.
 
         Writes out specific run settings (fit_transit, fit_rv, fit_star, fit_ld, use_priors, lc_supersample_size, and fixed parameters if applicable)
         to the pickle file Output/name_run_settings.p. These are loaded back in with ExoSystem.load_results and are used to tell plotting functions
@@ -1410,6 +1410,7 @@ class ExoSystem:
             out.append([x, par_units[x.split()[0]], np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
 
         tab = Table(rows = out, names = ['Parameter','Units','Median','-Error','+Error'])
+        self.restab = tab
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
         run_settings = {'fit_transit': self.fit_transit, 'fit_rv': self.fit_rv, 'fit_star': self.fit_star, 'fit_ld': self.fit_ld, 'use_priors': self.use_priors, 'lc_supersample_size': self.lc_supersample_size}
@@ -1483,6 +1484,14 @@ class ExoSystem:
 
     @property
     def results(self):
+        """Astropy table storing median and 1 sigma (16th and 84th percentile) values for fit parameters and derived parameters.
+
+        Use the chains object or derived chains object for flattened chains of these parameters, as well as a description of them in the docstrings.
+        """
+        return self.restab
+
+    @property
+    def chains(self):
         """Dict which stores the flattened chains of fit parameters. Keys are the parameter names.
 
         Potential fit parameters:
@@ -1514,7 +1523,7 @@ class ExoSystem:
         return self.res
     
     @property
-    def derived_results(self):
+    def derived_chains(self):
         """Dict which stores flat chains of derived parameters. Keys are the parameter names.
 
         Potential derived parameters:
@@ -1549,7 +1558,9 @@ class ExoSystem:
 
 
     def load_results(self, name: str):
-        """Loads in the results from a previous run. Flattened chains will be accessable in ExoSystem.res and ExoSystem.dres.
+        """Loads in the results from a previous run. Flattened chains will be accessable in ExoSystem.chains and ExoSystem.derived_chains.
+
+        Also loads the median results table
         
         If the run includes a transit fit, loads in and applies masks to the light curves.
         
@@ -1566,16 +1577,15 @@ class ExoSystem:
             name (str): Name of the previous run to load in.
         """
 
-        if os.path.exists(self.direc+'/Output/'+name+'_dres.p'):
+        try:
+            self.res = pickle.load(open(self.direc+'/Output/'+name+'_res.p', 'rb'))
             self.dres = pickle.load(open(self.direc+'/Output/'+name+'_dres.p', 'rb'))
+            self.load_results_tab(name)
         
-        else:
+        except:
             print('No run named {0}.'.format(name))
             return None
     
-        if os.path.exists(self.direc+'/Output/'+name+'_res.p'):
-            self.res = pickle.load(open(self.direc+'/Output/'+name+'_res.p', 'rb'))
-
         if os.path.exists(self.direc+'/Masks/'+name+'_masks.p'):
             
             self.masks = pickle.load(open(self.direc+'/Masks/'+name+'_masks.p', 'rb'))
@@ -1590,12 +1600,12 @@ class ExoSystem:
                 self.ferr[i] = self.ferr[i][self.masks[i]]
 
         try:
-            self.load_lcs(name)
+            self.load_lcs_mod(name)
         except:
             pass
 
         try:
-            self.load_rv(name)
+            self.load_rv_mod(name)
         except:
             pass
 
@@ -1614,8 +1624,18 @@ class ExoSystem:
         except:
             pass
 
+
+    def load_results_tab(self, name: str):
+        """Loads in the median results table from Results/name.txt as an astropy table accessible through ExoSystem.results.
+
+        Args:
+            name (str): Name of the previous run to load in.
+        """
+
+        self.restab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
+
         
-    def load_lcs(self, name: str):
+    def load_lcs_mod(self, name: str):
         """Loads in the best fit transit model of a previous run into ExoSystem.fm.
 
         Args:
@@ -1625,7 +1645,7 @@ class ExoSystem:
         self._lcm = pickle.load(open(self.direc+'/Output/'+name+'_lcm.p', 'rb'))
 
 
-    def load_rv(self, name: str):
+    def load_rv_mod(self, name: str):
         """Loads in the best fit RV model of a previous run into ExoSystem.rvm.
 
         Args:
@@ -3122,17 +3142,6 @@ class ExoSystem:
 
         self.make_plots(name, show_plots)
         
-
-    def print_results(self, name: str):
-        """Loads in and prints out the results table from Results/name.txt that was created by Exosystem.make_results(name).
-
-        Args:
-            name (str): Name of the run to load the results from. Loads in Results/name.txt.
-        """
-
-        tab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
-        tab.pprint_all()
-
 
     def calc_rv_bic(self):
         """Calculates the Bayesian information criterion (BIC) of the best fit RV model. Can be used to compare different RV models with different
