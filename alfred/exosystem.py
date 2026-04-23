@@ -1135,24 +1135,80 @@ class ExoSystem:
             skip_state_check (bool): Whether or not to skip the initial state check after the burn-in.
         """
 
-        sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(self.x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
+        self.sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(self.x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
 
         print('\nRunning MCMC burn-in.')
 
-        state = sampler.run_mcmc(pos, self.nburn, progress = True)
-        sampler.reset()
+        state = self.sampler.run_mcmc(pos, self.nburn, progress = True)
+        self.sampler.reset()
 
         print('\nRunning MCMC sampling.')
 
-        sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
+        self.sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
 
-        self.samples = sampler.get_chain()
+        self.samples = self.sampler.get_chain()
 
-        self.log_likes = sampler.get_log_prob()
+        self.log_likes = self.sampler.get_log_prob()
 
         if self.fit_transit and np.any(self.fit_ttv):
 
-            self.blobs = sampler.get_blobs()
+            self.blobs = self.sampler.get_blobs()
+
+
+    def continue_run(self, name: str, save_samples = False, show_plots = True, skip_state_check = False):
+        """Continues running the MCMC sampler from where it left off, without a burn in. Remakes all results and plots, and saves to the provided name
+        (does not have to be the same name as the previous run).
+
+        Can only be run if the ExoSystem.samples exists (the full un-flattened chains). This is the case if a run has just been performed with this
+        ExoSystem object, or if a previous run had save_samples set to true, and that run has been loaded in.
+
+        Args:
+            name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
+                and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
+                or plotted again.
+
+            save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
+                if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
+                and these take up additional storage. Default is False.
+
+            show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
+
+            skip_state_check (bool, optional): Passed to the emcee sampler. Whether or not to skip checking whether the initial parameters can fully
+                explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
+        """
+
+        print('\nRunning MCMC sampling.')
+
+        state = self.samples[-1]
+        self.sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
+
+        self.samples = self.sampler.get_chain()
+
+        self.log_likes = self.sampler.get_log_prob()
+
+        if self.fit_transit and np.any(self.fit_ttv):
+
+            self.blobs = self.sampler.get_blobs()
+
+        if save_samples:
+
+            z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
+
+            if hasattr(self, 'blobs'):
+                z['blobs'] = self.blobs
+
+            pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
+
+        self.calc_gelman_rubin()
+
+        self.flatten_chains()
+
+        self.make_results(name)
+
+        self.make_plots(name, show_plots)
+
+        print('')
+        self.restab.pprint_all()
 
 
     def flatten_chains(self):
