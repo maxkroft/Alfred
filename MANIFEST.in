@@ -1,0 +1,4 @@
+global-include alfred/*.pyx
+global-include alfred/*.c
+include requirements.txt
+include alfred/ld_grids/*

@@ -15,7 +15,7 @@ dependencies = [
     "matplotlib",
     "emcee",
     "corner",
-    "batman-package",
+    "batman-package",   
     "scipy",
     "celerite2",
     "astropy",
