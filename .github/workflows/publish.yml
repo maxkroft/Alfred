@@ -30,8 +30,7 @@ jobs:
         run: |
           # NOTE: put your own distribution build steps here.
           python -m pip install build
-          python -m build
-          rm dist/*.whl
+          python -m build --sdist
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
