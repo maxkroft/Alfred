@@ -892,8 +892,10 @@ class ExoSystem:
                 gpf = 0
 
                 if self.detrend[j]:
+                    
+                    jj = np.sum(self.detrend[:j])
 
-                    gp = set_gp_params(np.exp(y['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(y['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[j])
+                    gp = set_gp_params(np.exp(y['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(y['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[jj])
 
                     gpf = gp.predict(resid)
 
@@ -3833,10 +3835,12 @@ def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, 
             if exs.detrend[i]:
 
                 resid = exs.f[i] - fm
+                
+                ii = np.sum(exs.detrend[:i])
 
                 try:
 
-                    gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(exs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(exs.lcnames[i])]), exs.tt[i], exs.ferr[i], exs.gps[i])
+                    gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(exs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(exs.lcnames[i])]), exs.tt[i], exs.ferr[i], exs.gps[ii])
 
                 except:
 
