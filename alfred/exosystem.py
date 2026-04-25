@@ -660,7 +660,7 @@ class ExoSystem:
 
         self.keys = list(self.x0.keys())
 
-        print('Initial parameters:')
+        print('\nInitial parameters:')
         print(self.x0)
         
         if self.use_priors and len(self.fixed) > 0:
@@ -2905,7 +2905,7 @@ class ExoSystem:
 
             j = np.where(self.which_rv == k)[0]
 
-            if i > 1:
+            if i > 0:
 
                 rv[j] -= np.median(y['rv_offset {0}'.format(self.rvnames[k])])
 
