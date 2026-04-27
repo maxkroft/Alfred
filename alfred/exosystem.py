@@ -1157,7 +1157,7 @@ class ExoSystem:
             self.blobs = self.sampler.get_blobs()
 
 
-    def continue_run(self, name: str, save_samples = False, show_plots = True, skip_state_check = False):
+    def continue_run(self, name: str, nrun: int, save_samples = False, show_plots = True, skip_state_check = False):
         """Continues running the MCMC sampler from where it left off, without a burn in. Remakes all results and plots, and saves to the provided name
         (does not have to be the same name as the previous run).
 
@@ -1168,6 +1168,9 @@ class ExoSystem:
             name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
                 and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
                 or plotted again.
+
+            nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
+                burn-in steps.
 
             save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
                 if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
@@ -1182,7 +1185,7 @@ class ExoSystem:
         print('\nRunning MCMC sampling.')
 
         state = self.samples[-1]
-        self.sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
+        self.sampler.run_mcmc(state, nrun, progress = True, skip_initial_state_check = skip_state_check)
 
         self.samples = self.sampler.get_chain()
 
