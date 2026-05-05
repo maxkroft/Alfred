@@ -53,6 +53,46 @@ class Priors:
         self.prior_funcs.append(uniform_prior)
 
 
+    def add_jeffreys_prior(self, lower: float, upper: float):
+        """Adds a Jeffrey's prior function to the list of priors with the given bounds. Variable must be positive definite. The prior function
+        returns negative infinity if the given trial value is out of the bounds, otherwise the normalized Jeffrey's prior. Does not work if the
+        lower bound is 0!!! In that case, use a modified Jeffrey's prior. Updates the lower and upper bounds of the Priors object.
+        """
+
+        self.lbound = max(self.lbound, lower)
+        self.ubound = min(self.ubound, upper)
+
+        def jeffreys_prior(x):
+
+            if not lower <= x <= upper:
+
+                return -np.inf
+            
+            return -np.log(x) - np.log(np.log(upper/lower))
+
+        self.prior_funcs.append(jeffreys_prior)
+
+    
+    def add_modified_jeffreys_prior(self, upper: float, knee: float):
+        """Adds a modified Jeffrey's prior function to the list of priors with the given bounds. Variable must be positive definite. Implicit lower
+        bound of 0. The prior function returns negative infinity if the given trial value is out of the bounds, otherwise the normalized modified
+        Jeffrey's prior. The modified Jeffrey's prior becomes log uniform below the knee value. Updates the lower and upper bounds of the Priors object.
+        """
+
+        self.lbound = max(self.lbound, 0)
+        self.ubound = min(self.ubound, upper)
+
+        def modified_jeffreys_prior(x):
+
+            if not 0 <= x <= upper:
+
+                return -np.inf
+            
+            return -np.log(x+knee) - np.log(np.log((knee+upper)/knee))
+
+        self.prior_funcs.append(modified_jeffreys_prior)
+
+
     def apply_priors(self, x: float) -> float:
         """Applies all priors in the list of functions to the given trial value, and returns the log likelihood value to be added during fitting.
 
@@ -225,6 +265,14 @@ class AllPriors:
         elif prior_type == 'F':
 
             self.fixed[var] = params[0]
+
+        elif prior_type == 'J':
+
+            self.prior_dict[var].add_jeffreys_prior(params[0], params[1])
+
+        elif prior_type == 'MJ':
+
+            self.prior_dict[var].add_modified_jeffreys_prior(params[0], params[1])
 
 
     def apply(self, par: dict) -> float:

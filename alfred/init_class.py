@@ -794,9 +794,10 @@ class Init_ttvs(InitFile):
 
 class Init_priors(InitFile):
     """Class for creating, loading, and editing prior initialization files. Inherits from InitFile. Contains any priors the user wishes to apply to the
-    fit. Currently supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), and fixed priors (fixing a
-    parameter at a specific value so it is not fit). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances
-    of a type of parameter in the fit (e.g. i x, the inclination of all planets).
+    fit. Currently supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), fixed priors (fixing a
+    parameter at a specific value so it is not fit), Jeffrey's priors (uninformative prior independent of scale), and modified Jeffrey's priors
+    (becomes log uniform below the knee value). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances
+    of a type of parameter in the fit (e.g. P x, the periods of all planets).
     """
 
     def __init__(self, direc: str, name: str = 'init_priors.txt'):
@@ -811,11 +812,11 @@ class Init_priors(InitFile):
 
         self.header_rows = ['name']
 
-        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT',
+        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
                              'eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar', 'age']
         
-        self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT']
+        self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp']
         self.lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         self.ld_vars = ['u1', 'u2']
         
@@ -835,6 +836,7 @@ class Init_priors(InitFile):
                                  'planet eccentricity',
                                  'planet argument of periastron in radians',
                                  'individual planet transit time (for fitting TTVs) in BJD - 2450000',
+                                 'planet to star flux ratio',
                                  'lightcurve baseline flux value',
                                  'natural log of the light curve gaussian process period in days',
                                  'light curve gaussian process period in days',
@@ -897,10 +899,11 @@ class Init_priors(InitFile):
     
 
     def add_prior(self):
-        """Adds a new row to the Init_priors table for a new prior. Prompts the user to fill it in. Easier than adding rows manually. Currently supported
-        priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), and fixed priors (fixing a parameter at a
-        specific value so it is not fit). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances of a type
-        of parameter in the fit (e.g. i x, the inclination of all planets).
+        """Adds a new row to the Init_priors table for a new prior. Prompts the user to fill it in. Easier than adding rows manually. Currently
+        supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), fixed priors (fixing a parameter at
+        a specific value so it is not fit), Jeffrey's priors (uninformative prior independent of scale), and modified Jeffrey's priors (becomes
+        log uniform below the knee value). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances of a
+        type of parameter in the fit (e.g. P x, the periods of all planets).
         """
 
         row = []
@@ -967,9 +970,9 @@ class Init_priors(InitFile):
 
         while True:
             
-            priortype = input('Prior type to use for {0}. U for uniform, G for Gaussian, F for fixed.'.format(var)).upper()
+            priortype = input("Prior type to use for {0}. U for uniform, G for Gaussian, F for fixed, J for Jeffrey's, or MJ for modified Jeffrey's.".format(var)).upper()
 
-            if priortype not in ['U', 'G', 'F']:
+            if priortype not in ['U', 'G', 'F', 'J', 'MJ']:
 
                 z = input('Prior type is not recognized. Enter to try again. Type "stop" to exit.')
                 if z.lower() == 'stop':
@@ -1001,6 +1004,16 @@ class Init_priors(InitFile):
 
             p1 = input('Value at which to fix {0}.'.format(var))
             p2 = 0
+
+        elif priortype == 'J':
+
+            p1 = input("Lower bound of Jeffrey's prior for {0}.".format(var))
+            p2 = input("Upper bound of Jeffrey's prior for {0}.".format(var))
+
+        elif priortype == 'MJ':
+
+            p1 = input("Upper bound of modified Jeffrey's prior for {0}.".format(var))
+            p2 = input("Knee value of modified Jeffrey's prior for {0}.".format(var))
 
         row.append(p1)
         row.append(p2)
