@@ -2657,6 +2657,10 @@ class ExoSystem:
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
 
+        eclipse = False
+        if np.any(self.is_eclipse):
+            eclipse = True
+
         y = self.res | self.dres
 
         if self.use_priors:
@@ -2673,11 +2677,11 @@ class ExoSystem:
 
             mos = []
             for j in range(self.nt):
-                mos.append(['a{0}'.format(j)])
-                mos.append(['a{0}'.format(j)])
-                mos.append(['b{0}'.format(j)])
+                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + ['c{0}'.format(j)] if eclipse else [])
+                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + ['c{0}'.format(j)] if eclipse else [])
+                mos.append(['b{0}'.format(j),'b{0}'.format(j)] + ['d{0}'.format(j)] if eclipse else [])
 
-            fig, ax = plt.subplot_mosaic(mos, figsize = (14,6*self.nt), sharex = True, layout = 'constrained')
+            fig, ax = plt.subplot_mosaic(mos, figsize = (21 if eclipse else 14,6*self.nt), sharex = True, layout = 'constrained')
 
             mean = np.median(y['F0 {0}'.format(sec)])
 
@@ -2717,7 +2721,7 @@ class ExoSystem:
                 ax['a{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                 exp = self.exptimes[i]*60*60*24
-                bins = np.linspace(-0.5, 0.5, 15 if exp == 1800 else (30 if exp == 600 else 45))
+                bins = np.linspace(-0.5, 0.5, 25 if exp == 1800 else (40 if exp == 600 else 50))
                 denom, _ = np.histogram(xfold, bins)
                 num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
                 denom[num == 0] = 1.0
@@ -2749,6 +2753,61 @@ class ExoSystem:
 
                 ax['b{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
 
+                if not self.is_eclipse[j]:
+
+                    plt.setp(ax['c{0}'.format(j)].get_xticklabels(), visible = False)
+                    plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
+                    ax['c{0}'.format(j)].axis('off')
+
+                    plt.setp(ax['d{0}'.format(j)].get_xticklabels(), visible = False)
+                    plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
+                    ax['d{0}'.format(j)].axis('off')
+
+                    continue
+
+                if eclipse:
+
+                    e = np.median(y['e {0}'.format(j+1)]) if 'e {0}'.format(j+1) in y else 0
+                    w = np.median(y['w {0}'.format(j+1)])*np.pi/180 if 'w {0}'.format(j+1) in y else np.pi/2
+                    ar = np.median(y['a/rs {0}'.format(j+1)])
+                    rs = np.median(y['rstar'])
+                    tc2 = calc_t_sec(p, tc, e, w, ar, rs)
+
+                    other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
+                    xfold = (newt - tc2 + 0.5 * p) % p - 0.5 * p
+                    eclphase = self._lcm[sec]['eclphase'][k]
+                    eclphase_err = self._lcm[sec]['eclphase_err'][:,k]
+
+                    ax['c{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                    exp = self.exptimes[i]*60*60*24
+                    bins = np.linspace(-0.5, 0.5, 25 if exp == 1800 else (40 if exp == 600 else 50))
+                    denom, _ = np.histogram(xfold, bins)
+                    num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
+                    denom[num == 0] = 1.0
+                    ax['c{0}'.format(j)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+
+                    ax['c{0}'.format(j)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                    ax['c{0}'.format(j)].fill_between(ttphase, eclphase_err[0], eclphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
+
+                    ax['c{0}'.format(j)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(j)].transAxes)
+
+                    ax['c{0}'.format(j)].sharey(ax['a{0}'.format(j)])
+                    plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
+
+                    ax['c{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+
+                    ax['d{0}'.format(j)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                    ax['d{0}'.format(j)].axhline(0, c = 'red', lw = 1, zorder = 2)
+
+                    ax['d{0}'.format(j)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['d{0}'.format(j)].transAxes)
+
+                    ax['d{0}'.format(j)].sharey(ax['b{0}'.format(j)])
+                    plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
+
+                    ax['d{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+
+            
             ax['a0'].set_xlim(-0.5,0.5)
             ax['a0'].set_title(str(sec), fontsize = 20)
             ax['b{0}'.format(self.nt-1)].set_xlabel('Time since $T_{C}$ [days]', fontsize = 20)
