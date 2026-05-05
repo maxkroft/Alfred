@@ -3312,6 +3312,9 @@ class ExoSystem:
         self.make_results(name)
 
         self.make_plots(name, show_plots)
+
+        print('')
+        self.restab.pprint_all()
         
 
     def calc_rv_bic(self):
