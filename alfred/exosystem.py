@@ -2738,9 +2738,9 @@ class ExoSystem:
                     low = np.min(self.f[i][l] - other[l] - self.ferr[i][l])
 
                 else:
-                    k = np.where((ttphase >= -0.5) & (ttphase <= 0.5))[0]
-                    high = np.max(fmphase[2])
-                    low = np.min(fmphase[0])
+                    l = np.where((ttphase >= -0.5) & (ttphase <= 0.5))[0]
+                    high = np.max(fmphase[l])
+                    low = np.min(fmphase[l])
 
                 ax['a{0}'.format(j)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
 
@@ -2773,10 +2773,12 @@ class ExoSystem:
                     rs = np.median(y['rstar'])
                     tc2 = calc_t_sec(p, tc, e, w, ar, rs)
 
+                    ke = np.sum(self.is_eclipse[:j])
+
                     other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                     xfold = (newt - tc2 + 0.5 * p) % p - 0.5 * p
-                    eclphase = self._lcm[sec]['eclphase'][k]
-                    eclphase_err = self._lcm[sec]['eclphase_err'][:,k]
+                    eclphase = self._lcm[sec]['eclphase'][ke]
+                    eclphase_err = self._lcm[sec]['eclphase_err'][:,ke]
 
                     ax['c{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
