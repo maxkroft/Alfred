@@ -143,7 +143,7 @@ class AllPriors:
         self.fixed = {}
 
         searchvars = {'P': 'log(P)', 'a/rs': 'log(a/rs)', 'rhos': 'log(a/rs)', 'i': 'cos(i)', 'K': 'log(K)', 'e': 'secw', 'w': 'secw',
-                      'rho_gp': 'log(rho_gp)', 'sigma_gp': 'log(sigma_gp)'}
+                      'rho_gp': 'log(rho_gp)', 'sigma_gp': 'log(sigma_gp)', 'age': 'log10(age)'}
         
         star_vars = ['eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
 

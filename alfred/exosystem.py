@@ -589,7 +589,7 @@ class ExoSystem:
 
                 except:
 
-                    print('star_run {0} does not exist. Running an initial star only fit.'.format(star_run))
+                    print('star_run {0} does not exist. Will run an initial star only optimization.'.format(star_run))
                     run_star_fit = True
 
             else:
@@ -744,6 +744,14 @@ class ExoSystem:
         if self.use_priors:
 
             self.allpriors = AllPriors(self.init_priors.table, x0, self.fit_ttv)
+
+            self.fixed = self.allpriors.fixed.copy()
+
+            for f in self.fixed:
+
+                if f in self.x0:
+
+                    self.x0.pop(f)
 
         res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args), [x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
         x = {k:v for k,v in zip(keys, res.x)}
