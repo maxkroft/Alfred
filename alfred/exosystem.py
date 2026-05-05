@@ -2316,6 +2316,107 @@ class ExoSystem:
 
                 arlist.append(ar)
 
+        pars = []
+        tcs = []
+
+        for j in range(self.n):
+
+            if not self.is_transit[j]:
+                continue
+            
+            if self.fit_ttv[j]:
+
+                p = y['P {0}'.format(j+1)]
+                tc = y['Tc {0}'.format(j+1)]
+                ror = y['ror {0}'.format(j+1)]
+                if self.fit_star:
+                    ar = arlist[j]
+                else:
+                    ar = y['a/rs {0}'.format(j+1)]
+                inc = y['i {0}'.format(j+1)]
+                e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
+                w = y['w {0}'.format(j+1)] if 'w {0}'.format(j+1) in y else np.full((n), 90)
+                
+                pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
+
+                tcs.append(np.median(tc))
+
+            else:
+
+                pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None).T)
+                tcs.append(np.median(y['Tc {0}'.format(j+1)]))
+
+
+        filts = np.unique(self.filters)
+
+        ttphase = np.linspace(-0.5, 0.5, 1000)
+        phaseexp = 1/1000
+        phasess = 1
+
+        self._lcm['phase'] = {'ttphase': ttphase}
+
+        print('\nPhase folded:\n')
+
+        for filt in filts:
+
+            print(filt+':')
+
+            ld = np.array(self.ld[filt])
+
+            if self.fit_ld:
+
+                ld = np.array([y['u1 {0}'.format(filt)], y['u2 {0}'.format(filt)]]).T
+
+            if self.fit_star:
+
+                starpars = np.array([Tstar, loggstar, y['feh']]).T
+                ld = np.array([self.ldgrids[filt][0](starpars)[0], self.ldgrids[filt][1](starpars)[0]]).T
+
+            fmphase = []
+            eclphase = []
+
+            for k in range(self.n):
+
+                if not self.is_transit[k]:
+                    continue
+
+                l = np.sum(self.is_transit[:k])
+
+                medpar = np.median(pars[l], axis = 0)
+                fmphase.append(lightCurve(medpar, ttphase + tcs[l], np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess))
+
+                if self.is_eclipse[k]:
+                    tc2 = calc_t_sec(medpar[0], medpar[1], medpar[5], medpar[6]*np.pi/180, medpar[3], np.median(rstar) if self.fit_star else self.rs)
+                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = np.median(rstar) if self.fit_star else self.rs))
+
+
+            fmphase_err = [[] for j in range(self.nt)]
+            eclphase_err = [[] for j in range(np.sum(self.is_eclipse))]
+
+            for j in tqdm(range(0,n,10)):
+
+                for k in range(self.n):
+
+                    if not self.is_transit[k]:
+                        continue
+
+                    l = np.sum(self.is_transit[:k])
+
+                    fmphase_err[l].append(lightCurve(pars[l][j], ttphase + tcs[l], ld[j] if ld.ndim > 1 else ld, phaseexp, phasess))
+
+                    if self.is_eclipse[k]:
+                        tc2 = calc_t_sec(pars[l][j][0], pars[l][j][1], pars[l][j][5], pars[l][j][6]*np.pi/180, pars[l][j][3], rstar[j] if self.fit_star else self.rs)
+                        le = np.sum(self.is_eclipse[:k])
+                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rstar[j] if self.fit_star else self.rs))
+
+            fmphase_err = np.percentile(fmphase_err, [16,84], axis = 1)
+            if np.any(self.is_eclipse):
+                eclphase_err = np.percentile(eclphase_err, [16,84], axis = 1)
+            
+            self._lcm['phase'][filt] = {'fmphase': np.array(fmphase), 'fmphase_err': fmphase_err, 'eclphase': np.array(eclphase), 'eclphase_err': eclphase_err}
+
+        print('Full:\n')
+
         for i in range(len(self.lcnames)):
 
             sec = self.lcnames[i]
@@ -2335,42 +2436,7 @@ class ExoSystem:
 
             detrend = self.detrend[i]
 
-            pars = []
-            tcs = []
-
-            for j in range(self.n):
-
-                if not self.is_transit[j]:
-                    continue
-                
-                if self.fit_ttv[j]:
-
-                    p = y['P {0}'.format(j+1)]
-                    tc = y['Tc {0}'.format(j+1)]
-                    ror = y['ror {0}'.format(j+1)]
-                    if self.fit_star:
-                        ar = arlist[j]
-                    else:
-                        ar = y['a/rs {0}'.format(j+1)]
-                    inc = y['i {0}'.format(j+1)]
-                    e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
-                    w = y['w {0}'.format(j+1)] if 'w {0}'.format(j+1) in y else np.full((n), 90)
-                    
-                    pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
-
-                    tcs.append(np.median(tc))
-
-                else:
-
-                    pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None).T)
-                    tcs.append(np.median(y['Tc {0}'.format(j+1)]))
-
-
             mean = y['F0 {0}'.format(sec)]
-
-            ttphase = np.linspace(-0.5, 0.5, 1000)
-            phaseexp = 1/1000
-            phasess = 1
 
             if detrend:
 
@@ -2383,8 +2449,6 @@ class ExoSystem:
                 gpf_err = []
 
             fm = []
-            fmphase = []
-            eclphase = []
 
             fmsum = 0
 
@@ -2396,13 +2460,6 @@ class ExoSystem:
                 l = np.sum(self.is_transit[:k])
 
                 fm0 = np.zeros(len(self.tt[i]))
-
-                medpar = np.median(pars[l], axis = 0)
-                fmphase.append(lightCurve(medpar, ttphase + tcs[l], np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess) + np.median(mean))
-
-                if self.is_eclipse[k]:
-                    tc2 = calc_t_sec(medpar[0], medpar[1], medpar[5], medpar[6]*np.pi/180, medpar[3], np.median(rstar) if self.fit_star else self.rs)
-                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = np.median(rstar) if self.fit_star else self.rs) + np.median(mean))
 
                 if self.fit_ttv[k]:
 
@@ -2443,7 +2500,7 @@ class ExoSystem:
                 gpf = gpf0
 
 
-            z = {'fm': np.array(fm), 'fmphase': np.array(fmphase), 'eclphase': np.array(eclphase), 'ttphase': ttphase}
+            z = {'fm': np.array(fm)}
 
             if detrend:
 
@@ -2451,8 +2508,6 @@ class ExoSystem:
 
 
             fm_err = [[] for j in range(self.nt)]
-            fmphase_err = [[] for j in range(self.nt)]
-            eclphase_err = [[] for j in range(np.sum(self.is_eclipse))]
 
             for j in tqdm(range(0,n,10)):
 
@@ -2466,13 +2521,6 @@ class ExoSystem:
                     l = np.sum(self.is_transit[:k])
 
                     fm0 = np.zeros(len(self.tt[i]))
-
-                    fmphase_err[l].append(lightCurve(pars[l][j], ttphase + tcs[l], ld[j] if ld.ndim > 1 else ld, phaseexp, phasess) + mean[j])
-
-                    if self.is_eclipse[k]:
-                        tc2 = calc_t_sec(pars[l][j][0], pars[l][j][1], pars[l][j][5], pars[l][j][6]*np.pi/180, pars[l][j][3], rstar[j] if self.fit_star else self.rs)
-                        le = np.sum(self.is_eclipse[:k])
-                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rstar[j] if self.fit_star else self.rs) + mean[j])
 
                     if self.fit_ttv[k]:
 
@@ -2513,13 +2561,8 @@ class ExoSystem:
 
 
             fm_err = np.percentile(fm_err, [16,84], axis = 1)
-            fmphase_err = np.percentile(fmphase_err, [16,84], axis = 1)
-            if np.any(self.is_eclipse):
-                eclphase_err = np.percentile(eclphase_err, [16,84], axis = 1)
 
             z['fm_err'] = fm_err
-            z['fmphase_err'] = fmphase_err
-            z['eclphase_err'] = eclphase_err
 
             if detrend:
 
@@ -2534,7 +2577,22 @@ class ExoSystem:
     def lc_mod(self):
         """Stores the best fit model light curves.
 
-        fm is a dict, with a key for each light curve data set using their nicknames. These keys correspond to their own dicts with the following keys:
+        fm is a dict, with a key for the phase folded models as well as for each light curve data set using their nicknames.
+
+        The 'phase' key contains a dict with 'ttphase', a 1d numpy array of phase-folded time points used for plotting the models. Also within 'phase'
+        is a key for each filter/bandpass used (e.g. TESS or Kepler). These are their own dicts with the following:
+
+        - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
+          model light curve for each planet, at the times of ttphase.
+        - fmphase_err: A 3d numpy array of the 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
+          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
+          with each row corresponding to a different planet.
+        - eclphase: The same as fmphase, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an empty array if
+          no planets were fit for secondary eclipses.
+        - eclphase_err: The same as fmphase_err, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an empty
+          array if no planets were fit for secondary eclipses.
+        
+        Each of the data set keys is a dict with the following:
 
         - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
           each planet at the times of this data set.
@@ -2543,13 +2601,7 @@ class ExoSystem:
           corresponding to a different planet.
         - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
         - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
-          1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
-        - ttphase: A 1d numpy array of phase folded times.
-        - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
-          model light curve for each planet, at the times of ttphase.
-        - fmphase_err: A 3d numpy array of the 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
-          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
-          with each row corresponding to a different planet.
+          1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.        
         """
         return self._lcm
 
@@ -2680,7 +2732,7 @@ class ExoSystem:
             sec = self.lcnames[i]
 
             alpha = 0.1
-            if self.exptimes[i] == 1800/60/60/24:
+            if self.exptimes[i] >= 1200/60/60/24:
                 alpha = 0.3
 
             mos = []
@@ -2721,9 +2773,9 @@ class ExoSystem:
 
                 other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                 xfold = (newt - tc + 0.5 * p) % p - 0.5 * p
-                ttphase = self._lcm[sec]['ttphase']
-                fmphase = self._lcm[sec]['fmphase'][k]
-                fmphase_err = self._lcm[sec]['fmphase_err'][:,k]
+                ttphase = self._lcm['phase']['ttphase']
+                fmphase = self._lcm['phase'][self.filters[i]]['fmphase'][k] + mean
+                fmphase_err = self._lcm['phase'][self.filters[i]]['fmphase_err'][:,k] + mean
                 fm = self._lcm[sec]['fm'][k]
 
                 ax['a{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
@@ -2785,8 +2837,8 @@ class ExoSystem:
 
                     other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                     xfold = (newt - tc2 + 0.5 * p) % p - 0.5 * p
-                    eclphase = self._lcm[sec]['eclphase'][ke]
-                    eclphase_err = self._lcm[sec]['eclphase_err'][:,ke]
+                    eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke] + mean
+                    eclphase_err = self._lcm['phase'][self.filters[i]]['eclphase_err'][:,ke] + mean
 
                     ax['c{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
