@@ -720,12 +720,7 @@ class ExoSystem:
         
         if save_samples:
 
-            z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
-
-            if hasattr(self, 'blobs'):
-                z['blobs'] = self.blobs
-
-            pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
+            self.save_samples(name)
 
         self.calc_gelman_rubin()
 
@@ -1192,6 +1187,23 @@ class ExoSystem:
         if self.fit_transit and np.any(self.fit_ttv):
 
             self.blobs = self.sampler.get_blobs()
+
+
+    def save_samples(self, name):
+        """Saves the full sample chains out to a pickle file (not flattened or thinned). This is only automatically run if save_samples was set to True
+        during fitting. Otherwise, can be run manually after a fit. This file takes up much more storage space than the normal thinned and flattened
+        samples which are always saved. The pickle file is saved to Output/name_samples.p.
+
+        Args:
+            name (str): Name of the run. Sets the name of the pickle file to name_samples.p.
+        """
+
+        z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
+
+        if hasattr(self, 'blobs'):
+            z['blobs'] = self.blobs
+
+        pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
 
 
     def continue_run(self, name: str, nrun: int, save_samples = False, show_plots = True, skip_state_check = False):
