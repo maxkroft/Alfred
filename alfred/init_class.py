@@ -55,6 +55,7 @@ class InitFile:
         if len(newname) < 4 or newname[-4:] != '.txt':
             newname += '.txt'
         self.name = newname
+        self.save()
 
     @property
     def table(self):
