@@ -571,7 +571,7 @@ class ExoSystem:
                     self.x0['sesw {0}'.format(i+1)] = self.sesinw[i]
 
         
-        if self.fit_star:
+        if self.fit_star and (self.fit_transit or self.fit_rv):
 
             if star_run is not None:
 
@@ -607,6 +607,14 @@ class ExoSystem:
                 self.x0['feh'] = x['feh']
                 self.x0['distance'] = x['distance']
                 self.x0['AV'] = x['AV']
+
+        elif self.fit_star:
+
+            self.x0['eep'] = 355
+            self.x0['log10(age)'] = 9.66
+            self.x0['feh'] = 0
+            self.x0['distance'] = 1000/self.plax
+            self.x0['AV'] = 0.01
 
 
         if self.fit_transit:
