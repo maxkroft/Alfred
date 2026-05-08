@@ -2757,9 +2757,9 @@ class ExoSystem:
 
             mos = []
             for j in range(self.nt):
-                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + ['c{0}'.format(j)] if eclipse else [])
-                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + ['c{0}'.format(j)] if eclipse else [])
-                mos.append(['b{0}'.format(j),'b{0}'.format(j)] + ['d{0}'.format(j)] if eclipse else [])
+                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
+                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
+                mos.append(['b{0}'.format(j),'b{0}'.format(j)] + (['d{0}'.format(j)] if eclipse else []))
 
             fig, ax = plt.subplot_mosaic(mos, figsize = (21 if eclipse else 14,6*self.nt), sharex = True, layout = 'constrained')
 
@@ -2833,7 +2833,7 @@ class ExoSystem:
 
                 ax['b{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
 
-                if not self.is_eclipse[j]:
+                if eclipse and not self.is_eclipse[j]:
 
                     plt.setp(ax['c{0}'.format(j)].get_xticklabels(), visible = False)
                     plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
