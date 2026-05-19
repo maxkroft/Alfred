@@ -1210,8 +1210,7 @@ class ExoSystem:
         """Continues running the MCMC sampler from where it left off, without a burn in. Remakes all results and plots, and saves to the provided name
         (does not have to be the same name as the previous run).
 
-        Can only be run if the ExoSystem.samples exists (the full un-flattened chains). This is the case if a run has just been performed with this
-        ExoSystem object, or if a previous run had save_samples set to true, and that run has been loaded in.
+        Can only be run if a run has already been performed with this ExoSystem object. Will not work on a loaded in run.
 
         Args:
             name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
@@ -1246,12 +1245,7 @@ class ExoSystem:
 
         if save_samples:
 
-            z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
-
-            if hasattr(self, 'blobs'):
-                z['blobs'] = self.blobs
-
-            pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
+            self.save_samples(name)
 
         self.calc_gelman_rubin()
 
@@ -3362,7 +3356,7 @@ class ExoSystem:
         plt.show()
 
 
-    def remove_chains(self, name: str, idxs: np.typing.ArrayLike, show_plots: bool = True):
+    def remove_chains(self, name: str, idxs: np.typing.ArrayLike, save_samples: bool = False, show_plots: bool = True):
         """Removes chains of the specified indices from samples, log_likes, and the lists of derived periods and tcs in a ttv fit. Then, reruns
         ExoSystem.calc_gelman_rubin, ExoSystem.flatten_chains, ExoSystem.make_results, and ExoSystem.make_plots.
 
@@ -3372,9 +3366,14 @@ class ExoSystem:
         or from loading in the results of a previous run which had save_samples set to True.
 
         Args:
-            name (str): Name of the run. Sets the folder in Plots to save the plots to, as well as the names of the output pickle files.
+            name (str): Name of the run. Does not have to be the same as the previous run. Sets the folder in Plots to save the plots to, as well as
+                the names of the output pickle files.
 
             idxs (ArrayLike): Indices of the chains to be removed.
+
+            save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
+                if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
+                and these take up additional storage. Default is False.
 
             show_plots (bool, optional): Whether or not to show plots. Plots are saved regardless. Default is True.
         """
@@ -3384,6 +3383,10 @@ class ExoSystem:
 
         if hasattr(self, 'blobs'):
             self.blobs = np.delete(self.blobs, idxs, axis = 1)
+
+        if save_samples:
+
+            self.save_samples(name)
 
         self.calc_gelman_rubin()
 
@@ -3396,6 +3399,48 @@ class ExoSystem:
         print('')
         self.restab.pprint_all()
         
+
+    def burn_steps(self, name: str, num_steps: int, save_samples: bool = False, show_plots: bool = True):
+        """Useful if the burn-in wasn't long enough. Cuts the first num_steps steps from samples, log_likes, and the lists of derived periods and tcs
+        in a ttv fit. Then, reruns ExoSystem.calc_gelman_rubin, ExoSystem.flatten_chains, ExoSystem.make_results, and ExoSystem.make_plots.
+
+        Must have the full samples of the run available as Exosystem.samples. Either this is from having just run a fit with this ExoSystem object,
+        or from loading in the results of a previous run which had save_samples set to True.
+
+        Args:
+            name (str): Name of the run. Does not have to be the same as the previous run. Sets the folder in Plots to save the plots to, as well as
+                the names of the output pickle files.
+
+            num_steps (int): Number of steps to cut from the beginning of the samples.
+
+            save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
+                if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
+                and these take up additional storage. Default is False.
+
+            show_plots (bool, optional): Whether or not to show plots. Plots are saved regardless. Default is True.
+        """
+
+        self.samples = self.samples[num_steps:]
+        self.log_likes = self.log_likes[num_steps:]
+
+        if hasattr(self, 'blobs'):
+            self.blobs = self.blobs[num_steps:]
+
+        if save_samples:
+
+            self.save_samples(name)
+
+        self.calc_gelman_rubin()
+
+        self.flatten_chains()
+
+        self.make_results(name)
+
+        self.make_plots(name, show_plots)
+
+        print('')
+        self.restab.pprint_all()
+
 
     def calc_rv_bic(self):
         """Calculates the Bayesian information criterion (BIC) of the best fit RV model. Can be used to compare different RV models with different
