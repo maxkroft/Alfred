@@ -1411,18 +1411,18 @@ class ExoSystem:
                         e = y['secw {0}'.format(i+1)]**2 + y['sesw {0}'.format(i+1)]**2
                         self.dres['e {0}'.format(i+1)] = e
 
-                        w = np.arctan2(y['sesw {0}'.format(i+1)], y['secw {0}'.format(i+1)]) * 180/np.pi
+                        w = np.arctan2(y['sesw {0}'.format(i+1)], y['secw {0}'.format(i+1)])
                         self.dres['w {0}'.format(i+1)] = w
 
                     else:
 
                         e = y['e {0}'.format(i+1)]
-                        w = y['w {0}'.format(i+1)] * 180/np.pi
+                        w = y['w {0}'.format(i+1)]
 
                 else:
 
                     e = 0
-                    w = 90
+                    w = np.pi/2
 
                 mp = 0
 
@@ -1462,7 +1462,7 @@ class ExoSystem:
 
                 if self.is_transit[i] and self.fit_transit:
 
-                    b = ars * y['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w * np.pi/180))
+                    b = ars * y['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w))
                     self.dres['b {0}'.format(i+1)] = b
 
                     dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
@@ -1500,7 +1500,7 @@ class ExoSystem:
                      'fp': '', 'TT': 'BJD-2450000', 'F0': '', 'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day',
                      'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex', 'distance': 'pc',
                      'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2',
-                     'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'deg',
+                     'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad',
                      'K': 'm/s', 'Mp': 'Mearth', 'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'dur': 'hr',
                      'rhos': 'g/cm^3', 'TSM': ''}
 
@@ -1608,6 +1608,8 @@ class ExoSystem:
         - log(K) x: Natural log of the RV semi-amplitude, in m/s, for planet number x.
         - secw x: Square root of the eccentricity times the cosine of the argument of periastron, for planet number x.
         - sesw x: Square root of the eccentricity times the sine of the argument of periastron, for planet number x.
+        - e x: Orbital eccentricity, for planet number x. Only fit if w is fixed.
+        - w x: Orbital argument of periastron, in radians, for planet number x. Only fit if e is fixed.
         - fp x: Planet to star flux ratio, for planet number x.
         - TT x y: Transit time (when fitting for TTVs), in BJD-2457000, for planet number x transit number y.
         - F0 x: Baseline flux value, for transit data set x.
@@ -1639,7 +1641,7 @@ class ExoSystem:
         - a x: Orbital semi-major axis, in AU, for planet number x.
         - i x: Orbital inclination, in degrees, for planet number x (restricted between 0 and 90 degrees).
         - e x: Orbital eccentricity, for planet number x.
-        - w x: Orbital argument of periastron, in degrees, for planet number x.
+        - w x: Orbital argument of periastron, in radians, for planet number x.
         - K x: RV semi-amplitude, in m/s, for planet number x.
         - Mp x: Planetary mass, in earth masses, for planet number x.
         - Mpsini x: Planetary mass times the sine of the orbital inclination, in earth masses, for planet number x (used when transit wasn't fit).
@@ -2349,7 +2351,7 @@ class ExoSystem:
                     ar = y['a/rs {0}'.format(j+1)]
                 inc = y['i {0}'.format(j+1)]
                 e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
-                w = y['w {0}'.format(j+1)] if 'w {0}'.format(j+1) in y else np.full((n), 90)
+                w = y['w {0}'.format(j+1)]*180/np.pi if 'w {0}'.format(j+1) in y else np.full((n), 90)
                 
                 pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
 
@@ -2842,7 +2844,7 @@ class ExoSystem:
                 if eclipse:
 
                     e = np.median(y['e {0}'.format(j+1)]) if 'e {0}'.format(j+1) in y else 0
-                    w = np.median(y['w {0}'.format(j+1)])*np.pi/180 if 'w {0}'.format(j+1) in y else np.pi/2
+                    w = np.median(y['w {0}'.format(j+1)]) if 'w {0}'.format(j+1) in y else np.pi/2
                     ar = np.median(y['a/rs {0}'.format(j+1)])
                     rs = np.median(y['rstar'])
                     tc2 = calc_t_sec(p, tc, e, w, ar, rs)
