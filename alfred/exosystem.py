@@ -28,6 +28,7 @@ from alfred._rv_func import _rvModel
 from alfred.init_class import *
 from alfred.ld_grids import *
 from alfred.priors import *
+from alfred import is_notebook
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 np.set_printoptions(legacy='1.25')
@@ -1173,12 +1174,14 @@ class ExoSystem:
 
         print('\nRunning MCMC burn-in.')
 
-        state = self.sampler.run_mcmc(pos, self.nburn, progress = True)
+        prog = 'notebook' if is_notebook else True
+
+        state = self.sampler.run_mcmc(pos, self.nburn, progress = prog)
         self.sampler.reset()
 
         print('\nRunning MCMC sampling.')
 
-        self.sampler.run_mcmc(state, self.nrun, progress = True, skip_initial_state_check = skip_state_check)
+        self.sampler.run_mcmc(state, self.nrun, progress = prog, skip_initial_state_check = skip_state_check)
 
         self.samples = self.sampler.get_chain()
 
