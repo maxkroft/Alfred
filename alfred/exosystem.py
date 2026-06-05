@@ -1468,6 +1468,9 @@ class ExoSystem:
                     b = ars * y['cos(i) {0}'.format(i+1)] * (1 - e**2) / (1 + e * np.sin(w))
                     self.dres['b {0}'.format(i+1)] = b
 
+                    depth = y['ror {0}'.format(i+1)]**2 * 1e6
+                    self.dres['depth {0}'.format(i+1)] = depth
+
                     dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
                     self.dres['dur {0}'.format(i+1)] = dur
 
@@ -1504,7 +1507,7 @@ class ExoSystem:
                      'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex', 'distance': 'pc',
                      'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2',
                      'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad',
-                     'K': 'm/s', 'Mp': 'Mearth', 'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'dur': 'hr',
+                     'K': 'm/s', 'Mp': 'Mearth', 'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr',
                      'rhos': 'g/cm^3', 'TSM': ''}
 
 
@@ -1652,6 +1655,7 @@ class ExoSystem:
         - teq x: Planetary equilibrium temperature (zero-albedo blackbody), in K, for planet number x.
         - sinc x: Insolation flux reaching the planet, in units of Earth insolation flux, for planet number x.
         - b x: Transit impact parameter, for planet number x.
+        - depth x: Transit depth, in ppm, for planet number x.
         - dur x: Transit duration, in hours, for planet number x.
         - rhos x: Implied stellar density from transit of planet number x, in g/cm^3.
         - TSM x: Transmission spectroscopy metric, for planet number x.
@@ -2054,18 +2058,18 @@ class ExoSystem:
 
             i = np.sum(self.detrend[:j])
 
-            ax[i][0].set_ylabel('{0}'.format(self.lcnames[i]))
+            ax[i][0].set_ylabel('{0}'.format(self.lcnames[j]))
 
-            if 'F0 {0}'.format(self.lcnames[i]) in self.parnames:
-                v = self.parnames['F0 {0}'.format(self.lcnames[i])]
+            if 'F0 {0}'.format(self.lcnames[j]) in self.parnames:
+                v = self.parnames['F0 {0}'.format(self.lcnames[j])]
                 ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
-            if 'log(rho_gp) {0}'.format(self.lcnames[i]) in self.parnames:
-                v = self.parnames['log(rho_gp) {0}'.format(self.lcnames[i])]
+            if 'log(rho_gp) {0}'.format(self.lcnames[j]) in self.parnames:
+                v = self.parnames['log(rho_gp) {0}'.format(self.lcnames[j])]
                 ax[i][1].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
-            if 'log(sigma_gp) {0}'.format(self.lcnames[i]) in self.parnames:
-                v = self.parnames['log(sigma_gp) {0}'.format(self.lcnames[i])]
+            if 'log(sigma_gp) {0}'.format(self.lcnames[j]) in self.parnames:
+                v = self.parnames['log(sigma_gp) {0}'.format(self.lcnames[j])]
                 ax[i][2].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
         ax[0][0].set_title('F0')
