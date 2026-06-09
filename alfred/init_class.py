@@ -633,7 +633,7 @@ class Init_planets(InitFile):
 
         row = []
 
-        transit = input('Is the planet transitting? True or False ').lower() == 'true'
+        transit = input('Is the planet transiting? True or False ').lower() == 'true'
         row.append(transit)
 
         rv = input('Does the planet have an RV signal? True or False ').lower() == 'true'

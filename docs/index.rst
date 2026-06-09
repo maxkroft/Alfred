@@ -13,4 +13,5 @@ Alfred documentation
    :maxdepth: 2
 
    installation
+   quickstart.ipynb
    api

@@ -37,7 +37,7 @@ version = {attr = "alfred.__version__"}
 find = {}
 
 [tool.setuptools.package-data]
-alfred = ["ld_grids/*"]
+alfred = ["ld_grids/*","example_data/*.csv"]
 
 [tool.pytest.ini_options]
 filterwarnings = [
