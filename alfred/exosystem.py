@@ -2670,10 +2670,10 @@ class ExoSystem:
                 ax['a'].plot(self.tt[i], gpf + mean, color = 'green', label = 'GP Model', zorder = 3, linewidth = 2)
                 ax['a'].fill_between(self.tt[i], gpf_err[0]+mean, gpf_err[1]+mean, color = 'green', edgecolor = 'none', alpha = 0.5, zorder = 2)
 
-                ax['a'].text(0.01, 0.99, 'Raw', fontsize = 20, ha = 'left', va = 'top', transform = ax['a'].transAxes)
-
                 ax['a'].tick_params(axis = 'both', labelsize = 15)
                 ax['a'].set_title(str(sec), fontsize = 20)
+
+                ax['b'].text(0.01, 0.99, 'Flattened', fontsize = 20, ha = 'left', va = 'top', transform = ax['b'].transAxes)
 
             ax['b'].errorbar(self.tt[i], self.f[i] - (gpf if self.detrend[i] else 0), yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
@@ -2687,8 +2687,6 @@ class ExoSystem:
                 ax['b'].plot(self.tt[i], fm[k]+mean, label = 'Planet {0}'.format(j+1), zorder = 3, linewidth = 2)
                 ax['b'].fill_between(self.tt[i], fm_err[0][k]+mean, fm_err[1][k]+mean, zorder = 2, alpha = 0.5, edgecolor = 'none')
             
-            ax['b'].text(0.01, 0.99, 'Flattened', fontsize = 20, ha = 'left', va = 'top', transform = ax['b'].transAxes)
-
             ax['b'].tick_params(axis = 'both', labelsize = 15)
             ax['b'].legend(fontsize = 15)
 
@@ -2795,8 +2793,8 @@ class ExoSystem:
 
 
                 other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
-                xfold = (newt - tc + 0.5 * p) % p - 0.5 * p
-                ttphase = self._lcm['phase']['ttphase']
+                xfold = ((newt - tc + 0.5 * p) % p - 0.5 * p) * 24
+                ttphase = self._lcm['phase']['ttphase'] * 24
                 fmphase = self._lcm['phase'][self.filters[i]]['fmphase'][k] + mean
                 fmphase_err = self._lcm['phase'][self.filters[i]]['fmphase_err'][:,k] + mean
                 fm = self._lcm[sec]['fm'][k]
@@ -2804,7 +2802,7 @@ class ExoSystem:
                 ax['a{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                 exp = self.exptimes[i]*60*60*24
-                bins = np.linspace(-0.5, 0.5, 25 if exp == 1800 else (40 if exp == 600 else 50))
+                bins = np.linspace(-12, 12, 25 if exp == 1800 else (40 if exp == 600 else 50))
                 denom, _ = np.histogram(xfold, bins)
                 num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
                 denom[num == 0] = 1.0
@@ -2815,13 +2813,13 @@ class ExoSystem:
 
                 ax['a{0}'.format(j)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(j)].transAxes)
 
-                l = np.where((xfold >= -0.5) & (xfold <= 0.5))[0]
+                l = np.where((xfold >= -12) & (xfold <= 12))[0]
                 if len(l) > 0:
                     high = np.max(self.f[i][l] - other[l] + self.ferr[i][l])
                     low = np.min(self.f[i][l] - other[l] - self.ferr[i][l])
 
                 else:
-                    l = np.where((ttphase >= -0.5) & (ttphase <= 0.5))[0]
+                    l = np.where((ttphase >= -12) & (ttphase <= 12))[0]
                     high = np.max(fmphase[l])
                     low = np.min(fmphase[l])
 
@@ -2859,14 +2857,14 @@ class ExoSystem:
                     ke = np.sum(self.is_eclipse[:j])
 
                     other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
-                    xfold = (newt - tc2 + 0.5 * p) % p - 0.5 * p
+                    xfold = ((newt - tc2 + 0.5 * p) % p - 0.5 * p) * 24
                     eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke] + mean
                     eclphase_err = self._lcm['phase'][self.filters[i]]['eclphase_err'][:,ke] + mean
 
                     ax['c{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                     exp = self.exptimes[i]*60*60*24
-                    bins = np.linspace(-0.5, 0.5, 25 if exp == 1800 else (40 if exp == 600 else 50))
+                    bins = np.linspace(-12, 12, 25 if exp == 1800 else (40 if exp == 600 else 50))
                     denom, _ = np.histogram(xfold, bins)
                     num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
                     denom[num == 0] = 1.0
@@ -2893,9 +2891,9 @@ class ExoSystem:
                     ax['d{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
 
             
-            ax['a0'].set_xlim(-0.5,0.5)
+            ax['a0'].set_xlim(-12,12)
             ax['a0'].set_title(str(sec), fontsize = 20)
-            ax['b{0}'.format(self.nt-1)].set_xlabel('Time since $T_{C}$ [days]', fontsize = 20)
+            ax['b{0}'.format(self.nt-1)].set_xlabel('Time since $T_{C}$ [hours]', fontsize = 20)
             fig.supylabel('Relative Flux', fontsize = 20)
 
             for a in ax:
