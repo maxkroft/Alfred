@@ -1557,6 +1557,10 @@ class ExoSystem:
             self.plot_star_chains(name, show_plot = show_plots)
 
         if self.fit_planets:
+
+            self.plot_big_chains(name)
+
+        if self.fit_planets:
         
             self.plot_pl_corner(name, show_plot = show_plots)
 
@@ -1975,7 +1979,6 @@ class ExoSystem:
             j += 1
 
         fig.supxlabel('N Steps')
-        fig.supylabel('Parameter')
 
         fig.savefig(self.direc+'Plots/'+name+'/pl_chains.png')
 
@@ -2109,6 +2112,42 @@ class ExoSystem:
         fig.supxlabel('N Steps')
 
         fig.savefig(self.direc+'Plots/'+name+'/star_chains.png')
+
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
+
+
+    def plot_big_chains(self, name: str, show_plot = False):
+        """Plots the MCMC chains for every fit parameter. Saves the plot as bigchains.png to the folder for this run, set by the name parameter.
+        Shows the plot if show_plot is True.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is False.
+        """
+         
+        num1, num2 = min(len(self.parnames),10), (len(self.parnames)-1)//10 + 1
+
+        fig, ax = plt.subplots(num1, num2, figsize = (7*num2, 18*num1/10), sharex = True, layout = 'constrained')
+
+        if num2 == 1:
+            ax = np.array([ax.T]).T
+
+        for k, v in self.parnames.items():
+
+            i = v%10
+            j = v//10
+
+            ax[i][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+            ax[i][j].text(0.01, 0.99, k, fontsize = 20, ha = 'left', va = 'top', transform = ax[i][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
+
+        fig.supxlabel('N Steps')
+
+        fig.savefig(self.direc+'Plots/'+name+'/bigchains.png')
 
         if show_plot:
             plt.show()
