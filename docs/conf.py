@@ -2,6 +2,11 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../alfred/'))
 
+# Check if we are on Read the Docs
+if os.environ.get("READTHEDOCS") == "True":
+    # Sphinx will intercept "import isochrones" and return a fake module
+    autodoc_mock_imports = ["isochrones"]
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
