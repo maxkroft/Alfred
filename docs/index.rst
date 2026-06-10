@@ -59,6 +59,6 @@ Future Features Wishlist
 Changelog
 +++++++++
 
-**1.0.0**
+**1.0.0 (2026-Jun-10)**
 
 * Initial release.

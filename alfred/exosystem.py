@@ -463,6 +463,9 @@ class ExoSystem:
         self.lc_supersample_size = lc_supersample_size
 
 
+        self.delete_run(name)
+
+
         if self.rv_bkg_order not in [0,1,2]:
             print('Invalid RV background polynomial order. Must be 0, 1, or 2.')
             return None
@@ -3006,7 +3009,11 @@ class ExoSystem:
 
         rvm = []
         rvmplot = []
-        trplot = np.linspace(np.min(self.tr)-5, np.max(self.tr)+5, 1000)
+
+        num_min_p = (np.max(self.tr)+5 - np.min(self.tr)+5)/np.min(ps)
+        num_pts = int(min(10000,max(1000, 8*num_min_p)))
+        trplot = np.linspace(np.min(self.tr)-5, np.max(self.tr)+5, num_pts)
+
         trphase = np.linspace(-0.5, 0.5, 1000)
         rvallplot = 0
         rvmphase = []
