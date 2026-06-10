@@ -2,5 +2,5 @@
 
 # Alfred
 
-``Alfred`` (the **A**\wesome **L**\ibrary **F**\or **R**\obust **E**\xoplanet **D**\etection) is a package designed for flexible, user-friendly 
+Alfred (the **A**wesome **L**ibrary **F**or **R**obust **E**xoplanet **D**etection) is a package designed for flexible, user-friendly 
 exoplanet detection and characterization.
