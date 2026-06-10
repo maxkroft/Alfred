@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath('../alfred/'))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'Alfred'
-copyright = '2026, Maxwell Kroft'
+copyright = '2026, Maxwell Kroft | Logo by Tayt Armitage'
 author = 'Maxwell Kroft'
 root_doc = 'index'
 
