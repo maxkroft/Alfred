@@ -136,17 +136,28 @@ class Init_lcs(InitFile):
 
         row = []
 
-        fpath = input('Absolute path to light curve file to move here, or type "skip" if you dont want to move a file now: ')
+        found = False
+        while not found:
 
-        if fpath.lower() == 'skip':
-            fname = input('Name of light curve file: ')
+            fpath = input('Absolute path to light curve file to move here, or type "skip" if you dont want to move a file now: ')
 
-        else:
-            fname = fpath[fpath.rfind('/')+1:]
-            try:
-                shutil.copyfile(fpath, self.direc+'/'+fname)
-            except shutil.SameFileError:
-                print('File already there.')
+            if fpath.lower() == 'skip':
+                fname = input('Name of light curve file for later: ')
+                found = True
+
+            else:
+                
+                fname = fpath[fpath.rfind('/')+1:]
+
+                try:
+                    shutil.copyfile(fpath, self.direc+'/'+fname)
+                    found = True
+
+                except shutil.SameFileError:
+                    print('File already there.')
+
+                except FileNotFoundError:
+                    print('File not found. Try again.')
 
         row.append(fname)
 
@@ -250,17 +261,28 @@ class Init_rv(InitFile):
 
         row = []
 
-        fpath = input('Absolute path to RV file to move here, or type "skip" if you dont want to move a file now: ')
+        found = False
+        while not found:
 
-        if fpath.lower() == 'skip':
-            fname = input('Name of RV file: ')
+            fpath = input('Absolute path to RV file to move here, or type "skip" if you dont want to move a file now: ')
 
-        else:
-            fname = fpath[fpath.rfind('/')+1:]
-            try:
-                shutil.copyfile(fpath, self.direc+'/'+fname)
-            except shutil.SameFileError:
-                print('File already there.')
+            if fpath.lower() == 'skip':
+                fname = input('Name of RV file for later: ')
+                found = True
+
+            else:
+
+                fname = fpath[fpath.rfind('/')+1:]
+
+                try:
+                    shutil.copyfile(fpath, self.direc+'/'+fname)
+                    found = True
+
+                except shutil.SameFileError:
+                    print('File already there.')
+
+                except FileNotFoundError:
+                    print('File not found. Try again.')
 
         row.append(fname)
 

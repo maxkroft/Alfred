@@ -55,6 +55,8 @@ class ExoSystem:
 
 
         self.direc = direc
+        if self.direc[-1] != '/':
+            self.direc += '/'
         self.init_planets = Init_planets(self.direc, init_planets).from_file()
         self.init_star = Init_star(self.direc, init_star).from_file()
         self.init_lcs = Init_lcs(self.direc, init_lcs).from_file()
