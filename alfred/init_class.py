@@ -1083,15 +1083,31 @@ def create_folder(direc: str):
 
     if x.lower() == 'y':
 
-        try:
-            Init_lcs(direc).create()
-        except:
-            print('Something went wrong with Init_lcs.create(). This will need to be rerun.')
+        done = False
+        while not done:
+            try:
+                Init_lcs(direc).create()
+                done = True
+            except Exception as e:
+                print('Something went wrong with Init_lcs.create():')
+                print(e)
 
-        try:
-            Init_ld(direc).create()
-        except:
-            print('Something went wrong with Init_ld.create(). This will need to be rerun.')
+                redo = input('Redo Init_lcs creation? y/n ')
+                if redo.lower() != 'y':
+                    done = True
+
+        done = False
+        while not done:
+            try:
+                Init_ld(direc).create()
+                done = True
+            except Exception as e:
+                print('Something went wrong with Init_ld.create():')
+                print(e)
+
+                redo = input('Redo Init_ld creation? y/n ')
+                if redo.lower() != 'y':
+                    done = True
 
     else:
 
@@ -1099,31 +1115,55 @@ def create_folder(direc: str):
 
         Init_ld(direc).create(empty = True)
 
-        _ = input('Once you have these, run the function create_init_lcs and then create_init_ld. Press any key to continue.')
+        _ = input('Once you have these, run Init_lcs("directory").create() and then Init_ld("directory").create(). Press any key to continue.')
 
 
     x = input('Do you have RV files already? y/n ')
 
     if x.lower() == 'y':
 
-        try:
-            Init_rv(direc).create()
-        except:
-            print('Something went wrong with Init_rv.create(). This will need to be rerun.')
+        done = False
+        while not done:
+            try:
+                Init_rv(direc).create()
+                done = True
+            except Exception as e:
+                print('Something went wrong with Init_rv.create():')
+                print(e)
+
+                redo = input('Redo Init_rv creation? y/n ')
+                if redo.lower() != 'y':
+                    done = True
 
     else:
 
         Init_rv(direc).create(empty = True)
 
-        _ = input('Once you have these, run the function create_init_rv. Press any key to continue.')
+        _ = input('Once you have these, run Init_rv("directory").create(). Press any key to continue.')
 
-    try:
-        Init_star(direc).create()
-    except:
-        print('Something went wrong with Init_star.create(). This will need to be rerun.')
+    done = False
+    while not done:
+        try:
+            Init_star(direc).create()
+            done = True
+        except Exception as e:
+            print('Something went wrong with Init_star.create():')
+            print(e)
 
-    try:
-        Init_planets(direc).create()
-    except:
-        print('Something went wrong with Init_planets.create(). This will need to be rerun.')
+            redo = input('Redo Init_star creation? y/n ')
+            if redo.lower() != 'y':
+                done = True
+
+    done = False
+    while not done:
+        try:
+            Init_planets(direc).create()
+            done = True
+        except Exception as e:
+            print('Something went wrong with Init_planets.create():')
+            print(e)
+
+            redo = input('Redo Init_planets creation? y/n ')
+            if redo.lower() != 'y':
+                done = True
 
