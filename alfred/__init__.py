@@ -1,6 +1,6 @@
 import os
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 ld_grid_dir = os.path.dirname(os.path.realpath(__file__))+'/ld_grids/'
 data_dir = os.path.dirname(os.path.realpath(__file__))+'/example_data/'
