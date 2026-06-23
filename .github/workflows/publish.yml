@@ -20,7 +20,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -28,9 +32,19 @@ jobs:
 
       - name: Build release distributions
         run: |
-          # NOTE: put your own distribution build steps here.
-          python -m pip install build
+          python -m pip install --upgrade build
           python -m build --sdist
+
+      - name: Verify built source and version
+        run: |
+          echo "GIT SHA: $(git rev-parse HEAD)"
+          echo "Release tag: ${{ github.event.release.tag_name }}"
+          echo "pyproject.toml (head):"
+          sed -n '1,200p' pyproject.toml || true
+          echo "alfred/__init__.py (head):"
+          sed -n '1,120p' alfred/__init__.py || true
+          echo "dist contents:"
+          ls -la dist || true
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -47,15 +61,10 @@ jobs:
       id-token: write
 
     # Dedicated environments with protections for publishing are strongly recommended.
-    # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
     environment:
       name: pypi
       # OPTIONAL: uncomment and update to include your PyPI project URL in the deployment status:
       url: https://pypi.org/project/Alfred-Exoplanets/
-      #
-      # ALTERNATIVE: if your GitHub Release name is the PyPI project version string
-      # ALTERNATIVE: exactly, uncomment the following line instead:
-      # url: https://pypi.org/project/YOURPROJECT/${{ github.event.release.name }}
 
     steps:
       - name: Retrieve release distributions
@@ -64,7 +73,48 @@ jobs:
           name: release-dists
           path: dist/
 
-      - name: Publish release distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
+      - name: Show built artifacts
+        run: |
+          echo "dist:"
+          ls -la dist || true
+          ls dist/*.tar.gz || true
+
+      - name: Extract built version from sdist
+        id: built_version
+        run: |
+          set -euxo pipefail
+          sdist=$(ls dist/*.tar.gz | head -n1 || true)
+          if [ -z "$sdist" ]; then
+            echo "error=no_sdist" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          fn=$(basename "$sdist")
+          # Try to extract pattern like name-version.tar.gz
+          ver=$(echo "$fn" | sed -E 's/.*-([0-9]+(\.[0-9]+)*)(\.post[0-9]+|[a-zA-Z0-9.+-]*)?\.tar\.gz$/\1/')
+          echo "sdist=$sdist" >> $GITHUB_OUTPUT
+          echo "version=$ver" >> $GITHUB_OUTPUT
+
+      - name: Check built version matches release tag
+        run: |
+          set -euxo pipefail
+          tag="${{ github.event.release.tag_name }}"
+          tag="${tag#v}"
+          built="${{ steps.built_version.outputs.version }}"
+          echo "release tag (no v): $tag"
+          echo "built version: $built"
+          if [ "$tag" != "$built" ]; then
+            echo "ERROR: built version ($built) does not match release tag ($tag). Aborting publish."
+            exit 1
+          fi
+
+      - name: Publish to PyPI (twine --skip-existing)
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine upload --skip-existing dist/*
+
+      - name: Skip publish (if already exists)
+        if: ${{ failure() }}
+        run: echo "Publish failed or skipped."
