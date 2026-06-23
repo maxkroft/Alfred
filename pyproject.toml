@@ -10,7 +10,6 @@ build-backend = "setuptools.build_meta"
 name = "Alfred-Exoplanets"
 dynamic = ["version"]
 authors = [{name = "Max Kroft"}]
-license = "MIT"
 dependencies = [
     "numpy",
     "matplotlib",
