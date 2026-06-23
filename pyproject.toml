@@ -11,7 +11,6 @@ name = "Alfred-Exoplanets"
 dynamic = ["version"]
 authors = [{name = "Max Kroft"}]
 license = "MIT"
-license-files = ["LICENSE"]
 dependencies = [
     "numpy",
     "matplotlib",
