@@ -3653,15 +3653,20 @@ class ExoSystem:
              
             freq, power = ls.autopower(minimum_frequency=min_freq, maximum_frequency=max_freq)
 
+        lsw = LombScargle(self.tr, np.ones_like(self.tr), fit_mean = False, center_data = False)
+        powerw = lsw.power(freq)
+
         fig, ax = plt.subplots()
 
         if plot_periods:
-            ax.plot(1/freq, power, c = 'black')
+            ax.plot(1/freq, power, c = 'black', zorder = 2)
+            ax.plot(1/freq, powerw, c = 'gray', label = 'Window Fn.', zorder = 1, alpha = 0.5)
             ax.set_xscale('log')
             ax.set_xlabel('Period (days)', fontsize = 20)
 
         else:
-            ax.plot(freq, power, c = 'black')
+            ax.plot(freq, power, c = 'black', zorder = 2)
+            ax.plot(freq, powerw, c = 'gray', label = 'Window Fn.', zorder = 1, alpha = 0.5)
             ax.set_xlabel('Frequency (1/days)', fontsize = 20)
 
         ax.axhline(ls.false_alarm_level(0.01), c = 'red', label = '1% FA')
