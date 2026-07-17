@@ -7,7 +7,7 @@ from astropy import units as u
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
-from alfred.init_gui import InitPlanetsGUI
+from alfred.init_gui import InitPlanetsGUI, InitLcsGUI
 
 
 class InitFile:
@@ -36,7 +36,7 @@ class InitFile:
         """
 
         self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
-                                header_rows = self.header_rows, converters = {'*': [int, float, bool, str]})
+                                header_rows = self.header_rows, converters = {'*': [float, bool, str]})
         return self
 
     def save(self):
@@ -89,111 +89,16 @@ class Init_lcs(InitFile):
 
         self.header_rows = ['name', 'unit']
 
-
-    def create(self, empty: bool = False) -> Self:
-        """Creates an Init_lcs table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-        and file.
-
-        Args:
-            empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
-                using Init_lcs.add_lc_file, or manually with either astropy Table methods or in the txt file. Default is False.
-
-        Returns:
-            Init_lcs: The whole Init_lcs object after creating the table.
-        """
-
         self.table = Table(names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter','Detrend'], 
                            units = [None,None,None,None,None,None,'BJD',None,'s',None,None],
-                           dtype = [str,str,str,str,str,str,int,float,float,str,bool])
+                           dtype = [str,str,str,str,str,str,float,float,float,str,bool])
 
-        if not empty:
+    
+    def __call__(self):
 
-            x = input('Creating light curve initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+        app = InitLcsGUI(self)
+        app.mainloop()
 
-            if x == 'stop':
-                return
-
-            while True:
-
-                self.add_lc_file()
-
-                x = input('More files? y/n ')
-                
-                if x.lower() != 'y':
-                    break
-        
-        else:
-
-            self.table.add_row(['None','None','None','None','None','None',0,np.nan,np.nan,'None',False])
-
-        self.save()
-
-        return self
-
-
-    def add_lc_file(self):
-        """Adds a new row to the Init_lcs table for a new light curve file. Prompts the user to fill it in. Easier than adding rows manually.
-        """
-
-        row = []
-
-        found = False
-        while not found:
-
-            fpath = input('Absolute path to light curve file to move here, or type "skip" if you dont want to move a file now: ')
-
-            if fpath.lower() == 'skip':
-                fname = input('Name of light curve file for later: ')
-                found = True
-
-            else:
-                
-                fname = fpath[fpath.rfind('/')+1:]
-
-                try:
-                    shutil.copyfile(fpath, self.direc+'/'+fname)
-                    found = True
-
-                except shutil.SameFileError:
-                    print('File already there.')
-
-                except FileNotFoundError:
-                    print('File not found. Try again.')
-
-        row.append(fname)
-
-        nickname = input('Nickname for the data set (e.g. "TESS S57"): ')
-        row.append(nickname)
-
-        timecol = input('Column header for the time data: ')
-        row.append(timecol)
-
-        fcol = input('Column header for the flux data: ')
-        row.append(fcol)
-
-        ferrcol = input('Column header for the flux error data: ')
-        row.append(ferrcol)
-
-        qcol = input('Column header for the quality flag data (or None): ')
-        row.append(qcol)
-
-        toffset = input('Time offset from BJD (in days), for example 2457000 is common for TESS: ')
-        row.append(toffset)
-
-        row.append(1.0)
-
-        exptime = input('Exposure time for this data set (aka its cadence) in seconds: ')
-        row.append(exptime)
-
-        filter = input('Filter or bandpass for this data (e.g. TESS, Kepler, V): ')
-        row.append(filter)
-
-        detrend = input('Detrend this lightcurve? True or False ').lower() == 'true'
-        row.append(detrend)
-
-        self.table.add_row(row)
-
-        self.save()
 
 
 class Init_rv(InitFile):
@@ -628,122 +533,6 @@ class Init_planets(InitFile):
         app = InitPlanetsGUI(self)
         app.mainloop()
 
-
-    # def create(self) -> Self:
-    #     """Creates an Init_planets table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
-    #     directory and file.
-
-    #     Returns:
-    #         Init_planets: The whole Init_planets object after creating the table.
-    #     """
-
-    #     self.table = Table(names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
-    #         units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
-    #         dtype = [bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float])
-
-    #     x = input('Creating planet initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
-
-    #     if x == 'stop':
-    #         return
-
-    #     while True:
-
-    #         self.add_planet()
-
-    #         x = input('More planets? y/n ')
-                
-    #         if x.lower() != 'y':
-    #             break
-
-    #     self.save()
-
-    #     return self
-
-
-    # def add_planet(self):
-    #     """Adds a new row to the Init_planets table for a new planet. Prompts the user to fill it in. Easier than adding rows manually.
-    #     """
-
-    #     row = []
-
-    #     transit = input('Is the planet transiting? True or False ').lower() == 'true'
-    #     row.append(transit)
-
-    #     rv = input('Does the planet have an RV signal? True or False ').lower() == 'true'
-    #     row.append(rv)
-
-    #     ecc = input('Fit the planet for eccentricity? True or False ').lower() == 'true'
-    #     row.append(ecc)
-
-    #     if transit:
-
-    #         ttv = input('Fit the planet for ttvs? True or False ').lower() == 'true'
-    #         row.append(ttv)
-
-    #         ecl = input('Fit the planet for a secondary eclipse? True or False ').lower() == 'true'
-    #         row.append(ecl)
-
-    #     else:
-
-    #         row.append(False)
-
-    #     p = input('Planet period initial guess (in days): ')
-    #     row.append(p)
-
-    #     tc = input('Planet tc initial guess (in BJD - 2450000): ')
-    #     row.append(tc)
-
-    #     if transit:
-
-    #         rp = input('Planet to star radius ratio initial guess: ')
-    #         row.append(rp)
-
-    #         a = input('Planet semimajor axis to stellar radius ratio initial guess: ')
-    #         row.append(a)
-
-    #         cosi = input('Planet cos(inclination) initial guess: ')
-    #         row.append(cosi)
-
-    #     else:
-
-    #         row.append(None)
-    #         row.append(None)
-    #         row.append(None)
-
-    #     if rv:
-
-    #         k = input('Planet rv semi-amplitude initial guess (in m/s): ')
-    #         row.append(k)
-
-    #     else:
-
-    #         row.append(None)
-
-    #     if rv and ecc:
-
-    #         secw = input('Planet sqrt(e)cos(w) initial guess: ')
-    #         row.append(secw)
-
-    #         sesw = input('Planet sqrt(e)sin(w) initial guess: ')
-    #         row.append(sesw)
-
-    #     else:
-
-    #         row.append(0.01)
-    #         row.append(0.01)
-
-    #     if ecl:
-
-    #         fp = input('Planet to star flux ratio initial guess: ')
-    #         row.append(fp)
-
-    #     else:
-
-    #         row.append(None)
-
-    #     self.table.add_row(row)
-
-    #     self.save()
 
 
 class Init_ttvs(InitFile):
