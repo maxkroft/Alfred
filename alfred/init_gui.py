@@ -1,3 +1,10 @@
+from __future__ import annotations  # MUST be line 1
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from alfred.init_class import Init_planets
+
 import customtkinter as ctk
 ctk.set_appearance_mode('dark')
 ctk.DrawEngine.preferred_drawing_method = "circle_shapes"
@@ -89,12 +96,12 @@ class ToggleCheckbox(ctk.CTkCheckBox):
 
 
 class PlanetGUI(ctk.CTkToplevel):
-    def __init__(self, data: Row):
+    def __init__(self, data: Row, idx: int):
         super().__init__()
 
         self.data = data
 
-        self.title('Add a Planet')
+        self.title('Planet {0}'.format(idx))
         self.geometry('500x600')
         self.grid_columnconfigure((0,1), weight = 1)
 
@@ -203,8 +210,61 @@ class DeletePrompt(ctk.CTkToplevel):
         self.destroy()
 
 
+class RenamePrompt(ctk.CTkToplevel):
+    def __init__(self, orig_name):
+        super().__init__()
+
+        self.title('New File Name')
+        self.geometry('300x100')
+        self.grid_columnconfigure(0, weight = 1)
+        self.grid_rowconfigure((0,1), weight = 1)
+
+        self.entry_var = ctk.StringVar(value = orig_name)
+        self.entry = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = self.entry_var)
+        self.entry.grid(row = 0, column = 0, padx = 10, pady = (10, 0), sticky = 'ew')
+
+        self.save = ctk.CTkButton(self, text = 'Save', font = ('Arial', 18, 'bold'), command = self.save_cmd)
+        self.save.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+    def save_cmd(self):
+
+        self.newname = self.entry_var.get().strip()
+        
+        if self.newname[-4:] != '.txt':
+            self.newname += '.txt'
+
+        self.destroy()
+
+
+class DirectoryPrompt(ctk.CTkToplevel):
+    def __init__(self, orig_path):
+        super().__init__()
+
+        self.title('Directory')
+        self.geometry('300x100')
+        self.grid_columnconfigure(0, weight = 1)
+        self.grid_rowconfigure((0,1), weight = 1)
+
+        self.entry_var = ctk.StringVar(value = orig_path)
+        self.entry = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = self.entry_var)
+        self.entry.grid(row = 0, column = 0, padx = 10, pady = (10, 0), sticky = 'ew')
+
+        self.save = ctk.CTkButton(self, text = 'Save', font = ('Arial', 18, 'bold'), command = self.save_cmd)
+        self.save.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+    def save_cmd(self):
+
+        self.newpath = self.entry_var.get().strip()
+        
+        if self.newpath[-1] != '/':
+            self.newpath += '/'
+
+        self.destroy()
+
+
+
 class PlanetFrame(ctk.CTkFrame):
-    def __init__(self, master, topmaster, data: Row, idx):
+    def __init__(self, master, topmaster, data: Row, idx: int):
         super().__init__(master)
 
         self.grid_columnconfigure(list(range(1,4)), weight = 1)
@@ -228,7 +288,7 @@ class PlanetFrame(ctk.CTkFrame):
 
     def edit_cmd(self):
 
-        edit_planet = PlanetGUI(self.data)
+        edit_planet = PlanetGUI(self.data, self.idx+1)
 
         self.wait_window(edit_planet)
 
@@ -245,14 +305,38 @@ class PlanetFrame(ctk.CTkFrame):
         self.labelvar.set('{0}. P = {1:.2f}'.format(self.idx+1, self.data['Period']))
 
 
-class InitPlanetGUI(ctk.CTk):
-    def __init__(self, table: Table):
+class InitPlanetsGUI(ctk.CTk):
+    def __init__(self, initfile: Init_planets):
         super().__init__()
 
-        self.table = table
+        self.tk.createcommand("bgerror", lambda *args: None)
 
-        self.geometry('800x600')
+        self.initfile = initfile
+        self.table = self.initfile.table
+
+        self.title(self.initfile.name)
+        self.geometry('600x400')
         self.grid_columnconfigure((0,1), weight = 1)
+        self.grid_rowconfigure(0, weight = 1)
+
+        self.setup_planets_frame()
+
+        self.add = ctk.CTkButton(self, text = 'Add', command = self.add_cmd, font = ('Arial', 18, 'bold'))
+        self.add.grid(row = 1, column = 0, padx = 100, pady = (10, 0), sticky = 'ew', columnspan = 2)
+
+        self.load = ctk.CTkButton(self, text = 'Load', command = self.load_cmd, font = ('Arial', 18, 'bold'))
+        self.load.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = ('Arial', 18, 'bold'))
+        self.save.grid(row = 2, column = 1, padx = 10, pady = (10, 0), sticky = 'ew')
+
+        self.rename = ctk.CTkButton(self, text = 'Rename', command = self.rename_cmd, font = ('Arial', 18, 'bold'))
+        self.rename.grid(row = 3, column = 0, padx = 10, pady = (10,10), sticky = 'ew')
+
+        self.directory = ctk.CTkButton(self, text = 'Directory', command = self.direc_cmd, font = ('Arial', 18, 'bold'))
+        self.directory.grid(row = 3, column  = 1, padx = 10, pady = (10,10), sticky = 'ew')
+
+    def setup_planets_frame(self):
 
         self.planets_frame = ctk.CTkScrollableFrame(self)
         self.planets_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
@@ -265,36 +349,65 @@ class InitPlanetGUI(ctk.CTk):
 
         for i in range(len(self.table)):
 
-            planet = PlanetFrame(self.planets_frame, self, table[i], i)
-            planet.grid(row = i+1, column = 0, pady = (10, 0), sticky = 'ew')
-            self.planets.append(planet)
+            self.add_planet(i)
 
-        self.add = ctk.CTkButton(self, text = 'Add', command = self.add_cmd, font = ('Arial', 18, 'bold'))
-        self.add.grid(row = 1, column = 0, padx = 10, pady = (10, 0), sticky = 'ew')
+    def add_planet(self, i):
 
-        self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = ('Arial', 18, 'bold'))
-        self.save.grid(row = 1, column = 1, padx = 10, pady = (10, 0), sticky = 'ew')
+        planet = PlanetFrame(self.planets_frame, self, self.table[i], i)
+        planet.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
+        self.planets.append(planet)
+
 
     def add_cmd(self):
         
         self.table.add_row([False]*5 + [np.nan]*9)
         i = len(self.planets)
-        planet = PlanetFrame(self.planets_frame, self, self.table[i], i)
-        planet.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
-        self.planets.append(planet)
-        planet.edit_cmd()
+        self.add_planet(i)
+        self.planets[i].edit_cmd()
+
+    def load_cmd(self):
+
+        self.initfile.from_file()
+        self.table = self.initfile.table
+
+        self.planets_frame.grid_forget()
+        self.setup_planets_frame()
+
 
     def save_cmd(self):
-        
+
+        self.initfile.save()
+
         self.destroy()
+
+    def rename_cmd(self):
+
+        rename_prompt = RenamePrompt(self.initfile.name)
+
+        self.wait_window(rename_prompt)
+
+        newname = rename_prompt.newname
+
+        self.initfile.name = newname
+        self.title(newname)
+
+    
+    def direc_cmd(self):
+
+        direc_prompt = DirectoryPrompt(self.initfile.direc)
+
+        self.wait_window(direc_prompt)
+
+        newpath = direc_prompt.newpath
+
+        self.initfile.direc = newpath
+
 
     def copy_cmd(self, data: Row):
 
         self.table.add_row(data)
         i = len(self.planets)
-        planet = PlanetFrame(self.planets_frame, self, self.table[i], i)
-        planet.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
-        self.planets.append(planet)
+        self.add_planet(i)
 
 
     def delete_cmd(self, i):
@@ -314,9 +427,3 @@ class InitPlanetGUI(ctk.CTk):
                 self.planets[j].idx = j
                 self.planets[j].data = self.table[j]
                 self.planets[j].update_label()
-
-
-tab = Table.read('/mnt/c/Users/kroft/Documents/Data/7178/init_planets2.txt', format = 'ascii.fixed_width_two_line', header_rows = ['name','unit'], delimiter = '|', converters = {'*': [int, float, bool, str]})
-# app = PlanetGUI(data = tab[0])
-app = InitPlanetGUI(tab)
-app.mainloop()

@@ -25,7 +25,7 @@ import copy
 import shutil
 
 from alfred._rv_func import _rvModel
-from alfred.init_class import *
+from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs
 from alfred.ld_grids import *
 from alfred.priors import *
 from alfred import is_notebook

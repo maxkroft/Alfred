@@ -7,6 +7,7 @@ from astropy import units as u
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
+from alfred.init_gui import InitPlanetsGUI
 
 
 class InitFile:
@@ -617,122 +618,132 @@ class Init_planets(InitFile):
 
         self.header_rows = ['name', 'unit']
 
-
-    def create(self) -> Self:
-        """Creates an Init_planets table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
-        directory and file.
-
-        Returns:
-            Init_planets: The whole Init_planets object after creating the table.
-        """
-
         self.table = Table(names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
             units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
             dtype = [bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float])
 
-        x = input('Creating planet initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
 
-        if x == 'stop':
-            return
+    def __call__(self):
 
-        while True:
+        app = InitPlanetsGUI(self)
+        app.mainloop()
 
-            self.add_planet()
 
-            x = input('More planets? y/n ')
+    # def create(self) -> Self:
+    #     """Creates an Init_planets table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
+    #     directory and file.
+
+    #     Returns:
+    #         Init_planets: The whole Init_planets object after creating the table.
+    #     """
+
+    #     self.table = Table(names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
+    #         units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
+    #         dtype = [bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float])
+
+    #     x = input('Creating planet initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+    #     if x == 'stop':
+    #         return
+
+    #     while True:
+
+    #         self.add_planet()
+
+    #         x = input('More planets? y/n ')
                 
-            if x.lower() != 'y':
-                break
+    #         if x.lower() != 'y':
+    #             break
 
-        self.save()
+    #     self.save()
 
-        return self
+    #     return self
 
 
-    def add_planet(self):
-        """Adds a new row to the Init_planets table for a new planet. Prompts the user to fill it in. Easier than adding rows manually.
-        """
+    # def add_planet(self):
+    #     """Adds a new row to the Init_planets table for a new planet. Prompts the user to fill it in. Easier than adding rows manually.
+    #     """
 
-        row = []
+    #     row = []
 
-        transit = input('Is the planet transiting? True or False ').lower() == 'true'
-        row.append(transit)
+    #     transit = input('Is the planet transiting? True or False ').lower() == 'true'
+    #     row.append(transit)
 
-        rv = input('Does the planet have an RV signal? True or False ').lower() == 'true'
-        row.append(rv)
+    #     rv = input('Does the planet have an RV signal? True or False ').lower() == 'true'
+    #     row.append(rv)
 
-        ecc = input('Fit the planet for eccentricity? True or False ').lower() == 'true'
-        row.append(ecc)
+    #     ecc = input('Fit the planet for eccentricity? True or False ').lower() == 'true'
+    #     row.append(ecc)
 
-        if transit:
+    #     if transit:
 
-            ttv = input('Fit the planet for ttvs? True or False ').lower() == 'true'
-            row.append(ttv)
+    #         ttv = input('Fit the planet for ttvs? True or False ').lower() == 'true'
+    #         row.append(ttv)
 
-            ecl = input('Fit the planet for a secondary eclipse? True or False ').lower() == 'true'
-            row.append(ecl)
+    #         ecl = input('Fit the planet for a secondary eclipse? True or False ').lower() == 'true'
+    #         row.append(ecl)
 
-        else:
+    #     else:
 
-            row.append(False)
+    #         row.append(False)
 
-        p = input('Planet period initial guess (in days): ')
-        row.append(p)
+    #     p = input('Planet period initial guess (in days): ')
+    #     row.append(p)
 
-        tc = input('Planet tc initial guess (in BJD - 2450000): ')
-        row.append(tc)
+    #     tc = input('Planet tc initial guess (in BJD - 2450000): ')
+    #     row.append(tc)
 
-        if transit:
+    #     if transit:
 
-            rp = input('Planet to star radius ratio initial guess: ')
-            row.append(rp)
+    #         rp = input('Planet to star radius ratio initial guess: ')
+    #         row.append(rp)
 
-            a = input('Planet semimajor axis to stellar radius ratio initial guess: ')
-            row.append(a)
+    #         a = input('Planet semimajor axis to stellar radius ratio initial guess: ')
+    #         row.append(a)
 
-            cosi = input('Planet cos(inclination) initial guess: ')
-            row.append(cosi)
+    #         cosi = input('Planet cos(inclination) initial guess: ')
+    #         row.append(cosi)
 
-        else:
+    #     else:
 
-            row.append(None)
-            row.append(None)
-            row.append(None)
+    #         row.append(None)
+    #         row.append(None)
+    #         row.append(None)
 
-        if rv:
+    #     if rv:
 
-            k = input('Planet rv semi-amplitude initial guess (in m/s): ')
-            row.append(k)
+    #         k = input('Planet rv semi-amplitude initial guess (in m/s): ')
+    #         row.append(k)
 
-        else:
+    #     else:
 
-            row.append(None)
+    #         row.append(None)
 
-        if rv and ecc:
+    #     if rv and ecc:
 
-            secw = input('Planet sqrt(e)cos(w) initial guess: ')
-            row.append(secw)
+    #         secw = input('Planet sqrt(e)cos(w) initial guess: ')
+    #         row.append(secw)
 
-            sesw = input('Planet sqrt(e)sin(w) initial guess: ')
-            row.append(sesw)
+    #         sesw = input('Planet sqrt(e)sin(w) initial guess: ')
+    #         row.append(sesw)
 
-        else:
+    #     else:
 
-            row.append(0.01)
-            row.append(0.01)
+    #         row.append(0.01)
+    #         row.append(0.01)
 
-        if ecl:
+    #     if ecl:
 
-            fp = input('Planet to star flux ratio initial guess: ')
-            row.append(fp)
+    #         fp = input('Planet to star flux ratio initial guess: ')
+    #         row.append(fp)
 
-        else:
+    #     else:
 
-            row.append(None)
+    #         row.append(None)
 
-        self.table.add_row(row)
+    #     self.table.add_row(row)
 
-        self.save()
+    #     self.save()
 
 
 class Init_ttvs(InitFile):
