@@ -626,7 +626,7 @@ class Init_planets(InitFile):
             Init_planets: The whole Init_planets object after creating the table.
         """
 
-        self.table = Table(names = ['Transiting', 'RV Signal', 'Fit TTVs', 'Fit Eclipse', 'Fit Ecc', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
+        self.table = Table(names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
             units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
             dtype = [bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float])
 
@@ -661,6 +661,9 @@ class Init_planets(InitFile):
         rv = input('Does the planet have an RV signal? True or False ').lower() == 'true'
         row.append(rv)
 
+        ecc = input('Fit the planet for eccentricity? True or False ').lower() == 'true'
+        row.append(ecc)
+
         if transit:
 
             ttv = input('Fit the planet for ttvs? True or False ').lower() == 'true'
@@ -672,9 +675,6 @@ class Init_planets(InitFile):
         else:
 
             row.append(False)
-
-        ecc = input('Fit the planet for eccentricity? True or False ').lower() == 'true'
-        row.append(ecc)
 
         p = input('Planet period initial guess (in days): ')
         row.append(p)
