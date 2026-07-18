@@ -9,6 +9,8 @@ import customtkinter as ctk
 ctk.set_appearance_mode('dark')
 ctk.DrawEngine.preferred_drawing_method = "circle_shapes"
 
+font = 'Verdana'
+
 from astropy.table import Table, Row, vstack
 import numpy as np
 
@@ -27,19 +29,19 @@ class InitGUI(ctk.CTk):
         self.grid_columnconfigure((0,1), weight = 1)
         self.grid_rowconfigure(0, weight = 1)
 
-        self.add = ctk.CTkButton(self, text = 'Add', command = self.add_cmd, font = ('Arial', 18, 'bold'))
+        self.add = ctk.CTkButton(self, text = 'Add', command = self.add_cmd, font = (font, 18, 'bold'))
         self.add.grid(row = 1, column = 0, padx = 100, pady = (10, 0), sticky = 'ew', columnspan = 2)
 
-        self.load = ctk.CTkButton(self, text = 'Load', command = self.load_cmd, font = ('Arial', 18, 'bold'))
+        self.load = ctk.CTkButton(self, text = 'Load', command = self.load_cmd, font = (font, 18, 'bold'))
         self.load.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
 
-        self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = ('Arial', 18, 'bold'))
+        self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
         self.save.grid(row = 2, column = 1, padx = 10, pady = (10, 0), sticky = 'ew')
 
-        self.rename = ctk.CTkButton(self, text = 'Rename', command = self.rename_cmd, font = ('Arial', 18, 'bold'))
+        self.rename = ctk.CTkButton(self, text = 'Rename', command = self.rename_cmd, font = (font, 18, 'bold'))
         self.rename.grid(row = 3, column = 0, padx = 10, pady = (10,10), sticky = 'ew')
 
-        self.directory = ctk.CTkButton(self, text = 'Directory', command = self.direc_cmd, font = ('Arial', 18, 'bold'))
+        self.directory = ctk.CTkButton(self, text = 'Directory', command = self.direc_cmd, font = (font, 18, 'bold'))
         self.directory.grid(row = 3, column  = 1, padx = 10, pady = (10,10), sticky = 'ew')
 
 
@@ -98,13 +100,13 @@ class DeletePrompt(ctk.CTkToplevel):
 
         self.answer = False
 
-        self.label = ctk.CTkLabel(self, text = 'Delete?', font = ('Arial', 18, 'bold'))
+        self.label = ctk.CTkLabel(self, text = 'Delete?', font = (font, 18, 'bold'))
         self.label.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)
 
-        self.yes = ctk.CTkButton(self, text = 'Yes', command = self.yes_cmd, font = ('Arial', 18, 'bold'))
+        self.yes = ctk.CTkButton(self, text = 'Yes', command = self.yes_cmd, font = (font, 18, 'bold'))
         self.yes.grid(row = 1, column  = 0, padx = 10, sticky = 'ew')
 
-        self.no = ctk.CTkButton(self, text = 'No', command = self.no_cmd, font = ('Arial', 18, 'bold'))
+        self.no = ctk.CTkButton(self, text = 'No', command = self.no_cmd, font = (font, 18, 'bold'))
         self.no.grid(row = 1, column = 1, padx = 10, sticky = 'ew')
 
     def yes_cmd(self):
@@ -130,10 +132,10 @@ class RenamePrompt(ctk.CTkToplevel):
         self.newname = orig_name
 
         self.entry_var = ctk.StringVar(value = orig_name)
-        self.entry = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = self.entry_var)
+        self.entry = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = self.entry_var)
         self.entry.grid(row = 0, column = 0, padx = 10, pady = (10, 0), sticky = 'ew')
 
-        self.save = ctk.CTkButton(self, text = 'Save', font = ('Arial', 18, 'bold'), command = self.save_cmd)
+        self.save = ctk.CTkButton(self, text = 'Save', font = (font, 18, 'bold'), command = self.save_cmd)
         self.save.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
 
     def save_cmd(self):
@@ -158,10 +160,10 @@ class DirectoryPrompt(ctk.CTkToplevel):
         self.newpath = orig_path
 
         self.entry_var = ctk.StringVar(value = orig_path)
-        self.entry = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = self.entry_var)
+        self.entry = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = self.entry_var)
         self.entry.grid(row = 0, column = 0, padx = 10, pady = (10, 0), sticky = 'ew')
 
-        self.save = ctk.CTkButton(self, text = 'Save', font = ('Arial', 18, 'bold'), command = self.save_cmd)
+        self.save = ctk.CTkButton(self, text = 'Save', font = (font, 18, 'bold'), command = self.save_cmd)
         self.save.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
 
     def save_cmd(self):
@@ -185,8 +187,8 @@ class FloatEntryFrame(ctk.CTkFrame):
 
         self.grid_columnconfigure(0, weight = 1)
 
-        self.label = ctk.CTkLabel(self, text = label, font = ('Arial',18,'bold'))
-        self.entry = FloatEntry(self, min_val = self.min_val, max_val = self.max_val, font = ('Arial', 18), justify = 'center')
+        self.label = ctk.CTkLabel(self, text = label, font = (font, 18, 'bold'))
+        self.entry = FloatEntry(self, min_val = self.min_val, max_val = self.max_val, font = (font, 18), justify = 'center')
 
         self.label.grid(row = 0, column = 0, pady = (10,0))
         self.entry.grid(row = 1, column = 0, sticky = "ew", padx = 10)
@@ -242,7 +244,7 @@ class ToggleCheckbox(ctk.CTkCheckBox):
         self.val = ctk.IntVar(value = startval)
         self.toggles = toggles
 
-        super().__init__(master, text = self.label, font = ('Arial', 18, 'bold'), variable = self.val, command = self.toggle_entry)
+        super().__init__(master, text = self.label, font = (font, 18, 'bold'), variable = self.val, command = self.toggle_entry)
         self.toggle_entry()
 
 
@@ -327,7 +329,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.se_check.grid(row = 4, column = 0, padx=10, pady=(10, 0), sticky="w")
 
 
-        self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = ('Arial', 18, 'bold'))
+        self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
         self.save.grid(row = 6, column = 0, padx = 10, pady = (10,0), sticky = "ew", columnspan = 2)
 
 
@@ -365,16 +367,16 @@ class PlanetFrame(ctk.CTkFrame):
         self.idx = idx
 
         self.labelvar = ctk.StringVar(value = '{0}. P = {1:.2f}'.format(self.idx+1, self.data['Period']))
-        self.label = ctk.CTkLabel(self, textvariable = self.labelvar, font = ('Arial', 18, 'bold'))
+        self.label = ctk.CTkLabel(self, textvariable = self.labelvar, font = (font, 18, 'bold'))
         self.label.grid(row = 0, column = 0, padx = 10, sticky = 'ew')
 
-        self.edit = ctk.CTkButton(self, text = 'Edit', command = self.edit_cmd, font = ('Arial', 18, 'bold'))
+        self.edit = ctk.CTkButton(self, text = 'Edit', command = self.edit_cmd, font = (font, 18, 'bold'))
         self.edit.grid(row = 0, column = 1, padx = 10, sticky = 'ew')
 
-        self.copy = ctk.CTkButton(self, text = 'Copy', command = lambda d=self.data: self.topmaster.copy_cmd(d), font = ('Arial', 18, 'bold'))
+        self.copy = ctk.CTkButton(self, text = 'Copy', command = lambda d=self.data: self.topmaster.copy_cmd(d), font = (font, 18, 'bold'))
         self.copy.grid(row = 0, column = 2, padx = 10, sticky = 'ew')
 
-        self.delete = ctk.CTkButton(self, text = 'Delete', command = self.delete_cmd, font = ('Arial', 18, 'bold'))
+        self.delete = ctk.CTkButton(self, text = 'Delete', command = self.delete_cmd, font = (font, 18, 'bold'))
         self.delete.grid(row = 0, column = 3, padx = 10, sticky = 'ew')
 
     def edit_cmd(self):
@@ -429,7 +431,7 @@ class InitPlanetsGUI(InitGUI):
         self.items_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
         self.items_frame.grid_columnconfigure(0, weight = 1)
 
-        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'Planets', font = ('Arial', 18, 'bold'))
+        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'Planets', font = (font, 18, 'bold'))
         self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew')
 
         self.planets = []
@@ -497,34 +499,34 @@ class LcFrame(ctk.CTkFrame):
         self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
         self.checkbox.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.filename = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['File']))
+        self.filename = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['File']))
         self.filename.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.nickname = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Nickname']))
+        self.nickname = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Nickname']))
         self.nickname.grid(row = 2, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.time = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Time Col']))
+        self.time = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Time Col']))
         self.time.grid(row = 3, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.flux = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Flux Col']))
-        self.flux.grid(row = 4, column = 0, pady = 10, sticky = 'nsew')
+        self.flux = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Flux Col']))
+        self.flux.grid(row = 4, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.fluxerr = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Err Col']))
+        self.fluxerr = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Err Col']))
         self.fluxerr.grid(row = 5, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.quality = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Quality Col']))
+        self.quality = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Quality Col']))
         self.quality.grid(row = 6, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = ('Arial', 18))
+        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = (font, 18))
         self.offset.grid(row = 7, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = ('Arial', 18))
+        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = (font, 18))
         self.errscale.grid(row = 8, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.exptime = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Exp Time']) else data['Exp Time']), font = ('Arial', 18))
+        self.exptime = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Exp Time']) else data['Exp Time']), font = (font, 18))
         self.exptime.grid(row = 9, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.filter = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Filter']))
+        self.filter = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Filter']))
         self.filter.grid(row = 10, column = 0, pady = (10,0), sticky = 'nsew')
 
         self.detrend = ctk.CTkCheckBox(self, variable = ctk.IntVar(value = 1 if data['Detrend'] else 0), text = '')
@@ -546,18 +548,18 @@ class InitLcsGUI(InitGUI):
         self.items_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
         self.items_frame.grid_rowconfigure(list(range(13)), weight = 1)
 
-        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'Light Curve Files', font = ('Arial', 18, 'bold'))
+        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'Light Curve Files', font = (font, 18, 'bold'))
         self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
 
-        self.copy = ctk.CTkButton(self.items_frame, text = 'Copy Selected', font = ('Arial', 18, 'bold'), command = self.copy_cmd)
+        self.copy = ctk.CTkButton(self.items_frame, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
         self.copy.grid(row = 0, column = 1, padx = 10, pady = (10,0), sticky = 'nesw')
 
-        self.delete = ctk.CTkButton(self.items_frame, text = 'Delete Selected', font = ('Arial', 18, 'bold'), command = self.delete_cmd)
+        self.delete = ctk.CTkButton(self.items_frame, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
         self.delete.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nesw')
 
         labels = ['Select','File Name','Nickname','Time Column','Flux Column','Error Column','Quality Column','Time Offset (BJD)','Error Scale','Exp Time (s)','Filter','Detrend']
         for i in range(12):
-            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = ('Arial', 18, 'bold'))
+            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
             label.grid(row = i+1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.lcs = []
@@ -665,29 +667,30 @@ class RVFrame(ctk.CTkFrame):
         self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
         self.checkbox.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.filename = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['File']))
+        self.filename = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['File']))
         self.filename.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.nickname = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Nickname']))
+        self.nickname = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Nickname']))
         self.nickname.grid(row = 2, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.time = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Time Col']))
+        self.time = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Time Col']))
         self.time.grid(row = 3, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.rv = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['RV Col']))
-        self.rv.grid(row = 4, column = 0, pady = 10, sticky = 'nsew')
+        self.rv = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['RV Col']))
+        self.rv.grid(row = 4, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.rverr = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Err Col']))
+        self.rverr = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Err Col']))
         self.rverr.grid(row = 5, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = ('Arial', 18))
+        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = (font, 18))
         self.offset.grid(row = 6, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = ('Arial', 18))
+        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = (font, 18))
         self.errscale.grid(row = 7, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.units = ctk.CTkOptionMenu(self, values = ['m/s','km/s'], font = ('Arial', 18), variable = ctk.StringVar(value = 'm/s' if data['m/s or km/s'] == '' else data['m/s or km/s']))
+        self.units = ctk.CTkOptionMenu(self, values = ['m/s','km/s'], font = (font, 18), variable = ctk.StringVar(value = 'm/s' if data['m/s or km/s'] == '' else data['m/s or km/s']))
         self.units.grid(row = 8, column = 0, pady = (10,0), sticky = 'nesw')
+        self.units._dropdown_menu.configure(font = (font, 18))
 
 
 class InitRVGUI(InitGUI):
@@ -705,18 +708,18 @@ class InitRVGUI(InitGUI):
         self.items_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
         self.items_frame.grid_rowconfigure(list(range(9)), weight = 1)
 
-        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'RV Files', font = ('Arial', 18, 'bold'))
+        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'RV Files', font = (font, 18, 'bold'))
         self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
 
-        self.copy = ctk.CTkButton(self.items_frame, text = 'Copy Selected', font = ('Arial', 18, 'bold'), command = self.copy_cmd)
+        self.copy = ctk.CTkButton(self.items_frame, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
         self.copy.grid(row = 0, column = 1, padx = 10, pady = (10,0), sticky = 'nesw')
 
-        self.delete = ctk.CTkButton(self.items_frame, text = 'Delete Selected', font = ('Arial', 18, 'bold'), command = self.delete_cmd)
+        self.delete = ctk.CTkButton(self.items_frame, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
         self.delete.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nesw')
 
         labels = ['Select','File Name','Nickname','Time Column','RV Column','Error Column','Time Offset (BJD)','Error Scale','Units']
         for i in range(9):
-            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = ('Arial', 18, 'bold'))
+            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
             label.grid(row = i+1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.rvs = []
