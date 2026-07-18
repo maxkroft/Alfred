@@ -604,3 +604,26 @@ class InitLcsGUI(InitGUI):
             for i in range(len(self.lcs)):
                 self.lcs[i].grid(row = 1, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
                 self.lcs[i].data = self.table[i]
+
+
+    def save_cmd(self):
+
+        for i in range(len(self.lcs)):
+
+            lc = self.lcs[i]
+
+            self.table['File'][i] = lc.filename.get().strip()
+            self.table['Nickname'][i] = lc.nickname.get().strip()
+            self.table['Time Col'][i] = lc.time.get().strip()
+            self.table['Flux Col'][i] = lc.flux.get().strip()
+            self.table['Err Col'][i] = lc.fluxerr.get().strip()
+            self.table['Quality Col'][i] = lc.quality.get().strip()
+            self.table['Time Offset'][i] = lc.offset.return_float()
+            self.table['Err Scale'][i] = lc.errscale.return_float()
+            self.table['Exp Time'][i] = lc.exptime.return_float()
+            self.table['Filter'][i] = lc.filter.get().strip()
+            self.table['Detrend'][i] = lc.detrend.get() == 1
+
+        self.initfile.table = self.table
+
+        super().save_cmd()
