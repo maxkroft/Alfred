@@ -267,10 +267,11 @@ class ToggleCheckbox(ctk.CTkCheckBox):
 ######################
 
 class PlanetGUI(ctk.CTkToplevel):
-    def __init__(self, data: Row, idx: int):
+    def __init__(self, data: Row, idx: int, close_cmd):
         super().__init__()
 
         self.data = data
+        self.close_cmd = close_cmd
 
         self.title('Planet {0}'.format(idx))
         self.geometry('500x600')
@@ -348,7 +349,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.data['sqrt(e)sin(w)'] = self.sesw_entry.entry.return_float()
         self.data['fp'] = self.f_entry.entry.return_float()
 
-        self.destroy()
+        self.close_cmd()
 
 
 
@@ -378,13 +379,30 @@ class PlanetFrame(ctk.CTkFrame):
 
     def edit_cmd(self):
 
-        edit_planet = PlanetGUI(self.data, self.idx+1)
+        if not hasattr(self, 'edit_planet'):
 
-        self.wait_window(edit_planet)
+            self.edit_planet = PlanetGUI(self.data, self.idx+1, self.edit_close)
+            self.edit_planet.protocol("WM_DELETE_WINDOW", self.edit_close)
 
-        self.data = edit_planet.data
+            self.wait_window(self.edit_planet)
 
-        self.update_label()
+            self.update_label()
+
+        else:
+
+            self.edit_planet.withdraw()
+            self.edit_planet.update()
+            self.edit_planet.deiconify()
+            self.edit_planet.lift()
+            self.edit_planet.focus()
+
+
+    def edit_close(self):
+
+        self.data = self.edit_planet.data
+        self.edit_planet.destroy()
+        delattr(self, 'edit_planet')
+
 
     def delete_cmd(self):
 
