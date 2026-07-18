@@ -1,4 +1,4 @@
-from __future__ import annotations  # MUST be line 1
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
@@ -557,7 +557,7 @@ class InitLcsGUI(InitGUI):
 
         labels = ['Select','File Name','Nickname','Time Column','Flux Column','Error Column','Quality Column','Time Offset (BJD)','Error Scale','Exp Time (s)','Filter','Detrend']
         for i in range(12):
-            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = ('Arial', 18))
+            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = ('Arial', 18, 'bold'))
             label.grid(row = i+1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.lcs = []
@@ -641,6 +641,162 @@ class InitLcsGUI(InitGUI):
             self.table['Exp Time'][i] = lc.exptime.return_float()
             self.table['Filter'][i] = lc.filter.get().strip()
             self.table['Detrend'][i] = lc.detrend.get() == 1
+
+        self.initfile.table = self.table
+
+        super().save_cmd()
+
+
+
+#################
+#####Init RV#####
+#################
+
+
+class RVFrame(ctk.CTkFrame):
+    def __init__(self, master, data: Row):
+        super().__init__(master)
+
+        self.data = data
+
+        self.grid_rowconfigure(list(range(9)), weight = 1)
+
+        self.checkval = ctk.IntVar(value = 0)
+        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
+        self.checkbox.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.filename = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['File']))
+        self.filename.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.nickname = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Nickname']))
+        self.nickname.grid(row = 2, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.time = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Time Col']))
+        self.time.grid(row = 3, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.rv = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['RV Col']))
+        self.rv.grid(row = 4, column = 0, pady = 10, sticky = 'nsew')
+
+        self.rverr = ctk.CTkEntry(self, font = ('Arial', 18), justify = 'center', textvariable = ctk.StringVar(value = data['Err Col']))
+        self.rverr.grid(row = 5, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = ('Arial', 18))
+        self.offset.grid(row = 6, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = ('Arial', 18))
+        self.errscale.grid(row = 7, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.units = ctk.CTkOptionMenu(self, values = ['m/s','km/s'], font = ('Arial', 18), variable = ctk.StringVar(value = 'm/s' if data['m/s or km/s'] == '' else data['m/s or km/s']))
+        self.units.grid(row = 8, column = 0, pady = (10,0), sticky = 'nesw')
+
+
+class InitRVGUI(InitGUI):
+    def __init__(self, initfile: InitFile):
+        super().__init__(initfile)
+
+        self.geometry('1000x700')
+
+        self.setup_items_frame()
+
+    
+    def setup_items_frame(self):
+
+        self.items_frame = ctk.CTkScrollableFrame(self, orientation = 'horizontal')
+        self.items_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid_rowconfigure(list(range(9)), weight = 1)
+
+        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'RV Files', font = ('Arial', 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+
+        self.copy = ctk.CTkButton(self.items_frame, text = 'Copy Selected', font = ('Arial', 18, 'bold'), command = self.copy_cmd)
+        self.copy.grid(row = 0, column = 1, padx = 10, pady = (10,0), sticky = 'nesw')
+
+        self.delete = ctk.CTkButton(self.items_frame, text = 'Delete Selected', font = ('Arial', 18, 'bold'), command = self.delete_cmd)
+        self.delete.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nesw')
+
+        labels = ['Select','File Name','Nickname','Time Column','RV Column','Error Column','Time Offset (BJD)','Error Scale','Units']
+        for i in range(9):
+            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = ('Arial', 18, 'bold'))
+            label.grid(row = i+1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.rvs = []
+
+        for i in range(len(self.table)):
+
+            self.add_rv(i)
+
+
+    def add_rv(self, i):
+
+        rv = RVFrame(self.items_frame, self.table[i])
+        rv.grid(row = 1, column = i+1, padx = 10, sticky = 'nsew', rowspan = 9)
+        self.rvs.append(rv)
+
+
+    def add_cmd(self):
+        
+        self.table.add_row(['']*6 + [np.nan]*3 + [''] + [False])
+        i = len(self.rvs)
+        self.add_rv(i)
+
+
+    def copy_cmd(self):
+
+        checked = []
+
+        for i in range(len(self.rvs)):
+            
+            if self.rvs[i].checkval.get():
+                checked.append(i)
+
+        tablecopy = self.table[checked]
+
+        self.initfile.table = vstack([self.table, tablecopy])
+        self.table = self.initfile.table
+
+        for i in range(len(self.rvs),len(self.rvs)+len(checked)):
+            self.add_rv(i)
+
+    
+    def delete_cmd(self):
+
+        delete_prompt = DeletePrompt()
+
+        self.wait_window(delete_prompt)
+
+        if delete_prompt.answer:
+
+            checked = []
+
+            for i in range(len(self.rvs)):
+                
+                if self.rvs[i].checkval.get():
+                    checked.append(i)
+
+            self.table.remove_rows(checked)
+            for i in checked:
+                self.rvs[i].grid_forget()
+            self.rvs = list(np.delete(self.rvs, checked))
+
+            for i in range(len(self.rvs)):
+                self.rvs[i].grid(row = 1, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
+                self.rvs[i].data = self.table[i]
+
+
+    def save_cmd(self):
+
+        for i in range(len(self.rvs)):
+
+            rv = self.rvs[i]
+
+            self.table['File'][i] = rv.filename.get().strip()
+            self.table['Nickname'][i] = rv.nickname.get().strip()
+            self.table['Time Col'][i] = rv.time.get().strip()
+            self.table['RV Col'][i] = rv.rv.get().strip()
+            self.table['Err Col'][i] = rv.rverr.get().strip()
+            self.table['Time Offset'][i] = rv.offset.return_float()
+            self.table['Err Scale'][i] = rv.errscale.return_float()
+            self.table['m/s or km/s'][i] = rv.units.get()
 
         self.initfile.table = self.table
 

@@ -7,7 +7,7 @@ from astropy import units as u
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
-from alfred.init_gui import InitPlanetsGUI, InitLcsGUI
+from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI
 
 
 class InitFile:
@@ -119,104 +119,114 @@ class Init_rv(InitFile):
 
         self.header_rows = ['name', 'unit']
 
-
-    def create(self, empty: bool = False) -> Self:
-        """Creates an Init_rv table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-        and file.
-
-        Args:
-            empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
-                using Init_rv.add_rv_file, or manually with either astropy Table methods or in the txt file. Default is False.
-
-        Returns:
-            Init_rv: The whole Init_rv object after creating the table.
-        """
-
         self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
                            units = [None, None, None, None, None, 'BJD', None, None],
                            dtype = [str,str,str,str,str,float,float,str])
 
-        if not empty:
 
-            x = input('Creating rv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+    def __call__(self):
 
-            if x == 'stop':
-                return
+        app = InitRVGUI(self)
+        app.mainloop()
 
-            while True:
 
-                self.add_rv_file()
+    # def create(self, empty: bool = False) -> Self:
+    #     """Creates an Init_rv table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+    #     and file.
 
-                x = input('More files? y/n ')
+    #     Args:
+    #         empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
+    #             using Init_rv.add_rv_file, or manually with either astropy Table methods or in the txt file. Default is False.
+
+    #     Returns:
+    #         Init_rv: The whole Init_rv object after creating the table.
+    #     """
+
+    #     self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
+    #                        units = [None, None, None, None, None, 'BJD', None, None],
+    #                        dtype = [str,str,str,str,str,float,float,str])
+
+    #     if not empty:
+
+    #         x = input('Creating rv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+    #         if x == 'stop':
+    #             return
+
+    #         while True:
+
+    #             self.add_rv_file()
+
+    #             x = input('More files? y/n ')
                 
-                if x.lower() != 'y':
-                    break
+    #             if x.lower() != 'y':
+    #                 break
 
-        else:
+    #     else:
 
-            self.table.add_row(['None','None','None','None','None',np.nan,np.nan,'None'])
+    #         self.table.add_row(['None','None','None','None','None',np.nan,np.nan,'None'])
         
-        self.save()
+    #     self.save()
 
-        return self
+    #     return self
 
 
-    def add_rv_file(self):
-        """Adds a new row to the Init_rv table for a new RV data file. Prompts the user to fill it in. Easier than adding rows manually.
-        """
+    # def add_rv_file(self):
+    #     """Adds a new row to the Init_rv table for a new RV data file. Prompts the user to fill it in. Easier than adding rows manually.
+    #     """
 
-        row = []
+    #     row = []
 
-        found = False
-        while not found:
+    #     found = False
+    #     while not found:
 
-            fpath = input('Absolute path to RV file to move here, or type "skip" if you dont want to move a file now: ')
+    #         fpath = input('Absolute path to RV file to move here, or type "skip" if you dont want to move a file now: ')
 
-            if fpath.lower() == 'skip':
-                fname = input('Name of RV file for later: ')
-                found = True
+    #         if fpath.lower() == 'skip':
+    #             fname = input('Name of RV file for later: ')
+    #             found = True
 
-            else:
+    #         else:
 
-                fname = fpath[fpath.rfind('/')+1:]
+    #             fname = fpath[fpath.rfind('/')+1:]
 
-                try:
-                    shutil.copyfile(fpath, self.direc+'/'+fname)
-                    found = True
+    #             try:
+    #                 shutil.copyfile(fpath, self.direc+'/'+fname)
+    #                 found = True
 
-                except shutil.SameFileError:
-                    print('File already there.')
+    #             except shutil.SameFileError:
+    #                 print('File already there.')
 
-                except FileNotFoundError:
-                    print('File not found. Try again.')
+    #             except FileNotFoundError:
+    #                 print('File not found. Try again.')
 
-        row.append(fname)
+    #     row.append(fname)
 
-        nickname = input('Nickname for the data set (e.g. "NEID"): ')
-        row.append(nickname)
+    #     nickname = input('Nickname for the data set (e.g. "NEID"): ')
+    #     row.append(nickname)
 
-        timecol = input('Column header for the time data: ')
-        row.append(timecol)
+    #     timecol = input('Column header for the time data: ')
+    #     row.append(timecol)
 
-        rvcol = input('Column header for the RV data: ')
-        row.append(rvcol)
+    #     rvcol = input('Column header for the RV data: ')
+    #     row.append(rvcol)
 
-        rverrcol = input('Column header for the RV error data: ')
-        row.append(rverrcol)
+    #     rverrcol = input('Column header for the RV error data: ')
+    #     row.append(rverrcol)
 
-        toffset = input('Time offset from BJD (in days), for example 2457000 is common for TESS: ')
-        row.append(toffset)
+    #     toffset = input('Time offset from BJD (in days), for example 2457000 is common for TESS: ')
+    #     row.append(toffset)
 
-        row.append(1.0)
+    #     row.append(1.0)
 
-        mskms = input('Are the RV and RV error data in "m/s" or "km/s": ')
-        while mskms not in ['m/s','km/s']:
-            mskms = input('Please type "m/s" or "km/s" exactly: ')
-        row.append(mskms)
+    #     mskms = input('Are the RV and RV error data in "m/s" or "km/s": ')
+    #     while mskms not in ['m/s','km/s']:
+    #         mskms = input('Please type "m/s" or "km/s" exactly: ')
+    #     row.append(mskms)
 
-        self.table.add_row(row)
+    #     self.table.add_row(row)
 
-        self.save()
+    #     self.save()
 
 
 class Init_star(InitFile):
