@@ -263,6 +263,95 @@ class ToggleCheckbox(ctk.CTkCheckBox):
         return self.val.get() == 1
     
 
+
+class ScrollableDropdown(ctk.CTkToplevel):
+    def __init__(self, attach, values=None, height=200, width=None, command=None, font = None, **kwargs):
+        super().__init__(takefocus=1)
+        self.geometry("0x0+0+0")
+        self.wm_overrideredirect(True)
+        self.attributes("-topmost", True)
+        
+        self.attach = attach
+        self.values = values if values else []
+        self.command = command
+        self.font = font
+        
+        # Store requested layout dimensions
+        self.requested_width = width
+        self.requested_height = height
+        
+        # Build standard Frame container inside window wrapper
+        # We start with placeholder dimensions, then update them on click
+        self.frame = ctk.CTkScrollableFrame(self, width=150, height=self.requested_height, fg_color = "#4F4F4F")
+        self.frame.pack(fill="both", expand=True)
+        
+        # Hide window on creation immediately
+        self.withdraw()
+        
+        # Cleanly attach trigger actions onto the target Button / OptionMenu
+        if isinstance(attach, ctk.CTkOptionMenu):
+            attach.configure(command=self._icon_click)
+        elif isinstance(attach, ctk.CTkButton):
+            attach.configure(command=self._icon_click)
+            
+        self._update_options()
+
+    def _update_options(self):
+        for child in self.frame.winfo_children():
+            child.destroy()
+            
+        for value in self.values:
+            btn = ctk.CTkButton(
+                self.frame,
+                text=str(value),
+                fg_color="transparent",
+                text_color=("black", "white"),
+                font = self.font,
+                hover_color=("#dbdbdb", "#707070"),
+                anchor="w",
+                command=lambda v=value: self._on_select(v)
+            )
+            btn.pack(fill="x", pady=1, padx=2)
+
+    def _icon_click(self, *args):
+        if self.winfo_viewable():
+            self.withdraw()
+        else:
+            self._place_dropdown()
+
+    def _place_dropdown(self):
+        # Crucial Fix: Force Tkinter to refresh geometry buffers before calculation
+        self.attach.update_idletasks()
+        
+        # Compute exact pixel coordinates *at the time of the click*
+        x = self.attach.winfo_rootx()
+        y = self.attach.winfo_rooty() + self.attach.winfo_height()
+        
+        # Match button's actual rendered width if no custom override is passed
+        width = self.requested_width if self.requested_width else self.attach.winfo_width()
+        
+        # Resize internal elements safely
+        self.frame.configure(width=width - 15)
+        
+        # Position and display the pop-up overlay window directly below button boundary
+        self.geometry(f"{width}x{self.requested_height}+{x}+{y}")
+        self.deiconify()
+        self.focus_set()
+        
+        # Close drop menu safely if user clicks anywhere else in the application window
+        self.bind("<FocusOut>", lambda e: self.withdraw())
+
+    def _on_select(self, value):
+        if self.command:
+            self.command(value)
+        elif hasattr(self.attach, "set"):
+            self.attach.set(value)
+        elif isinstance(self.attach, ctk.CTkButton):
+            self.attach.configure(text=value)
+        self.withdraw()
+    
+
+
 ######################
 #####Init Planets#####
 ######################
@@ -815,6 +904,34 @@ class PriorFrame(ctk.CTkFrame):
     def __init__(self, master, data: Row):
         super().__init__(master)
 
+        self.data = data
+
+        self.grid_columnconfigure(list(range(6)), weight = 1)
+        self.grid_rowconfigure((0,1), weight = 1)
+
+        self.checkval = ctk.IntVar(value = 0)
+        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
+        self.checkbox.grid(row = 1, column = 0, padx = (10,0), pady = 10, sticky = 'nsew')
+
+        varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
+                    'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
+                    'eep', 'log10(age)', 'age', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
+        # self.variable = ctk.CTkOptionMenu(self, values = varoptions, font = (font, 18), variable = ctk.StringVar(value = 'P' if data['Variable'] == '' else data['Variable'].split()[0]), command = self.varoption_cmd)
+        self.variable_anchor = ctk.CTkButton(self, textvariable = ctk.StringVar(value = 'P' if data['Variable'] == '' else data['Variable'].split()[0]), font = (font, 18))
+        self.variable_anchor.grid(row = 1, column = 1, padx = (10,0), pady = 10, sticky = 'nesw')
+        self.variable = ScrollableDropdown(self.variable_anchor, values = varoptions, height = 400, command = self.varoption_cmd, font = (font, 18))
+
+        self.varnumberlabel_var = ctk.StringVar(value = '')
+        self.varnumberlabel = ctk.CTkLabel(self, textvariable = self.varnumberlabel_var, font = (font, 18, 'bold'))
+        self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.varnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = '' if data['Variable'] == '' else data['Variable'].split()[1:]))
+        self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = 10, sticky = 'nsew')
+
+    def varoption_cmd(self, choice):
+
+        self.variable_anchor.configure(text=choice)
+
+
 
 class InitPriorsGUI(InitGUI):
     def __init__(self, initfile: InitFile):
@@ -837,11 +954,11 @@ class InitPriorsGUI(InitGUI):
     def setup_items_frame(self):
 
         self.items_frame = ctk.CTkScrollableFrame(self)
-        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
-        self.items_frame.grid_columnconfigure(list(range(5)), weight = 1)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew', columnspan = 2)
+        self.items_frame.grid_columnconfigure(list(range(6)), weight = 1)
 
-        labels = ['Select','Variable','Prior Distribution']
-        for i in range(3):
+        labels = ['Select','Variable','','Prior Distribution','','']
+        for i in range(6):
             label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
             label.grid(row = 0, column = i, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
@@ -855,7 +972,7 @@ class InitPriorsGUI(InitGUI):
     def add_prior(self, i):
 
         prior = PriorFrame(self.items_frame, self.table[i])
-        prior.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
+        prior.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew', columnspan = 6)
         self.priors.append(prior)
 
 

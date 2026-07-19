@@ -7,7 +7,7 @@ from astropy import units as u
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
-from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI
+from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI, InitPriorsGUI
 
 
 class InitFile:
@@ -691,6 +691,15 @@ class Init_priors(InitFile):
                                  'stellar radius in solar radii',
                                  'mean stellar density in g/cm^3 in stellar fitting']
         
+        self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
+            dtype = [str, str, float, float])
+        
+
+    def __call__(self):
+
+        app = InitPriorsGUI(self)
+        app.mainloop()
+        
     
     def var_help(self):
         """Prints out all parameters which can have priors set on them, as well as descriptions of what they are and what units they should be in.
@@ -701,159 +710,159 @@ class Init_priors(InitFile):
             print(self.allowed_vars[i], '-', self.var_descriptions[i])
 
     
-    def create(self) -> Self:
-        """Creates an Init_priors table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-        and file.
+    # def create(self) -> Self:
+    #     """Creates an Init_priors table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+    #     and file.
 
-        Returns:
-            Init_priors: The whole Init_priors object after creating the table.
-        """
+    #     Returns:
+    #         Init_priors: The whole Init_priors object after creating the table.
+    #     """
 
-        self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
-            dtype = [str, str, float, float])
+    #     self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
+    #         dtype = [str, str, float, float])
 
-        x = input('Creating prior initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+    #     x = input('Creating prior initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
 
-        if x == 'stop':
-            return
+    #     if x == 'stop':
+    #         return
 
-        while True:
+    #     while True:
 
-            self.add_prior()
+    #         self.add_prior()
 
-            x = input('More priors? y/n ')
+    #         x = input('More priors? y/n ')
                 
-            if x.lower() != 'y':
-                break
+    #         if x.lower() != 'y':
+    #             break
 
-        self.save()
+    #     self.save()
 
-        return self
+    #     return self
     
 
-    def add_prior(self):
-        """Adds a new row to the Init_priors table for a new prior. Prompts the user to fill it in. Easier than adding rows manually. Currently
-        supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), fixed priors (fixing a parameter at
-        a specific value so it is not fit), Jeffrey's priors (uninformative prior independent of scale), and modified Jeffrey's priors (becomes
-        log uniform below the knee value). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances of a
-        type of parameter in the fit (e.g. P x, the periods of all planets).
-        """
+    # def add_prior(self):
+    #     """Adds a new row to the Init_priors table for a new prior. Prompts the user to fill it in. Easier than adding rows manually. Currently
+    #     supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), fixed priors (fixing a parameter at
+    #     a specific value so it is not fit), Jeffrey's priors (uninformative prior independent of scale), and modified Jeffrey's priors (becomes
+    #     log uniform below the knee value). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances of a
+    #     type of parameter in the fit (e.g. P x, the periods of all planets).
+    #     """
 
-        row = []
+    #     row = []
 
-        while True:
+    #     while True:
 
-            var = input('Variable name. Type "help" to see a list of variables. Type "stop" to exit.')
+    #         var = input('Variable name. Type "help" to see a list of variables. Type "stop" to exit.')
 
-            if var.lower() == 'help':
+    #         if var.lower() == 'help':
 
-                self.var_help()
+    #             self.var_help()
 
-            elif var.lower() == 'stop':
-                return
+    #         elif var.lower() == 'stop':
+    #             return
 
-            elif var not in self.allowed_vars:
+    #         elif var not in self.allowed_vars:
 
-                z = input('Variable is not recognized. Enter to try again. Type "stop" to exit.')
-                if z.lower() == 'stop':
-                    return
+    #             z = input('Variable is not recognized. Enter to try again. Type "stop" to exit.')
+    #             if z.lower() == 'stop':
+    #                 return
 
-            else:
+    #         else:
                 
-                break
+    #             break
 
-        origvar = var
+    #     origvar = var
         
-        if var in self.planet_vars:
+    #     if var in self.planet_vars:
 
-            num = input('Planet number to apply to apply this prior to (planets are 1-indexed starting at top of init_planets file).' + ('' if var == 'TT' else ' Enter x to apply this prior to all planets.'))
+    #         num = input('Planet number to apply to apply this prior to (planets are 1-indexed starting at top of init_planets file).' + ('' if var == 'TT' else ' Enter x to apply this prior to all planets.'))
 
-            if var == 'TT':
+    #         if var == 'TT':
 
-                tnum = input('Transit number of planet {0} to apply this prior to (1-indexed in time order).'.format(num))
+    #             tnum = input('Transit number of planet {0} to apply this prior to (1-indexed in time order).'.format(num))
 
-                num += ' '
-                num += tnum
+    #             num += ' '
+    #             num += tnum
 
-            var += ' '
-            var += num
+    #         var += ' '
+    #         var += num
 
-        elif var in self.lc_vars:
+    #     elif var in self.lc_vars:
 
-            lc = input('Light curve nickname to apply this prior to. Enter x to apply this prior to all light curves.')
+    #         lc = input('Light curve nickname to apply this prior to. Enter x to apply this prior to all light curves.')
 
-            var += ' '
-            var += lc
+    #         var += ' '
+    #         var += lc
 
-        elif var in self.ld_vars:
+    #     elif var in self.ld_vars:
 
-            filt = input('Filter to apply this prior to. Enter x to apply this prior to all filters.')
+    #         filt = input('Filter to apply this prior to. Enter x to apply this prior to all filters.')
 
-            var += ' '
-            var += filt
+    #         var += ' '
+    #         var += filt
 
-        elif var == 'rv_offset':
+    #     elif var == 'rv_offset':
 
-            rv = input('RV dataset nickname to apply this prior to. Enter x to apply this prior to all RV datasets.')
+    #         rv = input('RV dataset nickname to apply this prior to. Enter x to apply this prior to all RV datasets.')
 
-            var += ' '
-            var += rv
+    #         var += ' '
+    #         var += rv
 
-        row.append(var)
+    #     row.append(var)
 
-        while True:
+    #     while True:
             
-            priortype = input("Prior type to use for {0}. U for uniform, G for Gaussian, F for fixed, J for Jeffrey's, or MJ for modified Jeffrey's.".format(var)).upper()
+    #         priortype = input("Prior type to use for {0}. U for uniform, G for Gaussian, F for fixed, J for Jeffrey's, or MJ for modified Jeffrey's.".format(var)).upper()
 
-            if priortype not in ['U', 'G', 'F', 'J', 'MJ']:
+    #         if priortype not in ['U', 'G', 'F', 'J', 'MJ']:
 
-                z = input('Prior type is not recognized. Enter to try again. Type "stop" to exit.')
-                if z.lower() == 'stop':
-                    return
+    #             z = input('Prior type is not recognized. Enter to try again. Type "stop" to exit.')
+    #             if z.lower() == 'stop':
+    #                 return
                 
-            elif priortype == 'F' and origvar in ['rhos','u1','u2','mstar','rstar','rhostar']:
+    #         elif priortype == 'F' and origvar in ['rhos','u1','u2','mstar','rstar','rhostar']:
 
-                z = input('Cannot set {0} to fixed. Enter to try again. Type "stop" to exit.'.format(origvar))
-                if z.lower() == 'stop':
-                    return
+    #             z = input('Cannot set {0} to fixed. Enter to try again. Type "stop" to exit.'.format(origvar))
+    #             if z.lower() == 'stop':
+    #                 return
 
-            else:
+    #         else:
 
-                break
+    #             break
 
-        row.append(priortype)
+    #     row.append(priortype)
 
-        if priortype == 'U':
+    #     if priortype == 'U':
 
-            p1 = input('Lower bound of uniform prior for {0}.'.format(var))
-            p2 = input('Upper bound of uniform prior for {0}.'.format(var))
+    #         p1 = input('Lower bound of uniform prior for {0}.'.format(var))
+    #         p2 = input('Upper bound of uniform prior for {0}.'.format(var))
 
-        elif priortype == 'G':
+    #     elif priortype == 'G':
 
-            p1 = input('Mean of Gaussian prior for {0}.'.format(var))
-            p2 = input('Standard deviation of Gaussian prior for {0}.'.format(var))
+    #         p1 = input('Mean of Gaussian prior for {0}.'.format(var))
+    #         p2 = input('Standard deviation of Gaussian prior for {0}.'.format(var))
 
-        elif priortype == 'F':
+    #     elif priortype == 'F':
 
-            p1 = input('Value at which to fix {0}.'.format(var))
-            p2 = 0
+    #         p1 = input('Value at which to fix {0}.'.format(var))
+    #         p2 = 0
 
-        elif priortype == 'J':
+    #     elif priortype == 'J':
 
-            p1 = input("Lower bound of Jeffrey's prior for {0}.".format(var))
-            p2 = input("Upper bound of Jeffrey's prior for {0}.".format(var))
+    #         p1 = input("Lower bound of Jeffrey's prior for {0}.".format(var))
+    #         p2 = input("Upper bound of Jeffrey's prior for {0}.".format(var))
 
-        elif priortype == 'MJ':
+    #     elif priortype == 'MJ':
 
-            p1 = input("Upper bound of modified Jeffrey's prior for {0}.".format(var))
-            p2 = input("Knee value of modified Jeffrey's prior for {0}.".format(var))
+    #         p1 = input("Upper bound of modified Jeffrey's prior for {0}.".format(var))
+    #         p2 = input("Knee value of modified Jeffrey's prior for {0}.".format(var))
 
-        row.append(p1)
-        row.append(p2)
+    #     row.append(p1)
+    #     row.append(p2)
 
-        self.table.add_row(row)
+    #     self.table.add_row(row)
 
-        self.save()
+    #     self.save()
 
 
 
