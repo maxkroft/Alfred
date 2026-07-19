@@ -27,23 +27,22 @@ class InitGUI(ctk.CTk):
         self.title(self.initfile.name)
         
         self.grid_columnconfigure((0,1), weight = 1)
-        self.grid_rowconfigure(0, weight = 1)
+        self.grid_rowconfigure(1, weight = 1)
 
         self.add = ctk.CTkButton(self, text = 'Add', command = self.add_cmd, font = (font, 18, 'bold'))
-        self.add.grid(row = 1, column = 0, padx = 100, pady = (10, 0), sticky = 'ew', columnspan = 2)
+        self.add.grid(row = 2, column = 0, padx = 100, pady = (10, 0), sticky = 'ew', columnspan = 2)
 
         self.load = ctk.CTkButton(self, text = 'Load', command = self.load_cmd, font = (font, 18, 'bold'))
-        self.load.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+        self.load.grid(row = 4, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
 
         self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
-        self.save.grid(row = 2, column = 1, padx = 10, pady = (10, 0), sticky = 'ew')
+        self.save.grid(row = 4, column = 1, padx = 10, pady = (10, 0), sticky = 'ew')
 
         self.rename = ctk.CTkButton(self, text = 'Rename', command = self.rename_cmd, font = (font, 18, 'bold'))
-        self.rename.grid(row = 3, column = 0, padx = 10, pady = (10,10), sticky = 'ew')
+        self.rename.grid(row = 5, column = 0, padx = 10, pady = 10, sticky = 'ew')
 
         self.directory = ctk.CTkButton(self, text = 'Directory', command = self.direc_cmd, font = (font, 18, 'bold'))
-        self.directory.grid(row = 3, column  = 1, padx = 10, pady = (10,10), sticky = 'ew')
-
+        self.directory.grid(row = 5, column  = 1, padx = 10, pady = 10, sticky = 'ew')
 
     def add_cmd(self):
         return
@@ -425,14 +424,14 @@ class InitPlanetsGUI(InitGUI):
 
         self.setup_items_frame()
 
+        self.frame_title = ctk.CTkLabel(self, text = 'Planets', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)
+
     def setup_items_frame(self):
 
         self.items_frame = ctk.CTkScrollableFrame(self)
-        self.items_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
         self.items_frame.grid_columnconfigure(0, weight = 1)
-
-        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'Planets', font = (font, 18, 'bold'))
-        self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew')
 
         self.planets = []
 
@@ -443,7 +442,7 @@ class InitPlanetsGUI(InitGUI):
     def add_planet(self, i):
 
         planet = PlanetFrame(self.items_frame, self, self.table[i], i)
-        planet.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
+        planet.grid(row = i, column = 0, pady = (10,0), sticky = 'ew')
         self.planets.append(planet)
 
 
@@ -475,7 +474,7 @@ class InitPlanetsGUI(InitGUI):
             self.planets.pop(i)
 
             for j in range(len(self.planets)):
-                self.planets[j].grid(row = j+1, column = 0, pady = (10, 0), sticky = 'ew')
+                self.planets[j].grid(row = j, column = 0, pady = (10, 0), sticky = 'ew')
                 self.planets[j].idx = j
                 self.planets[j].data = self.table[j]
                 self.planets[j].update_label()
@@ -530,7 +529,7 @@ class LcFrame(ctk.CTkFrame):
         self.filter.grid(row = 10, column = 0, pady = (10,0), sticky = 'nsew')
 
         self.detrend = ctk.CTkCheckBox(self, variable = ctk.IntVar(value = 1 if data['Detrend'] else 0), text = '')
-        self.detrend.grid(row = 11, column = 0, pady = (10,0), sticky = 'nsew')
+        self.detrend.grid(row = 11, column = 0, pady = 10, sticky = 'nsew')
 
 
 class InitLcsGUI(InitGUI):
@@ -541,26 +540,26 @@ class InitLcsGUI(InitGUI):
 
         self.setup_items_frame()
 
+        self.frame_title = ctk.CTkLabel(self, text = 'Light Curve Files', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)
+
+        self.copy = ctk.CTkButton(self, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
+        self.copy.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.delete = ctk.CTkButton(self, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
+        self.delete.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'ew')
+
     
     def setup_items_frame(self):
 
         self.items_frame = ctk.CTkScrollableFrame(self, orientation = 'horizontal')
-        self.items_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
-        self.items_frame.grid_rowconfigure(list(range(13)), weight = 1)
-
-        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'Light Curve Files', font = (font, 18, 'bold'))
-        self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
-
-        self.copy = ctk.CTkButton(self.items_frame, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
-        self.copy.grid(row = 0, column = 1, padx = 10, pady = (10,0), sticky = 'nesw')
-
-        self.delete = ctk.CTkButton(self.items_frame, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
-        self.delete.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nesw')
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid_rowconfigure(list(range(12)), weight = 1)
 
         labels = ['Select','File Name','Nickname','Time Column','Flux Column','Error Column','Quality Column','Time Offset (BJD)','Error Scale','Exp Time (s)','Filter','Detrend']
         for i in range(12):
             label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
-            label.grid(row = i+1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
+            label.grid(row = i, column = 0, padx = (10,0), pady = (10,0) if i < 11 else 10, sticky = 'nsew')
 
         self.lcs = []
 
@@ -572,7 +571,7 @@ class InitLcsGUI(InitGUI):
     def add_lc(self, i):
 
         lc = LcFrame(self.items_frame, self.table[i])
-        lc.grid(row = 1, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
+        lc.grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
         self.lcs.append(lc)
 
 
@@ -622,7 +621,7 @@ class InitLcsGUI(InitGUI):
             self.lcs = list(np.delete(self.lcs, checked))
 
             for i in range(len(self.lcs)):
-                self.lcs[i].grid(row = 1, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
+                self.lcs[i].grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
                 self.lcs[i].data = self.table[i]
 
 
@@ -689,7 +688,7 @@ class RVFrame(ctk.CTkFrame):
         self.errscale.grid(row = 7, column = 0, pady = (10,0), sticky = 'nsew')
 
         self.units = ctk.CTkOptionMenu(self, values = ['m/s','km/s'], font = (font, 18), variable = ctk.StringVar(value = 'm/s' if data['m/s or km/s'] == '' else data['m/s or km/s']))
-        self.units.grid(row = 8, column = 0, pady = (10,0), sticky = 'nesw')
+        self.units.grid(row = 8, column = 0, pady = 10, sticky = 'nesw')
         self.units._dropdown_menu.configure(font = (font, 18))
 
 
@@ -701,26 +700,26 @@ class InitRVGUI(InitGUI):
 
         self.setup_items_frame()
 
+        self.frame_title = ctk.CTkLabel(self, text = 'RV Files', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)
+
+        self.copy = ctk.CTkButton(self, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
+        self.copy.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.delete = ctk.CTkButton(self, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
+        self.delete.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'ew')
+
     
     def setup_items_frame(self):
 
         self.items_frame = ctk.CTkScrollableFrame(self, orientation = 'horizontal')
-        self.items_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
         self.items_frame.grid_rowconfigure(list(range(9)), weight = 1)
-
-        self.frame_title = ctk.CTkLabel(self.items_frame, text = 'RV Files', font = (font, 18, 'bold'))
-        self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
-
-        self.copy = ctk.CTkButton(self.items_frame, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
-        self.copy.grid(row = 0, column = 1, padx = 10, pady = (10,0), sticky = 'nesw')
-
-        self.delete = ctk.CTkButton(self.items_frame, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
-        self.delete.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nesw')
 
         labels = ['Select','File Name','Nickname','Time Column','RV Column','Error Column','Time Offset (BJD)','Error Scale','Units']
         for i in range(9):
             label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
-            label.grid(row = i+1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
+            label.grid(row = i, column = 0, padx = (10,0), pady = (10,0) if i < 8 else 10, sticky = 'nsew')
 
         self.rvs = []
 
@@ -732,13 +731,13 @@ class InitRVGUI(InitGUI):
     def add_rv(self, i):
 
         rv = RVFrame(self.items_frame, self.table[i])
-        rv.grid(row = 1, column = i+1, padx = 10, sticky = 'nsew', rowspan = 9)
+        rv.grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 9)
         self.rvs.append(rv)
 
 
     def add_cmd(self):
         
-        self.table.add_row(['']*6 + [np.nan]*3 + [''] + [False])
+        self.table.add_row(['']*5 + [np.nan]*2 + [''])
         i = len(self.rvs)
         self.add_rv(i)
 
@@ -782,7 +781,131 @@ class InitRVGUI(InitGUI):
             self.rvs = list(np.delete(self.rvs, checked))
 
             for i in range(len(self.rvs)):
-                self.rvs[i].grid(row = 1, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
+                self.rvs[i].grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 9)
+                self.rvs[i].data = self.table[i]
+
+
+    def save_cmd(self):
+
+        for i in range(len(self.rvs)):
+
+            rv = self.rvs[i]
+
+            self.table['File'][i] = rv.filename.get().strip()
+            self.table['Nickname'][i] = rv.nickname.get().strip()
+            self.table['Time Col'][i] = rv.time.get().strip()
+            self.table['RV Col'][i] = rv.rv.get().strip()
+            self.table['Err Col'][i] = rv.rverr.get().strip()
+            self.table['Time Offset'][i] = rv.offset.return_float()
+            self.table['Err Scale'][i] = rv.errscale.return_float()
+            self.table['m/s or km/s'][i] = rv.units.get()
+
+        self.initfile.table = self.table
+
+        super().save_cmd()
+
+
+
+#####################
+#####Init Priors#####
+#####################
+
+
+class PriorFrame(ctk.CTkFrame):
+    def __init__(self, master, data: Row):
+        super().__init__(master)
+
+
+class InitPriorsGUI(InitGUI):
+    def __init__(self, initfile: InitFile):
+        super().__init__(initfile)
+
+        self.geometry('800x800')
+
+        self.setup_items_frame()
+
+        self.frame_title = ctk.CTkLabel(self, text = 'Priors', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'ew', columnspan = 2)
+
+        self.copy = ctk.CTkButton(self, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
+        self.copy.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.delete = ctk.CTkButton(self, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
+        self.delete.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'ew')
+
+
+    def setup_items_frame(self):
+
+        self.items_frame = ctk.CTkScrollableFrame(self)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid_columnconfigure(list(range(5)), weight = 1)
+
+        labels = ['Select','Variable','Prior Distribution']
+        for i in range(3):
+            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
+            label.grid(row = 0, column = i, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.priors = []
+
+        for i in range(len(self.table)):
+
+            self.add_prior(i)
+
+
+    def add_prior(self, i):
+
+        prior = PriorFrame(self.items_frame, self.table[i])
+        prior.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
+        self.priors.append(prior)
+
+
+    def add_cmd(self):
+        
+        self.table.add_row(['']*5 + [np.nan]*2 + [''])
+        i = len(self.rvs)
+        self.add_rv(i)
+
+
+    def copy_cmd(self):
+
+        checked = []
+
+        for i in range(len(self.rvs)):
+            
+            if self.rvs[i].checkval.get():
+                checked.append(i)
+
+        tablecopy = self.table[checked]
+
+        self.initfile.table = vstack([self.table, tablecopy])
+        self.table = self.initfile.table
+
+        for i in range(len(self.rvs),len(self.rvs)+len(checked)):
+            self.add_rv(i)
+
+    
+    def delete_cmd(self):
+
+        delete_prompt = DeletePrompt()
+
+        self.wait_window(delete_prompt)
+
+        if delete_prompt.answer:
+
+            checked = []
+
+            for i in range(len(self.rvs)):
+                
+                if self.rvs[i].checkval.get():
+                    checked.append(i)
+
+            self.table.remove_rows(checked)
+            for i in checked:
+                self.rvs[i].grid_forget()
+            self.rvs = list(np.delete(self.rvs, checked))
+
+            for i in range(len(self.rvs)):
+                self.rvs[i].grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 9)
                 self.rvs[i].data = self.table[i]
 
 
