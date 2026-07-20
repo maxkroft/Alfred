@@ -691,6 +691,7 @@ class Init_priors(InitFile):
                                  'stellar radius in solar radii',
                                  'mean stellar density in g/cm^3 in stellar fitting']
         
+        
         self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
             dtype = [str, str, float, float])
         

@@ -11,7 +11,7 @@ ctk.DrawEngine.preferred_drawing_method = "circle_shapes"
 
 font = 'Verdana'
 
-from astropy.table import Table, Row, vstack
+from astropy.table import Table, Row, Column, vstack
 import numpy as np
 import re
 
@@ -362,6 +362,16 @@ class ScrollableDropdown(ctk.CTkToplevel):
     
 
 
+def update_string_col(col: Column, value: str, idx: int) -> Column:
+
+    if len(value) > int(col.dtype.str[2:]):
+        col = col.astype(f'S{len(value)}')
+
+    col[idx] = value
+
+    return col
+
+
 ######################
 #####Init Planets#####
 ######################
@@ -519,7 +529,7 @@ class InitPlanetsGUI(InitGUI):
     def __init__(self, initfile: InitFile):
         super().__init__(initfile)
 
-        self.geometry('600x400')
+        self.geometry('800x600')
 
         self.setup_items_frame()
 
@@ -635,7 +645,7 @@ class InitLcsGUI(InitGUI):
     def __init__(self, initfile: InitFile):
         super().__init__(initfile)
 
-        self.geometry('1000x800')
+        self.geometry('1000x750')
 
         self.setup_items_frame()
 
@@ -730,10 +740,10 @@ class InitLcsGUI(InitGUI):
 
             lc = self.lcs[i]
 
-            self.table['File'][i] = lc.filename.get().strip()
-            self.table['Nickname'][i] = lc.nickname.get().strip()
-            self.table['Time Col'][i] = lc.time.get().strip()
-            self.table['Flux Col'][i] = lc.flux.get().strip()
+            self.table['File'] = update_string_col(self.table['File'], lc.filename.get().strip(), i)
+            self.table['Nickname'] = update_string_col(self.table['Nickname'], lc.nickname.get().strip(), i)
+            self.table['Time Col'] = update_string_col(self.table['Time Col'], lc.time.get().strip(), i)
+            self.table['Flux Col'] = update_string_col(self.table['Flux Col'], lc.flux.get().strip(), i)
             self.table['Err Col'][i] = lc.fluxerr.get().strip()
             self.table['Quality Col'][i] = lc.quality.get().strip()
             self.table['Time Offset'][i] = lc.offset.return_float()
@@ -890,11 +900,11 @@ class InitRVGUI(InitGUI):
 
             rv = self.rvs[i]
 
-            self.table['File'][i] = rv.filename.get().strip()
-            self.table['Nickname'][i] = rv.nickname.get().strip()
-            self.table['Time Col'][i] = rv.time.get().strip()
-            self.table['RV Col'][i] = rv.rv.get().strip()
-            self.table['Err Col'][i] = rv.rverr.get().strip()
+            self.table['File'] = update_string_col(self.table['File'], rv.filename.get().strip(), i)
+            self.table['Nickname'] = update_string_col(self.table['Nickname'], rv.nickname.get().strip(), i)
+            self.table['Time Col'] = update_string_col(self.table['Time Col'], rv.time.get().strip(), i)
+            self.table['RV Col'] = update_string_col(self.table['RV Col'], rv.rv.get().strip(), i)
+            self.table['Err Col'] = update_string_col(self.table['Err Col'], rv.rverr.get().strip(), i)
             self.table['Time Offset'][i] = rv.offset.return_float()
             self.table['Err Scale'][i] = rv.errscale.return_float()
             self.table['m/s or km/s'][i] = rv.units.get()
@@ -918,7 +928,7 @@ class PriorFrame(ctk.CTkFrame):
 
         self.prior_convert = {'U': 'Uniform', 'G': 'Gaussian', 'F': 'Fixed', 'J': "Jeffrey's", 'MJ': "Mod. Jeffrey's"}
 
-        self.grid_columnconfigure(list(range(6)), weight = 1)
+        self.grid_columnconfigure(list(range(7)), weight = 1)
         self.grid_rowconfigure((0,1), weight = 1)
 
         checkboxlabel = ctk.CTkLabel(self, text = 'Select', font = (font, 16, 'bold'))
@@ -939,36 +949,77 @@ class PriorFrame(ctk.CTkFrame):
         self.varnumberlabel_var = ctk.StringVar(value = '')
         self.varnumberlabel = ctk.CTkLabel(self, textvariable = self.varnumberlabel_var, font = (font, 16, 'bold'))
         self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
-        self.varnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = '' if data['Variable'] == '' else data['Variable'].split()[1:]))
+        self.varnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = '' if data['Variable'] == '' else (data['Variable'].split()[1:] if data['Variable'].split()[0] != 'TT' else data['Variable'].split()[1])))
         self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
+        self.tnumberlabel = ctk.CTkLabel(self, text = 'Transit Number', font = (font, 16, 'bold'))
+        self.tnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = '' if data['Variable'] == '' or data['Variable'].split()[0] != 'TT' else data['Variable'].split()[2]))
+
         priortypelabel = ctk.CTkLabel(self, text = 'Prior Type', font = (font, 16, 'bold'))
-        priortypelabel.grid(row = 0, column = 3, padx = (10,0), sticky = 'nsew')
+        priortypelabel.grid(row = 0, column = 4, padx = (10,0), sticky = 'nsew')
         prioroptions = ['Uniform','Gaussian','Fixed',"Jeffrey's", "Mod. Jeffrey's"]
         self.priortype = ctk.CTkOptionMenu(self, values = prioroptions, font = (font, 18), variable = ctk.StringVar(value = 'Gaussian' if data['Prior Type'] == '' else self.prior_convert[data['Prior Type']]), command = self.priortype_cmd)
-        self.priortype.grid(row = 1, column = 3, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.priortype.grid(row = 1, column = 4, padx = (10,0), pady = (10,0), sticky = 'nsew')
         self.priortype._dropdown_menu.configure(font = (font, 18))
 
         self.par1label_var = ctk.StringVar(value = '')
         self.par1label = ctk.CTkLabel(self, textvariable = self.par1label_var, font = (font, 16, 'bold'))
-        self.par1label.grid(row = 0, column = 4, padx = (10,0), sticky = 'nsew')
+        self.par1label.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
         self.par1 = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Param 1']) else data['Param 1']), font = (font, 18), justify = 'center')
-        self.par1.grid(row = 1, column = 4, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.par1.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.par2label_var = ctk.StringVar(value = '')
         self.par2label = ctk.CTkLabel(self, textvariable = self.par2label_var, font = (font, 16, 'bold'))
-        self.par2label.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
+        self.par2label.grid(row = 0, column = 6, padx = (10,0), sticky = 'nsew')
         self.par2 = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Param 2']) else data['Param 2']), font = (font, 18), justify = 'center')
-        self.par2.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.par2.grid(row = 1, column = 6, padx = 10, pady = (10,0), sticky = 'nsew')
 
+        self.varoption_cmd(self.variable_anchor.cget('text'), update = False)
         self.priortype_cmd(self.priortype.get(), update = False)
 
 
-    def varoption_cmd(self, choice):
+    def varoption_cmd(self, choice, update = True):
+
+        if update:
+            self.varnumber.set('')
+        
+        if not self.varnumber.grid_info():
+            self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
+            self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        if self.tnumber.grid_info():
+            self.tnumberlabel.grid_forget()
+            self.tnumber.grid_forget()
 
         self.variable_anchor.configure(text=choice)
 
-        self.update_prior_pars()
+        planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'fp']
+        lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
+        ld_vars = ['u1', 'u2']
+
+        if choice in planet_vars:
+            self.varnumberlabel_var.set('Planet Number\nx for all')
+
+        elif choice == 'TT':
+            self.varnumberlabel_var.set('Planet Number')
+            self.tnumberlabel.grid(row = 0, column = 3, padx = (10,0), sticky = 'nsew')
+            self.tnumber.grid(row = 1, column = 3, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        elif choice in lc_vars:
+            self.varnumberlabel_var.set('LC Nickname\nx for all')
+
+        elif choice in ld_vars:
+            self.varnumberlabel_var.set('Filter\nx for all')
+
+        elif choice == 'rv_offset':
+            self.varnumberlabel_var.set('RV Nickname\nx for all')
+
+        else:
+            self.varnumberlabel.grid_forget()
+            self.varnumber.grid_forget()
+
+        if update:
+            self.update_prior_pars()
 
 
     def priortype_cmd(self, choice, update = True):
@@ -986,9 +1037,9 @@ class PriorFrame(ctk.CTkFrame):
             self.par2label.grid_forget()
             self.par2.grid_forget()
         
-        else:
-            self.par2label.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
-            self.par2.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        elif not self.par2.grid_info():
+            self.par2label.grid(row = 0, column = 6, padx = (10,0), sticky = 'nsew')
+            self.par2.grid(row = 1, column = 6, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.update_prior_pars(update = update)
 
@@ -1046,7 +1097,7 @@ class InitPriorsGUI(InitGUI):
     def __init__(self, initfile: InitFile):
         super().__init__(initfile)
 
-        self.geometry('1000x800')
+        self.geometry('1100x700')
 
         self.setup_items_frame()
 
@@ -1064,7 +1115,7 @@ class InitPriorsGUI(InitGUI):
 
         self.items_frame = ctk.CTkScrollableFrame(self)
         self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew', columnspan = 2)
-        self.items_frame.grid_columnconfigure(list(range(6)), weight = 1)
+        self.items_frame.grid_columnconfigure(0, weight = 1)
 
         self.priors = []
 
@@ -1076,7 +1127,7 @@ class InitPriorsGUI(InitGUI):
     def add_prior(self, i):
 
         prior = PriorFrame(self.items_frame, self.table[i])
-        prior.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew', columnspan = 6)
+        prior.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
         self.priors.append(prior)
 
 
@@ -1126,7 +1177,7 @@ class InitPriorsGUI(InitGUI):
             self.priors = list(np.delete(self.priors, checked))
 
             for i in range(len(self.priors)):
-                self.priors[i].grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew', columnspan = 6)
+                self.priors[i].grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
                 self.priors[i].data = self.table[i]
 
 
@@ -1138,8 +1189,8 @@ class InitPriorsGUI(InitGUI):
 
             prior = self.priors[i]
 
-            self.table['Variable'][i] = prior.variable_anchor.cget('text').strip() + ' ' + prior.varnumber.get().strip()
-            self.table['Prior Type'][i] = prior_convert[prior.priortype.get().strip()]
+            self.table['Variable'] = update_string_col(self.table['Variable'], prior.variable_anchor.cget('text').strip() + ' ' + prior.varnumber.get().strip() + (' ' + prior.tnumber.get().strip() if prior.tnumber.get().strip() != '' else ''), i)
+            self.table['Prior Type'] = update_string_col(self.table['Prior Type'], prior_convert[prior.priortype.get().strip()], i)
             self.table['Param 1'][i] = prior.par1.return_float()
             self.table['Param 2'][i] = prior.par2.return_float()
 
