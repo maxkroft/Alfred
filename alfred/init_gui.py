@@ -13,6 +13,7 @@ font = 'Verdana'
 
 from astropy.table import Table, Row, vstack
 import numpy as np
+import re
 
 
 class InitGUI(ctk.CTk):
@@ -207,12 +208,16 @@ class FloatEntry(ctk.CTkEntry):
 
     def validate_float_input(self, proposed_text):
 
-        if proposed_text == "-":
-            if self.min_val is not None and float(self.min_val) >= 0:
-                return False
+        if proposed_text == "":
             return True
+        
+        text = proposed_text.strip()
 
-        if proposed_text in ("", ".", "-."):
+        incomplete_sci_pattern = r'^[-+]?(\d*\.?\d*)[eE][-+]?$'
+
+        if text in ("-", "+", ".", "-.", "+.") or re.match(incomplete_sci_pattern, text):
+            if text.startswith("-") and self.min_val is not None and float(self.min_val) >= 0:
+                return False
             return True
 
         try:
@@ -231,7 +236,12 @@ class FloatEntry(ctk.CTkEntry):
 
     def return_float(self):
         try:
-            return float(self.get().strip())
+            x = float(self.get().strip())
+            if self.min_val is not None and x < self.min_val:
+                return np.nan
+            if self.max_val is not None and x > self.max_val:
+                return np.nan
+            return x
         except ValueError:
             return np.nan
 
@@ -605,13 +615,13 @@ class LcFrame(ctk.CTkFrame):
         self.quality = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Quality Col']))
         self.quality.grid(row = 6, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = (font, 18))
+        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = (font, 18), justify = 'center')
         self.offset.grid(row = 7, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = (font, 18))
+        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = (font, 18), justify = 'center')
         self.errscale.grid(row = 8, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.exptime = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Exp Time']) else data['Exp Time']), font = (font, 18))
+        self.exptime = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Exp Time']) else data['Exp Time']), font = (font, 18), justify = 'center')
         self.exptime.grid(row = 9, column = 0, pady = (10,0), sticky = 'nsew')
 
         self.filter = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Filter']))
@@ -770,10 +780,10 @@ class RVFrame(ctk.CTkFrame):
         self.rverr = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Err Col']))
         self.rverr.grid(row = 5, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = (font, 18))
+        self.offset = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Time Offset']) else data['Time Offset']), font = (font, 18), justify = 'center')
         self.offset.grid(row = 6, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = (font, 18))
+        self.errscale = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Err Scale']) else data['Err Scale']), font = (font, 18), justify = 'center')
         self.errscale.grid(row = 7, column = 0, pady = (10,0), sticky = 'nsew')
 
         self.units = ctk.CTkOptionMenu(self, values = ['m/s','km/s'], font = (font, 18), variable = ctk.StringVar(value = 'm/s' if data['m/s or km/s'] == '' else data['m/s or km/s']))
@@ -906,30 +916,129 @@ class PriorFrame(ctk.CTkFrame):
 
         self.data = data
 
+        self.prior_convert = {'U': 'Uniform', 'G': 'Gaussian', 'F': 'Fixed', 'J': "Jeffrey's", 'MJ': "Mod. Jeffrey's"}
+
         self.grid_columnconfigure(list(range(6)), weight = 1)
         self.grid_rowconfigure((0,1), weight = 1)
 
+        checkboxlabel = ctk.CTkLabel(self, text = 'Select', font = (font, 16, 'bold'))
+        checkboxlabel.grid(row = 0, column = 0, padx = (10,0), sticky = 'nsew')
         self.checkval = ctk.IntVar(value = 0)
         self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
-        self.checkbox.grid(row = 1, column = 0, padx = (10,0), pady = 10, sticky = 'nsew')
+        self.checkbox.grid(row = 1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
+        varlabel = ctk.CTkLabel(self, text = 'Variable', font = (font, 16, 'bold'))
+        varlabel.grid(row = 0, column = 1, padx = (10,0), sticky = 'nsew')
         varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
                     'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
                     'eep', 'log10(age)', 'age', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
-        # self.variable = ctk.CTkOptionMenu(self, values = varoptions, font = (font, 18), variable = ctk.StringVar(value = 'P' if data['Variable'] == '' else data['Variable'].split()[0]), command = self.varoption_cmd)
-        self.variable_anchor = ctk.CTkButton(self, textvariable = ctk.StringVar(value = 'P' if data['Variable'] == '' else data['Variable'].split()[0]), font = (font, 18))
-        self.variable_anchor.grid(row = 1, column = 1, padx = (10,0), pady = 10, sticky = 'nesw')
+        self.variable_anchor = ctk.CTkButton(self, text = 'P' if data['Variable'] == '' else data['Variable'].split()[0], font = (font, 18))
+        self.variable_anchor.grid(row = 1, column = 1, padx = (10,0), pady = (10,0), sticky = 'nesw')
         self.variable = ScrollableDropdown(self.variable_anchor, values = varoptions, height = 400, command = self.varoption_cmd, font = (font, 18))
 
         self.varnumberlabel_var = ctk.StringVar(value = '')
-        self.varnumberlabel = ctk.CTkLabel(self, textvariable = self.varnumberlabel_var, font = (font, 18, 'bold'))
-        self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.varnumberlabel = ctk.CTkLabel(self, textvariable = self.varnumberlabel_var, font = (font, 16, 'bold'))
+        self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
         self.varnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = '' if data['Variable'] == '' else data['Variable'].split()[1:]))
-        self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = 10, sticky = 'nsew')
+        self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        priortypelabel = ctk.CTkLabel(self, text = 'Prior Type', font = (font, 16, 'bold'))
+        priortypelabel.grid(row = 0, column = 3, padx = (10,0), sticky = 'nsew')
+        prioroptions = ['Uniform','Gaussian','Fixed',"Jeffrey's", "Mod. Jeffrey's"]
+        self.priortype = ctk.CTkOptionMenu(self, values = prioroptions, font = (font, 18), variable = ctk.StringVar(value = 'Gaussian' if data['Prior Type'] == '' else self.prior_convert[data['Prior Type']]), command = self.priortype_cmd)
+        self.priortype.grid(row = 1, column = 3, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.priortype._dropdown_menu.configure(font = (font, 18))
+
+        self.par1label_var = ctk.StringVar(value = '')
+        self.par1label = ctk.CTkLabel(self, textvariable = self.par1label_var, font = (font, 16, 'bold'))
+        self.par1label.grid(row = 0, column = 4, padx = (10,0), sticky = 'nsew')
+        self.par1 = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Param 1']) else data['Param 1']), font = (font, 18), justify = 'center')
+        self.par1.grid(row = 1, column = 4, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.par2label_var = ctk.StringVar(value = '')
+        self.par2label = ctk.CTkLabel(self, textvariable = self.par2label_var, font = (font, 16, 'bold'))
+        self.par2label.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
+        self.par2 = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Param 2']) else data['Param 2']), font = (font, 18), justify = 'center')
+        self.par2.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.priortype_cmd(self.priortype.get(), update = False)
+
 
     def varoption_cmd(self, choice):
 
         self.variable_anchor.configure(text=choice)
+
+        self.update_prior_pars()
+
+
+    def priortype_cmd(self, choice, update = True):
+
+        prior_param_convert = {'Uniform': ['Lower Bound','Upper Bound'],
+                               'Gaussian': ['Center', 'Width'],
+                               'Fixed': ['Value',''],
+                               "Jeffrey's": ['Lower Bound', 'Upper Bound'],
+                               "Mod. Jeffrey's": ['Upper Bound', 'Knee Value']}
+
+        self.par1label_var.set(prior_param_convert[choice][0])
+        self.par2label_var.set(prior_param_convert[choice][1])
+
+        if choice in ['Fixed']:
+            self.par2label.grid_forget()
+            self.par2.grid_forget()
+        
+        else:
+            self.par2label.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
+            self.par2.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.update_prior_pars(update = update)
+
+    
+    def update_prior_pars(self, update = True):
+
+        if update:
+            self.par1.set('')
+            self.par2.set('')
+
+        self.par1.min_val = None
+        self.par1.max_val = None
+        self.par2.min_val = None
+        self.par2.max_val = None
+
+        variable = self.variable_anchor.cget('text')
+        priortype = self.priortype.get()
+
+        pos_def_vars = ['log(P)', 'P', 'log(a/rs)', 'a/rs', 'rhos', 'log(K)', 'K',
+                    'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp',
+                    'eep', 'log10(age)', 'age', 'distance', 'mstar', 'rstar', 'rhostar']
+
+        if priortype in ["Jeffrey's", "Mod. Jeffrey's"] or variable in pos_def_vars:
+            self.par1.min_val = 0
+        
+        if priortype in ['Gaussian',"Jeffrey's", "Mod. Jeffrey's"] or variable in pos_def_vars:
+            self.par2.min_val = 0
+
+        bounded_vars = {'cos(i)':[0,1], 'i':[-np.pi,np.pi], 'secw':[-1,1], 'sesw':[-1,1], 'e':[0,1], 'w':[-np.pi,np.pi], 
+                        'u1':[0,1], 'u2':[0,1], 'feh':[-0.5,0.5], 'AV':[0,1]}
+        
+        if variable in bounded_vars:
+
+            self.par1.max_val = bounded_vars[variable][1]
+
+            if priortype in ["Jeffrey's", "Mod. Jeffrey's"]:
+
+                self.par1.min_val = max(bounded_vars[variable][0],0)
+                self.par2.min_val = max(bounded_vars[variable][0],0)
+                self.par2.max_val = bounded_vars[variable][1]
+
+            else:
+
+                self.par1.min_val = bounded_vars[variable][0]
+
+            if priortype in ['Uniform']:
+
+                self.par2.min_val = bounded_vars[variable][0]
+                self.par2.max_val = bounded_vars[variable][1]
+            
 
 
 
@@ -937,7 +1046,7 @@ class InitPriorsGUI(InitGUI):
     def __init__(self, initfile: InitFile):
         super().__init__(initfile)
 
-        self.geometry('800x800')
+        self.geometry('1000x800')
 
         self.setup_items_frame()
 
@@ -957,11 +1066,6 @@ class InitPriorsGUI(InitGUI):
         self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew', columnspan = 2)
         self.items_frame.grid_columnconfigure(list(range(6)), weight = 1)
 
-        labels = ['Select','Variable','','Prior Distribution','','']
-        for i in range(6):
-            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
-            label.grid(row = 0, column = i, padx = (10,0), pady = (10,0), sticky = 'nsew')
-
         self.priors = []
 
         for i in range(len(self.table)):
@@ -978,18 +1082,18 @@ class InitPriorsGUI(InitGUI):
 
     def add_cmd(self):
         
-        self.table.add_row(['']*5 + [np.nan]*2 + [''])
-        i = len(self.rvs)
-        self.add_rv(i)
+        self.table.add_row(['']*2 + [np.nan]*2)
+        i = len(self.priors)
+        self.add_prior(i)
 
 
     def copy_cmd(self):
 
         checked = []
 
-        for i in range(len(self.rvs)):
+        for i in range(len(self.priors)):
             
-            if self.rvs[i].checkval.get():
+            if self.priors[i].checkval.get():
                 checked.append(i)
 
         tablecopy = self.table[checked]
@@ -997,8 +1101,8 @@ class InitPriorsGUI(InitGUI):
         self.initfile.table = vstack([self.table, tablecopy])
         self.table = self.initfile.table
 
-        for i in range(len(self.rvs),len(self.rvs)+len(checked)):
-            self.add_rv(i)
+        for i in range(len(self.priors),len(self.priors)+len(checked)):
+            self.add_prior(i)
 
     
     def delete_cmd(self):
@@ -1011,35 +1115,33 @@ class InitPriorsGUI(InitGUI):
 
             checked = []
 
-            for i in range(len(self.rvs)):
+            for i in range(len(self.priors)):
                 
-                if self.rvs[i].checkval.get():
+                if self.priors[i].checkval.get():
                     checked.append(i)
 
             self.table.remove_rows(checked)
             for i in checked:
-                self.rvs[i].grid_forget()
-            self.rvs = list(np.delete(self.rvs, checked))
+                self.priors[i].grid_forget()
+            self.priors = list(np.delete(self.priors, checked))
 
-            for i in range(len(self.rvs)):
-                self.rvs[i].grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 9)
-                self.rvs[i].data = self.table[i]
+            for i in range(len(self.priors)):
+                self.priors[i].grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew', columnspan = 6)
+                self.priors[i].data = self.table[i]
 
 
     def save_cmd(self):
 
-        for i in range(len(self.rvs)):
+        prior_convert = {'Uniform': 'U', 'Gaussian': 'G', 'Fixed': 'F', "Jeffrey's": 'J', "Mod. Jeffrey's": 'MJ'}
 
-            rv = self.rvs[i]
+        for i in range(len(self.priors)):
 
-            self.table['File'][i] = rv.filename.get().strip()
-            self.table['Nickname'][i] = rv.nickname.get().strip()
-            self.table['Time Col'][i] = rv.time.get().strip()
-            self.table['RV Col'][i] = rv.rv.get().strip()
-            self.table['Err Col'][i] = rv.rverr.get().strip()
-            self.table['Time Offset'][i] = rv.offset.return_float()
-            self.table['Err Scale'][i] = rv.errscale.return_float()
-            self.table['m/s or km/s'][i] = rv.units.get()
+            prior = self.priors[i]
+
+            self.table['Variable'][i] = prior.variable_anchor.cget('text').strip() + ' ' + prior.varnumber.get().strip()
+            self.table['Prior Type'][i] = prior_convert[prior.priortype.get().strip()]
+            self.table['Param 1'][i] = prior.par1.return_float()
+            self.table['Param 2'][i] = prior.par2.return_float()
 
         self.initfile.table = self.table
 
