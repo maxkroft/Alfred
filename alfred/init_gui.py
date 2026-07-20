@@ -272,6 +272,7 @@ class ToggleCheckbox(ctk.CTkCheckBox):
     def return_bool(self):
         return self.val.get() == 1
     
+    
 
 
 class ScrollableDropdown(ctk.CTkToplevel):
@@ -360,6 +361,26 @@ class ScrollableDropdown(ctk.CTkToplevel):
             self.attach.configure(text=value)
         self.withdraw()
     
+
+
+class CheckDropDown(ctk.CTkFrame):
+    def __init__(self, master, options, startval, **kwargs):
+        super().__init__(master, fg_color = 'transparent', **kwargs)
+
+        self.options = options
+
+        self.grid_columnconfigure(1, weight = 1)
+        self.grid_rowconfigure(0, weight = 1)
+
+        self.checkval = ctk.IntVar(value = 0)
+        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
+        self.checkbox.grid(row = 0, column = 0, sticky = 'nsew')
+
+        self.dropdown_anchor = ctk.CTkButton(self, text = startval, font = (font, 18))
+        self.dropdown_anchor.grid(row = 0, column = 1, sticky = 'nesw')
+        self.dropdown = ScrollableDropdown(self.dropdown_anchor, values = self.options, height = 300, font = (font, 18))
+
+        
 
 
 def update_string_col(col: Column, value: str, idx: int) -> Column:
@@ -1197,3 +1218,201 @@ class InitPriorsGUI(InitGUI):
         self.initfile.table = self.table
 
         super().save_cmd()
+
+
+
+###################
+#####Init Star#####
+###################
+
+
+class StarFrame(ctk.CTkFrame):
+    def __init__(self, master, data: Row, **kwargs):
+        super().__init__(master, **kwargs)
+
+        self.data = data
+
+        self.grid_columnconfigure(0, weight = 1)
+        self.grid_rowconfigure(list(range(6)), weight = 1)
+
+        self.par = ctk.CTkLabel(self, text = data['Parameter'], font = (font, 18, 'bold'))
+        self.par.grid(row = 0, column = 0, sticky = 'nsew')
+
+        self.unit = ctk.CTkLabel(self, text = data['Units'], font = (font, 16))
+        self.unit.grid(row = 1, column = 0, sticky = 'nsew')
+
+        valuelabel = ctk.CTkLabel(self, text = 'Value', font = (font, 18, 'bold'))
+        valuelabel.grid(row = 2, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.value = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value']), font = (font, 18), justify = 'center')
+        self.value.grid(row = 3, column = 0, sticky = 'nsew')
+
+        errorlabel = ctk.CTkLabel(self, text = 'Error', font = (font, 18, 'bold'))
+        errorlabel.grid(row = 4, column = 0, pady = (10,0), sticky = 'nsew')
+        
+        self.error = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Error']) else data['Error']), font = (font, 18), justify = 'center')
+        self.error.grid(row = 5, column = 0, sticky = 'nsew')
+
+
+class PhotFrame(ctk.CTkFrame):
+    def __init__(self, master, data: Row, **kwargs):
+        super().__init__(master, **kwargs)
+
+        self.data = data
+
+        self.grid_columnconfigure(0, weight = 1)
+        self.grid_rowconfigure(list(range(5)), weight = 1)
+
+        photoptions = ['Gaia G','Gaia BP','Gaia RP','2MASS J','2MASS H','2MASS K','Wise 1','Wise 2','Wise 3','SDSS u','SDSS g','SDSS r','SDSS i','SDSS z','Bessel U','Bessel B','Bessel V','Bessel R','Bessel I','Kepler','TESS']
+
+        self.band = CheckDropDown(self, photoptions, data['Parameter'])
+        self.band.grid(row = 0, column = 0, sticky = 'nsew')
+
+        valuelabel = ctk.CTkLabel(self, text = 'Value', font = (font, 18, 'bold'))
+        valuelabel.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.value = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value']), font = (font, 18), justify = 'center')
+        self.value.grid(row = 2, column = 0, sticky = 'nsew')
+
+        errorlabel = ctk.CTkLabel(self, text = 'Error', font = (font, 18, 'bold'))
+        errorlabel.grid(row = 3, column = 0, pady = (10,0), sticky = 'nsew')
+        
+        self.error = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Error']) else data['Error']), font = (font, 18), justify = 'center')
+        self.error.grid(row = 4, column = 0, sticky = 'nsew')
+
+
+class InitStarGUI(InitGUI):
+    def __init__(self, initfile: InitFile):
+        super().__init__(initfile)
+
+        self.geometry('1000x750')
+
+        self.setup_items_frame()
+
+        self.frame_title = ctk.CTkLabel(self, text = 'Stellar Parameters', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'ew', columnspan = 2)
+
+        self.add.configure(text = 'Add Photometry')
+
+        self.query = ctk.CTkButton(self, text = 'Query for Parameters', font = (font, 18, 'bold'), command = self.query_cmd)
+        self.query.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.delete = ctk.CTkButton(self, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
+        self.delete.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'ew')
+
+    
+    def setup_items_frame(self):
+
+        self.items_frame = ctk.CTkScrollableFrame(self)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew', columnspan = 2)
+        self.items_frame.grid_columnconfigure(list(range(3)), weight = 1)
+
+        self.r = StarFrame(self.items_frame, self.table[0])
+        self.r.grid(row = 0, column = 0, padx = 10, pady = 10, sticky = 'nsew')
+
+        self.m = StarFrame(self.items_frame, self.table[1])
+        self.m.grid(row = 0, column = 1, padx = 10, pady = 10, sticky = 'nsew')
+
+        self.t = StarFrame(self.items_frame, self.table[2])
+        self.t.grid(row = 0, column = 2, padx = 10, pady = 10, sticky = 'nsew')
+
+        self.logg = StarFrame(self.items_frame, self.table[3])
+        self.logg.grid(row = 1, column = 0, padx = 10, pady = 10, sticky = 'nsew')
+
+        self.feh = StarFrame(self.items_frame, self.table[4])
+        self.feh.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = 'nsew')
+
+        self.plx = StarFrame(self.items_frame, self.table[5])
+        self.plx.grid(row = 1, column = 2, padx = 10, pady = 10, sticky = 'nsew')
+
+        photlabel = ctk.CTkLabel(self.items_frame, text = 'Photometry (mags)', font = (font, 18, 'bold'))
+        photlabel.grid(row = 2, column = 0, padx = 10, pady = 10, sticky = 'nsew', columnspan = 3)
+
+        self.phots = []
+        
+        for i in range(6, len(self.table)):
+
+            self.add_phot(i)
+
+    
+    def add_phot(self, i):
+
+        phot = PhotFrame(self.items_frame, self.table[i])
+        phot.grid(row = int(i//3)+1, column = i%3, padx = 10, pady = 10, sticky = 'nsew')
+        self.phots.append(phot)
+
+
+    def add_cmd(self):
+        
+        self.table.add_row(['Band', 'mag'] + [np.nan]*2)
+        i = len(self.phots)+6
+        self.add_phot(i)
+
+
+    def delete_cmd(self):
+
+        delete_prompt = DeletePrompt()
+
+        self.wait_window(delete_prompt)
+
+        if delete_prompt.answer:
+
+            checked = []
+
+            for i in range(len(self.phots)):
+                
+                if self.phots[i].band.checkval.get():
+                    checked.append(i)
+
+            self.table.remove_rows(checked)
+            for i in checked:
+                self.phots[i].grid_forget()
+            self.phots = list(np.delete(self.phots, checked))
+
+            for i in range(len(self.phots)):
+                self.phots[i].grid(row = int(i//3)+3, column = i%3, padx = 10, pady = 10, sticky = 'nsew')
+                self.phots[i].data = self.table[i]
+
+
+    def save_cmd(self):
+
+        self.table['Value'][0] = self.r.value.return_float()
+        self.table['Error'][0] = self.r.error.return_float()
+
+        self.table['Value'][1] = self.m.value.return_float()
+        self.table['Error'][1] = self.m.error.return_float()
+
+        self.table['Value'][2] = self.t.value.return_float()
+        self.table['Error'][2] = self.t.error.return_float()
+
+        self.table['Value'][3] = self.logg.value.return_float()
+        self.table['Error'][3] = self.logg.error.return_float()
+
+        self.table['Value'][4] = self.feh.value.return_float()
+        self.table['Error'][4] = self.feh.error.return_float()
+
+        self.table['Value'][5] = self.plx.value.return_float()
+        self.table['Error'][5] = self.plx.error.return_float()
+
+        phot_convert = {'Gaia G': 'G', 'Gaia BP': 'BP', 'Gaia RP': 'RP', '2MASS J': 'J', '2MASS H': 'H', '2MASS K': 'K',
+                        'Wise 1': 'W1', 'Wise 2': 'W2', 'Wise 3': 'W3', 'SDSS u': 'u', 'SDSS g': 'g', 'SDSS r': 'r', 'SDSS i': 'i', 'SDSS z': 'z',
+                        'Bessel U': 'U', 'Bessel B': 'B', 'Bessel V': 'V', 'Bessel R': 'R', 'Bessel I': 'I', 'Kepler': 'Kep', 'TESS': 'TESS'}
+
+        for i in range(len(self.phots)):
+
+            phot = self.phots[i]
+
+            j = i + 6
+
+            self.table['Parameter'] = update_string_col(self.table['Parameter'], phot_convert[phot.band.dropdown_anchor.cget('text').strip()], j)
+            self.table['Value'][j] = phot.value.return_float()
+            self.table['Error'][j] = phot.error.return_float()
+
+        self.initfile.table = self.table
+
+        super().save_cmd()
+
+    
+    def query_cmd(self):
+
+        return
