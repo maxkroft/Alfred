@@ -278,8 +278,8 @@ class ToggleCheckbox(ctk.CTkCheckBox):
 
 
 class ScrollableDropdown(ctk.CTkToplevel):
-    def __init__(self, attach, values=None, height=200, width=None, command=None, font = None, **kwargs):
-        super().__init__(takefocus=1)
+    def __init__(self, master, attach, values=None, height=200, width=None, command=None, font = None, **kwargs):
+        super().__init__(master, takefocus=1)
         self.geometry("0x0+0+0")
         self.wm_overrideredirect(True)
         self.attributes("-topmost", True)
@@ -349,7 +349,10 @@ class ScrollableDropdown(ctk.CTkToplevel):
         # Position and display the pop-up overlay window directly below button boundary
         self.geometry(f"{width}x{self.requested_height}+{x}+{y}")
         self.deiconify()
-        self.focus_set()
+        
+        self.lift()
+
+        self.focus_force()
         
         # Close drop menu safely if user clicks anywhere else in the application window
         self.bind("<FocusOut>", lambda e: self.withdraw())
@@ -380,7 +383,7 @@ class CheckDropDown(ctk.CTkFrame):
 
         self.dropdown_anchor = ctk.CTkButton(self, text = startval, font = (font, 18))
         self.dropdown_anchor.grid(row = 0, column = 1, sticky = 'nesw')
-        self.dropdown = ScrollableDropdown(self.dropdown_anchor, values = self.options, height = 300, font = (font, 18))
+        self.dropdown = ScrollableDropdown(master, self.dropdown_anchor, values = self.options, height = 300, font = (font, 18))
 
         
 
@@ -740,20 +743,21 @@ class InitLcsGUI(InitGUI):
 
         if delete_prompt.answer:
 
-            checked = []
+            checked = [i for i, lc in enumerate(self.lcs) if lc.checkval.get()]
 
-            for i in range(len(self.lcs)):
-                
-                if self.lcs[i].checkval.get():
-                    checked.append(i)
+            if not checked:
+                return
 
             self.table.remove_rows(checked)
+
             for i in checked:
                 self.lcs[i].grid_forget()
-            self.lcs = list(np.delete(self.lcs, checked))
+                self.lcs[i].destroy()
+
+            self.lcs = [lc for i, lc in enumerate(self.lcs) if i not in checked]
 
             for i in range(len(self.lcs)):
-                self.lcs[i].grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 12)
+                self.lcs[i].grid_configure(column = i+1)
                 self.lcs[i].data = self.table[i]
 
 
@@ -900,22 +904,24 @@ class InitRVGUI(InitGUI):
 
         if delete_prompt.answer:
 
-            checked = []
+            checked = [i for i, rv in enumerate(self.rvs) if rv.checkval.get()]
 
-            for i in range(len(self.rvs)):
-                
-                if self.rvs[i].checkval.get():
-                    checked.append(i)
+            if not checked:
+                return
 
             self.table.remove_rows(checked)
+
             for i in checked:
                 self.rvs[i].grid_forget()
-            self.rvs = list(np.delete(self.rvs, checked))
+                self.rvs[i].destroy()
+
+            self.rvs = [rv for i, rv in enumerate(self.rvs) if i not in checked]
 
             for i in range(len(self.rvs)):
-                self.rvs[i].grid(row = 0, column = i+1, padx = 10, sticky = 'nsew', rowspan = 9)
+                self.rvs[i].grid_configure(column = i+1)
                 self.rvs[i].data = self.table[i]
 
+        
 
     def save_cmd(self):
 
@@ -967,12 +973,13 @@ class PriorFrame(ctk.CTkFrame):
                     'eep', 'log10(age)', 'age', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
         self.variable_anchor = ctk.CTkButton(self, text = 'P' if data['Variable'] == '' else data['Variable'].split()[0], font = (font, 18))
         self.variable_anchor.grid(row = 1, column = 1, padx = (10,0), pady = (10,0), sticky = 'nesw')
-        self.variable = ScrollableDropdown(self.variable_anchor, values = varoptions, height = 400, command = self.varoption_cmd, font = (font, 18))
+        self.variable = ScrollableDropdown(self, self.variable_anchor, values = varoptions, height = 400, command = self.varoption_cmd, font = (font, 18))
 
         self.varnumberlabel_var = ctk.StringVar(value = '')
         self.varnumberlabel = ctk.CTkLabel(self, textvariable = self.varnumberlabel_var, font = (font, 16, 'bold'))
         self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
-        self.varnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = '' if data['Variable'] == '' else (data['Variable'].split()[1:] if data['Variable'].split()[0] != 'TT' else data['Variable'].split()[1])))
+        self.varnumber_var = ctk.StringVar(value = '' if data['Variable'] == '' else (data['Variable'].split()[1:] if data['Variable'].split()[0] != 'TT' else data['Variable'].split()[1]))
+        self.varnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = self.varnumber_var)
         self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.tnumberlabel = ctk.CTkLabel(self, text = 'Transit Number', font = (font, 16, 'bold'))
@@ -988,13 +995,15 @@ class PriorFrame(ctk.CTkFrame):
         self.par1label_var = ctk.StringVar(value = '')
         self.par1label = ctk.CTkLabel(self, textvariable = self.par1label_var, font = (font, 16, 'bold'))
         self.par1label.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
-        self.par1 = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Param 1']) else data['Param 1']), font = (font, 18), justify = 'center')
+        self.par1_var = ctk.StringVar(value = '' if np.isnan(data['Param 1']) else data['Param 1'])
+        self.par1 = FloatEntry(self, textvariable = self.par1_var, font = (font, 18), justify = 'center')
         self.par1.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.par2label_var = ctk.StringVar(value = '')
         self.par2label = ctk.CTkLabel(self, textvariable = self.par2label_var, font = (font, 16, 'bold'))
         self.par2label.grid(row = 0, column = 6, padx = (10,0), sticky = 'nsew')
-        self.par2 = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Param 2']) else data['Param 2']), font = (font, 18), justify = 'center')
+        self.par2_var = ctk.StringVar(value = '' if np.isnan(data['Param 2']) else data['Param 2'])
+        self.par2 = FloatEntry(self, textvariable = self.par2_var, font = (font, 18), justify = 'center')
         self.par2.grid(row = 1, column = 6, padx = 10, pady = (10,0), sticky = 'nsew')
 
         self.varoption_cmd(self.variable_anchor.cget('text'), update = False)
@@ -1004,7 +1013,7 @@ class PriorFrame(ctk.CTkFrame):
     def varoption_cmd(self, choice, update = True):
 
         if update:
-            self.varnumber.set('')
+            self.varnumber_var.set('')
         
         if not self.varnumber.grid_info():
             self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
@@ -1070,8 +1079,8 @@ class PriorFrame(ctk.CTkFrame):
     def update_prior_pars(self, update = True):
 
         if update:
-            self.par1.set('')
-            self.par2.set('')
+            self.par1_var.set('')
+            self.par2_var.set('')
 
         self.par1.min_val = None
         self.par1.max_val = None
@@ -1187,20 +1196,21 @@ class InitPriorsGUI(InitGUI):
 
         if delete_prompt.answer:
 
-            checked = []
+            checked = [i for i, prior in enumerate(self.priors) if prior.checkval.get()]
 
-            for i in range(len(self.priors)):
-                
-                if self.priors[i].checkval.get():
-                    checked.append(i)
+            if not checked:
+                return
 
             self.table.remove_rows(checked)
+
             for i in checked:
                 self.priors[i].grid_forget()
-            self.priors = list(np.delete(self.priors, checked))
+                self.priors[i].destroy()
+
+            self.priors = [prior for i, prior in enumerate(self.priors) if i not in checked]
 
             for i in range(len(self.priors)):
-                self.priors[i].grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
+                self.priors[i].grid_configure(row = i+1)
                 self.priors[i].data = self.table[i]
 
 
@@ -1539,22 +1549,24 @@ class InitStarGUI(InitGUI):
 
         if delete_prompt.answer:
 
-            checked = []
+            checked = [i for i, phot in enumerate(self.phots) if phot.band.checkval.get()]
 
-            for i in range(len(self.phots)):
-                
-                if self.phots[i].band.checkval.get():
-                    checked.append(i)
+            if not checked:
+                return
 
             self.table.remove_rows(checked)
+
             for i in checked:
                 self.phots[i].grid_forget()
-            self.phots = list(np.delete(self.phots, checked))
+                self.phots[i].destroy()
+
+            self.phots = [phot for i, phot in enumerate(self.phots) if i not in checked]
 
             for i in range(len(self.phots)):
-                self.phots[i].grid(row = int(i//3)+3, column = i%3, padx = 10, pady = 10, sticky = 'nsew')
+                self.phots[i].grid_configure(row = int(i//3)+3, column = i%3)
                 self.phots[i].data = self.table[i]
 
+    
 
     def save_cmd(self):
 
