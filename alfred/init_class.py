@@ -4,6 +4,7 @@ import shutil
 import os
 from astroquery.vizier import Vizier
 from astropy import units as u
+from astropy.io.ascii import InconsistentTableError
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
@@ -259,6 +260,62 @@ class Init_star(InitFile):
 
         app = InitStarGUI(self)
         app.mainloop()
+
+
+    def from_file(self) -> Self:
+        """Loads an an Init_star table from a previously created file. This is stored in .table. If the load fails, trys again using the deprecated
+        formatting and converts it to the current format.
+
+        Returns:
+            Init_star: The whole Init_star object is returned by this function.
+        """
+
+        try:
+            self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
+                                    header_rows = self.header_rows, converters = {'*': [float, bool, str]})
+
+        except InconsistentTableError:
+
+            table_old = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
+                                    header_rows = ['name','units'], converters = {'*': [float, bool, str]})
+
+            self.table['Value'][0] = table_old['Radius'][0]
+            self.table['Error'][0] = table_old['Radius'][1]
+
+            self.table['Value'][1] = table_old['Mass'][0]
+            self.table['Error'][1] = table_old['Mass'][1]
+
+            self.table['Value'][2] = table_old['Teff'][0]
+            self.table['Error'][2] = table_old['Teff'][1]
+
+            self.table['Value'][3] = table_old['log(g)'][0]
+            self.table['Error'][3] = table_old['log(g)'][1]
+
+            self.table['Value'][4] = table_old['Fe/H'][0]
+            self.table['Error'][4] = table_old['Fe/H'][1]
+
+            self.table['Value'][5] = table_old['Parallax'][0]
+            self.table['Error'][5] = table_old['Parallax'][1]
+
+            for colname in table_old.colnames:
+
+                if colname in ['G','Bp','Rp','J','H','K','W1','W2','W3']:
+
+                    if colname == 'Bp':
+
+                        self.table.add_row(['BP','mag',table_old['Bp'][0],table_old['Bp'][1]])
+
+                    elif colname == 'Rp':
+
+                        self.table.add_row(['RP','mag',table_old['Rp'][0],table_old['Rp'][1]])
+
+                    else:
+
+                        self.table.add_row([colname,'mag',table_old[colname][0],table_old[colname][1]])
+
+            self.save()
+
+        return self
 
 
     # def create(self) -> Self:
