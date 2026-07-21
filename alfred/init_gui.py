@@ -12,8 +12,10 @@ ctk.DrawEngine.preferred_drawing_method = "circle_shapes"
 font = 'Verdana'
 
 from astropy.table import Table, Row, Column, vstack
+from astropy import units as u
 import numpy as np
 import re
+from astroquery.vizier import Vizier
 
 
 class InitGUI(ctk.CTk):
@@ -1244,13 +1246,15 @@ class StarFrame(ctk.CTkFrame):
         valuelabel = ctk.CTkLabel(self, text = 'Value', font = (font, 18, 'bold'))
         valuelabel.grid(row = 2, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.value = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value']), font = (font, 18), justify = 'center')
+        self.value_var = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value'])
+        self.value = FloatEntry(self, textvariable = self.value_var, font = (font, 18), justify = 'center')
         self.value.grid(row = 3, column = 0, sticky = 'nsew')
 
         errorlabel = ctk.CTkLabel(self, text = 'Error', font = (font, 18, 'bold'))
         errorlabel.grid(row = 4, column = 0, pady = (10,0), sticky = 'nsew')
         
-        self.error = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Error']) else data['Error']), font = (font, 18), justify = 'center')
+        self.error_var = ctk.StringVar(value = '' if np.isnan(data['Error']) else data['Error'])
+        self.error = FloatEntry(self, min_val = 0, textvariable = self.error_var, font = (font, 18), justify = 'center')
         self.error.grid(row = 5, column = 0, sticky = 'nsew')
 
 
@@ -1263,7 +1267,7 @@ class PhotFrame(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight = 1)
         self.grid_rowconfigure(list(range(5)), weight = 1)
 
-        photoptions = ['Gaia G','Gaia BP','Gaia RP','2MASS J','2MASS H','2MASS K','Wise 1','Wise 2','Wise 3','SDSS u','SDSS g','SDSS r','SDSS i','SDSS z','Bessel U','Bessel B','Bessel V','Bessel R','Bessel I','Kepler','TESS']
+        photoptions = ['Gaia G','Gaia BP','Gaia RP','2MASS J','2MASS H','2MASS K','Wise 1','Wise 2','Wise 3','SDSS u','SDSS g','SDSS r','SDSS i','SDSS z','U','B','V','R','I','TESS']
 
         self.band = CheckDropDown(self, photoptions, data['Parameter'])
         self.band.grid(row = 0, column = 0, sticky = 'nsew')
@@ -1271,14 +1275,188 @@ class PhotFrame(ctk.CTkFrame):
         valuelabel = ctk.CTkLabel(self, text = 'Value', font = (font, 18, 'bold'))
         valuelabel.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.value = FloatEntry(self, textvariable = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value']), font = (font, 18), justify = 'center')
+        self.value_var = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value'])
+        self.value = FloatEntry(self, textvariable = self.value_var, font = (font, 18), justify = 'center')
         self.value.grid(row = 2, column = 0, sticky = 'nsew')
 
         errorlabel = ctk.CTkLabel(self, text = 'Error', font = (font, 18, 'bold'))
         errorlabel.grid(row = 3, column = 0, pady = (10,0), sticky = 'nsew')
         
-        self.error = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Error']) else data['Error']), font = (font, 18), justify = 'center')
+        self.error_var = ctk.StringVar(value = '' if np.isnan(data['Error']) else data['Error'])
+        self.error = FloatEntry(self, min_val = 0, textvariable = self.error_var, font = (font, 18), justify = 'center')
         self.error.grid(row = 4, column = 0, sticky = 'nsew')
+
+
+class StarQueryPrompt(ctk.CTkToplevel):
+    def __init__(self, initgui: InitStarGUI):
+        super().__init__()
+
+        self.initgui = initgui
+
+        self.title('Query Stellar Pars')
+        self.geometry('300x200')
+        self.grid_columnconfigure(0, weight = 1)
+        self.grid_rowconfigure(list(range(3)), weight = 1)
+
+        self.label = ctk.CTkLabel(self, text = 'Enter Catalog ID', font = (font, 18, 'bold'))
+        self.label.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.entry_var = ctk.StringVar(value = '')
+        self.entry = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = self.entry_var)
+        self.entry.grid(row = 1, column = 0, padx = 10, pady = (10, 0), sticky = 'ew')
+
+        self.run = ctk.CTkButton(self, text = 'Run Query', font = (font, 18, 'bold'), command = self.run_cmd)
+        self.run.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+    def run_cmd(self):
+
+        cid = self.entry_var.get().strip()
+
+        bands = []
+        for phot in self.initgui.phots:
+
+            bands.append(phot.band.dropdown_anchor.cget('text').strip())
+
+        vizier = Vizier(columns = ['**','+_r'])
+
+        try:
+
+            tic = vizier.query_object(object_name = cid, catalog = 'IV/39/tic82', radius = 1*u.arcmin)[0][0]
+
+            self.initgui.r.value_var.set(tic['Rad'])
+            self.initgui.r.error_var.set(tic['s_Rad'])
+
+            self.initgui.m.value_var.set(tic['Mass'])
+            self.initgui.m.error_var.set(tic['s_Mass'])
+
+            self.initgui.t.value_var.set(tic['Teff'])
+            self.initgui.t.error_var.set(tic['s_Teff'])
+
+            self.initgui.logg.value_var.set(tic['logg'])
+            self.initgui.logg.error_var.set(tic['s_logg'])
+
+            ticconvert = {'TESS': 'Tmag', 'B': 'Bmag', 'V': 'Vmag'}
+
+            for i in range(len(bands)):
+
+                band = bands[i]
+
+                if band in ticconvert:
+
+                    phot = self.initgui.phots[i]
+
+                    phot.value_var.set(tic[ticconvert[band]])
+                    phot.error_var.set(tic['e_'+ticconvert[band]])
+
+
+        except ConnectionError or TimeoutError:
+
+            self.label.configure(text = 'Connection issue.')
+            return
+
+        except:
+
+            pass
+
+        try:
+
+            gaia = vizier.query_object(object_name = cid, catalog = 'I/355/gaiadr3', radius = 1*u.arcmin)[0][0]
+
+            self.initgui.feh.value_var.set(gaia['[Fe/H]'])
+            self.initgui.feh.error_var.set((gaia['B_[Fe/H]']-gaia['b_[Fe/H]'])/2)
+
+            self.initgui.plx.value_var.set(gaia['Plx'])
+            self.initgui.plx.error_var.set(gaia['e_Plx'])
+
+            gaiaconvert = {'Gaia G': 'Gmag', 'Gaia BP': 'BPmag', 'Gaia RP': 'RPmag'}
+
+            for i in range(len(bands)):
+
+                band = bands[i]
+
+                if band in gaiaconvert:
+
+                    phot = self.initgui.phots[i]
+
+                    phot.value_var.set(gaia[gaiaconvert[band]])
+                    phot.error_var.set(gaia['e_'+gaiaconvert[band]])
+
+        except:
+
+            pass
+        
+        twomassconvert = {'2MASS J': 'Jmag', '2MASS H': 'Hmag', '2MASS K': 'Kmag'}
+
+        if np.any(np.isin(bands, list(twomassconvert.keys()))):
+
+            try:
+
+                twomass = vizier.query_object(object_name = cid, catalog = 'II/246/out', radius = 1*u.arcmin)[0][0]
+
+                for i in range(len(bands)):
+
+                    band = bands[i]
+
+                    if band in twomassconvert:
+
+                        phot = self.initgui.phots[i]
+
+                        phot.value_var.set(twomass[twomassconvert[band]])
+                        phot.error_var.set(twomass['e_'+twomassconvert[band]])
+
+            except:
+
+                pass
+
+        wiseconvert = {'Wise 1': 'W1mag', 'Wise 2': 'W2mag', 'Wise 3': 'W3mag'}
+
+        if np.any(np.isin(bands, list(wiseconvert.keys()))):
+
+            try:
+
+                wise = vizier.query_object(object_name = cid, catalog = 'II/328/allwise', radius = 1*u.arcmin)[0][0]
+
+                for i in range(len(bands)):
+
+                    band = bands[i]
+
+                    if band in wiseconvert:
+
+                        phot = self.initgui.phots[i]
+
+                        phot.value_var.set(wise[wiseconvert[band]])
+                        phot.error_var.set(wise['e_'+wiseconvert[band]])
+
+            except:
+
+                pass
+
+        sdssconvert = {'SDSS u': 'upmag', 'SDSS g': 'gpmag', 'SDSS r': 'rpmag', 'SDSS i': 'ipmag', 'SDSS z': 'zpmag'}
+
+        if np.any(np.isin(bands, list(sdssconvert.keys()))):
+
+            try:
+
+                sdss = vizier.query_object(object_name = cid, catalog = 'V/154/sdss16', radius = 1*u.arcmin)[0][0]
+
+                for i in range(len(bands)):
+
+                    band = bands[i]
+
+                    if band in sdssconvert:
+
+                        phot = self.initgui.phots[i]
+
+                        phot.value_var.set(sdss[sdssconvert[band]])
+                        phot.error_var.set(sdss['e_'+sdssconvert[band]])
+
+            except:
+
+                pass
+
+
+        self.destroy()
+
 
 
 class InitStarGUI(InitGUI):
@@ -1286,6 +1464,10 @@ class InitStarGUI(InitGUI):
         super().__init__(initfile)
 
         self.geometry('1000x750')
+
+        self.phot_convert = {'Gaia G': 'G', 'Gaia BP': 'BP', 'Gaia RP': 'RP', '2MASS J': 'J', '2MASS H': 'H', '2MASS K': 'K',
+                        'Wise 1': 'W1', 'Wise 2': 'W2', 'Wise 3': 'W3', 'SDSS u': 'u', 'SDSS g': 'g', 'SDSS r': 'r', 'SDSS i': 'i', 'SDSS z': 'z',
+                        'U': 'U', 'B': 'B', 'V': 'V', 'R': 'R', 'I': 'I','TESS': 'TESS'}
 
         self.setup_items_frame()
 
@@ -1394,17 +1576,13 @@ class InitStarGUI(InitGUI):
         self.table['Value'][5] = self.plx.value.return_float()
         self.table['Error'][5] = self.plx.error.return_float()
 
-        phot_convert = {'Gaia G': 'G', 'Gaia BP': 'BP', 'Gaia RP': 'RP', '2MASS J': 'J', '2MASS H': 'H', '2MASS K': 'K',
-                        'Wise 1': 'W1', 'Wise 2': 'W2', 'Wise 3': 'W3', 'SDSS u': 'u', 'SDSS g': 'g', 'SDSS r': 'r', 'SDSS i': 'i', 'SDSS z': 'z',
-                        'Bessel U': 'U', 'Bessel B': 'B', 'Bessel V': 'V', 'Bessel R': 'R', 'Bessel I': 'I', 'Kepler': 'Kep', 'TESS': 'TESS'}
-
         for i in range(len(self.phots)):
 
             phot = self.phots[i]
 
             j = i + 6
 
-            self.table['Parameter'] = update_string_col(self.table['Parameter'], phot_convert[phot.band.dropdown_anchor.cget('text').strip()], j)
+            self.table['Parameter'] = update_string_col(self.table['Parameter'], self.phot_convert[phot.band.dropdown_anchor.cget('text').strip()], j)
             self.table['Value'][j] = phot.value.return_float()
             self.table['Error'][j] = phot.error.return_float()
 
@@ -1415,4 +1593,6 @@ class InitStarGUI(InitGUI):
     
     def query_cmd(self):
 
-        return
+        query_prompt = StarQueryPrompt(self)
+
+        self.wait_window(query_prompt)
