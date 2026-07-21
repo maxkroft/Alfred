@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from alfred.init_class import InitFile
 
+from alfred.ld_grids import ld_grid_list, calc_ld
+
 import customtkinter as ctk
 ctk.set_appearance_mode('dark')
 ctk.DrawEngine.preferred_drawing_method = "circle_shapes"
@@ -206,6 +208,8 @@ class FloatEntry(ctk.CTkEntry):
         validate_float_cmd = self.register(self.validate_float_input)
 
         self.configure(validate = 'key', validatecommand = (validate_float_cmd, '%P'))
+
+        self.bind("<FocusOut>", self._on_focus_out)
         
 
     def validate_float_input(self, proposed_text):
@@ -224,17 +228,30 @@ class FloatEntry(ctk.CTkEntry):
 
         try:
             val = float(proposed_text)
-            
-            if self.min_val is not None and val < float(self.min_val):
-                return False
-                
-            if self.max_val is not None and val > float(self.max_val):
-                return False
-                
             return True
         
         except ValueError:
             return False
+
+
+    def _on_focus_out(self, event):
+        try:
+            raw_text = self.get().strip()
+            if not raw_text:
+                return
+                
+            val = float(raw_text)
+            
+            if self.min_val is not None and val < self.min_val:
+                self.delete(0, "end")
+                self.insert(0, str(self.min_val))
+
+            elif self.max_val is not None and val > self.max_val:
+                self.delete(0, "end")
+                self.insert(0, str(self.max_val))
+
+        except ValueError:
+            self.delete(0, "end")
 
     def return_float(self):
         try:
@@ -719,12 +736,7 @@ class InitLcsGUI(InitGUI):
 
     def copy_cmd(self):
 
-        checked = []
-
-        for i in range(len(self.lcs)):
-            
-            if self.lcs[i].checkval.get():
-                checked.append(i)
+        checked = [i for i, lc in enumerate(self.lcs) if lc.checkval.get()]
 
         tablecopy = self.table[checked]
 
@@ -880,12 +892,7 @@ class InitRVGUI(InitGUI):
 
     def copy_cmd(self):
 
-        checked = []
-
-        for i in range(len(self.rvs)):
-            
-            if self.rvs[i].checkval.get():
-                checked.append(i)
+        checked = [i for i, rv in enumerate(self.rvs) if rv.checkval.get()]
 
         tablecopy = self.table[checked]
 
@@ -1159,7 +1166,7 @@ class InitPriorsGUI(InitGUI):
     def add_prior(self, i):
 
         prior = PriorFrame(self.items_frame, self.table[i])
-        prior.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew')
+        prior.grid(row = i, column = 0, pady = (10,0), sticky = 'ew')
         self.priors.append(prior)
 
 
@@ -1172,12 +1179,7 @@ class InitPriorsGUI(InitGUI):
 
     def copy_cmd(self):
 
-        checked = []
-
-        for i in range(len(self.priors)):
-            
-            if self.priors[i].checkval.get():
-                checked.append(i)
+        checked = [i for i, prior in enumerate(self.priors) if prior.checkval.get()]
 
         tablecopy = self.table[checked]
 
@@ -1210,7 +1212,7 @@ class InitPriorsGUI(InitGUI):
             self.priors = [prior for i, prior in enumerate(self.priors) if i not in checked]
 
             for i in range(len(self.priors)):
-                self.priors[i].grid_configure(row = i+1)
+                self.priors[i].grid_configure(row = i)
                 self.priors[i].data = self.table[i]
 
 
@@ -1316,7 +1318,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
         self.entry.grid(row = 1, column = 0, padx = 10, pady = (10, 0), sticky = 'ew')
 
         self.run = ctk.CTkButton(self, text = 'Run Query', font = (font, 18, 'bold'), command = self.run_cmd)
-        self.run.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+        self.run.grid(row = 2, column = 0, padx = 10, pady = 10, sticky = 'ew')
 
     def run_cmd(self):
 
@@ -1608,3 +1610,194 @@ class InitStarGUI(InitGUI):
         query_prompt = StarQueryPrompt(self)
 
         self.wait_window(query_prompt)
+
+
+#################
+#####Init LD#####
+#################
+
+class LDFrame(ctk.CTkScrollableFrame):
+    def __init__(self, master, data: Row, **kwargs):
+        super().__init__(master, **kwargs)
+
+        self.data = data
+
+        self.grid_columnconfigure(list(range(5)), weight = 1)
+        self.grid_rowconfigure(0, weight = 1)
+
+        self.checkval = ctk.IntVar(value = 0)
+        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
+        self.checkbox.grid(row = 0, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.filter = ctk.CTkOptionMenu(self, values = ld_grid_list, font = (font, 18), variable = ctk.StringVar(value = 'TESS' if data['Filter'] == '' else data['Filter']))
+        self.filter.grid(row = 0, column = 1, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.filter._dropdown_menu.configure(font = (font, 18))
+
+        self.u1_var = ctk.StringVar(value = '' if np.isnan(data['u1']) else data['u1'])
+        self.u1 = FloatEntry(self, min_val = 0, max_val = 1, textvariable = self.u1_var, font = (font, 18), justify = 'center')
+        self.u1.grid(row = 0, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.u2_var = ctk.StringVar(value = '' if np.isnan(data['u2']) else data['u2'])
+        self.u2 = FloatEntry(self, min_val = 0, max_val = 1, textvariable = self.u2_var, font = (font, 18), justify = 'center')
+        self.u2.grid(row = 0, column = 3, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
+        self.generate = ctk.CTkButton(self, text = 'Generate', font = (font, 18, 'bold'), command = self.gen_cmd)
+        self.generate.grid(row = 0, column = 4, padx = 10, pady = (10,0), sticky = 'nsew')
+
+
+    def gen_cmd(self):
+
+        gen_prompt = LDGenPrompt(self.filter.get())
+        
+        self.wait_window(gen_prompt)
+
+        if hasattr(gen_prompt, 'u1'):
+
+            self.u1_var.set(gen_prompt.u1)
+            self.u2_var.set(gen_prompt.u2)
+
+
+class LDGenPrompt(ctk.CTkToplevel):
+    def __init__(self, filter: str):
+        super().__init__()
+
+        self.filter = filter
+        
+        self.title('Gen LD Pars')
+        self.geometry('300x300')
+        self.grid_columnconfigure(0, weight = 1)
+        self.grid_rowconfigure(list(range(7)), weight = 1)
+
+        self.tlabel = ctk.CTkLabel(self, text = 'Teff (K) [2300,7800]', font = (font, 18, 'bold'))
+        self.tlabel.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.t = FloatEntry(self, min_val = 2300, max_val = 7800, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = ''))
+        self.t.grid(row = 1, column = 0, padx = 10, sticky = 'ew')
+
+        self.logglabel = ctk.CTkLabel(self, text = 'log(g) (cgs) [3.0,6.0]', font = (font, 18, 'bold'))
+        self.logglabel.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.logg = FloatEntry(self, min_val = 3, max_val = 6, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = ''))
+        self.logg.grid(row = 3, column = 0, padx = 10, sticky = 'ew')
+
+        self.fehlabel = ctk.CTkLabel(self, text = 'Fe/H (dex) [-0.5,0.5]', font = (font, 18, 'bold'))
+        self.fehlabel.grid(row = 4, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.feh = FloatEntry(self, min_val = -0.5, max_val = 0.5, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = ''))
+        self.feh.grid(row = 5, column = 0, padx = 10, sticky = 'ew')
+
+        self.run = ctk.CTkButton(self, text = 'Generate', font = (font, 18, 'bold'), command = self.run_cmd)
+        self.run.grid(row = 6, column = 0, padx = 10, pady = 10, sticky = 'ew')
+
+
+    def run_cmd(self):
+
+        x = calc_ld(self.filter, self.t.return_float(), self.logg.return_float(), self.feh.return_float())
+        self.u1 = x[0][0]
+        self.u2 = x[1][0]
+
+        self.destroy()
+
+
+class InitLDGUI(InitGUI):
+    def __init__(self, initfile: InitFile):
+        super().__init__(initfile)
+
+        self.geometry('700x700')
+
+        self.setup_items_frame()
+
+        self.frame_title = ctk.CTkLabel(self, text = 'Limb Darkening Parameters', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'ew', columnspan = 2)
+
+        self.copy = ctk.CTkButton(self, text = 'Copy Selected', font = (font, 18, 'bold'), command = self.copy_cmd)
+        self.copy.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.delete = ctk.CTkButton(self, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
+        self.delete.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'ew')
+
+
+    def setup_items_frame(self):
+
+        self.items_frame = ctk.CTkScrollableFrame(self)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew', columnspan = 2)
+        self.items_frame.grid_columnconfigure(list(range(5)), weight = 1)
+
+        labels = ['Select','Filter','  u1  ','  u2  ','           ']
+        for i in range(5):
+            label = ctk.CTkLabel(self.items_frame, text = labels[i], font = (font, 18, 'bold'))
+            label.grid(row = 0, column = i, padx = (10,0) if i < 4 else (10 if i > 0 else 0), pady = (10,0), sticky = 'nsew')
+
+        self.lds = []
+
+        for i in range(len(self.table)):
+
+            self.add_ld(i)
+
+
+    def add_ld(self, i):
+
+        ld = LDFrame(self.items_frame, self.table[i])
+        ld.grid(row = i+1, column = 0, pady = (10,0), sticky = 'ew', columnspan = 5)
+        self.lds.append(ld)
+
+
+    def add_cmd(self):
+        
+        self.table.add_row([''] + [np.nan]*2)
+        i = len(self.lds)
+        self.add_ld(i)
+
+
+    def copy_cmd(self):
+
+        checked = [i for i, ld in enumerate(self.lds) if ld.checkval.get()]
+
+        tablecopy = self.table[checked]
+
+        self.initfile.table = vstack([self.table, tablecopy])
+        self.table = self.initfile.table
+
+        for i in range(len(self.lds),len(self.lds)+len(checked)):
+            self.add_ld(i)
+
+    
+    def delete_cmd(self):
+
+        delete_prompt = DeletePrompt()
+
+        self.wait_window(delete_prompt)
+
+        if delete_prompt.answer:
+
+            checked = [i for i, ld in enumerate(self.lds) if ld.checkval.get()]
+
+            if not checked:
+                return
+
+            self.table.remove_rows(checked)
+
+            for i in checked:
+                self.lds[i].grid_forget()
+                self.lds[i].destroy()
+
+            self.lds = [ld for i, ld in enumerate(self.lds) if i not in checked]
+
+            for i in range(len(self.lds)):
+                self.lds[i].grid_configure(row = i+1)
+                self.lds[i].data = self.table[i]
+
+
+    def save_cmd(self):
+
+        for i in range(len(self.lds)):
+
+            ld = self.lds[i]
+
+            self.table['Filter'] = update_string_col(self.table['Filter'], ld.filter.get().strip(), i)
+            self.table['u1'][i] = ld.u1.return_float()
+            self.table['u2'][i] = ld.u2.return_float()
+
+        self.initfile.table = self.table
+
+        super().save_cmd()

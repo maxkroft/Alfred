@@ -8,7 +8,7 @@ from astropy.io.ascii import InconsistentTableError
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
-from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI, InitPriorsGUI, InitStarGUI
+from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI, InitPriorsGUI, InitStarGUI, InitLDGUI
 
 
 class InitFile:
@@ -484,105 +484,113 @@ class Init_ld(InitFile):
 
         self.header_rows = ['name']
 
+        self.table = Table(names = ['Filter','u1','u2'], dtype = [str,float,float])
 
-    def create(self, empty: bool = False) -> Self:
-        """Creates an Init_ld table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-        and file.
 
-        Args:
-            empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
-                using Init_ld.add_ld_params, or manually with either astropy Table methods or in the txt file. Default is False.
+    def __call__(self):
 
-        Returns:
-            Init_ld: The whole Init_ld object after creating the table.
-        """
+        app = InitLDGUI(self)
+        app.mainloop()
 
-        self.table = Table(names = ['u1','u2','Filter'], dtype = [float,float,str])
 
-        if not empty:
+    # def create(self, empty: bool = False) -> Self:
+    #     """Creates an Init_ld table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
+    #     and file.
 
-            x = input('Creating limb darkening initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+    #     Args:
+    #         empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
+    #             using Init_ld.add_ld_params, or manually with either astropy Table methods or in the txt file. Default is False.
 
-            if x == 'stop':
-                return
+    #     Returns:
+    #         Init_ld: The whole Init_ld object after creating the table.
+    #     """
 
-            while True:
+    #     self.table = Table(names = ['Filter','u1','u2'], dtype = [str,float,float])
 
-                self.add_ld_params()
+    #     if not empty:
 
-                x = input('More filters? y/n ')
+    #         x = input('Creating limb darkening initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+
+    #         if x == 'stop':
+    #             return
+
+    #         while True:
+
+    #             self.add_ld_params()
+
+    #             x = input('More filters? y/n ')
                 
-                if x.lower() != 'y':
-                    break
+    #             if x.lower() != 'y':
+    #                 break
 
-        else:
+    #     else:
 
-            self.table.add_row([np.nan,np.nan,'None'])
+    #         self.table.add_row([np.nan,np.nan,'None'])
         
-        self.save()
+    #     self.save()
 
-        return self
+    #     return self
 
 
-    def add_ld_params(self):
-        """Adds a set of limb darkening parameters to the Init_ld table for a new filter. Prompts the user to fill it in. Easier than adding rows
-        manually. There is a prompt to automatically generate the parameters from existing grids given the stellar parameters. By default, the only
-        grids included are for the TESS filter and the Kepler filter, but more grids can be generated with alfred.generate_ld_grid if the user has
-        exoctk installed.
-        """
+    # def add_ld_params(self):
+    #     """Adds a set of limb darkening parameters to the Init_ld table for a new filter. Prompts the user to fill it in. Easier than adding rows
+    #     manually. There is a prompt to automatically generate the parameters from existing grids given the stellar parameters. By default, the only
+    #     grids included are for the TESS filter and the Kepler filter, but more grids can be generated with alfred.generate_ld_grid if the user has
+    #     exoctk installed.
+    #     """
 
-        autogen = input('Auto-generate quadratic limb darkening parameters from existing grids? y/n').lower()
+    #     autogen = input('Auto-generate quadratic limb darkening parameters from existing grids? y/n').lower()
 
-        if autogen == 'y':
+    #     if autogen == 'y':
 
-            while True:
+    #         while True:
 
-                filt = input('Filter to generate the limb darkening parameter for? Type "help" to see available filters. Type "stop" to exit.')
+    #             filt = input('Filter to generate the limb darkening parameter for? Type "help" to see available filters. Type "stop" to exit.')
 
-                if filt.lower() == 'help':
+    #             if filt.lower() == 'help':
 
-                    print(ld_grid_list)
+    #                 print(ld_grid_list)
 
-                elif filt.lower() == 'stop':
-                    return
+    #             elif filt.lower() == 'stop':
+    #                 return
 
-                elif filt not in ld_grid_list:
+    #             elif filt not in ld_grid_list:
 
-                    z = input('Filter is not recognized. If you have exoctk installed, you can make a grid for this filter using alfred.generate_ld_grid. Enter to try again. Type "stop" to exit.')
-                    if z.lower() == 'stop':
-                        return
+    #                 z = input('Filter is not recognized. If you have exoctk installed, you can make a grid for this filter using alfred.generate_ld_grid. Enter to try again. Type "stop" to exit.')
+    #                 if z.lower() == 'stop':
+    #                     return
 
-                else:
+    #             else:
                     
-                    break
+    #                 break
 
-            T = float(input('Stellar temperature in K:'))
-            logg = float(input('Stellar log g in cgs units:'))
-            feh = float(input('Stellar [Fe/H]:'))
+    #         T = float(input('Stellar temperature in K:'))
+    #         logg = float(input('Stellar log g in cgs units:'))
+    #         feh = float(input('Stellar [Fe/H]:'))
 
-            u1, u2 = calc_ld(filt, T, logg, feh)
+    #         u1, u2 = calc_ld(filt, T, logg, feh)
 
-            row = [u1, u2, filt]
+    #         row = [u1, u2, filt]
 
-            self.table.add_row(row)
+    #         self.table.add_row(row)
 
-        else:
+    #     else:
 
-            row = []
+    #         row = []
 
-            filt = input('Filter to define limb darkening parameters for (e.g. TESS, Kepler, V): ')
+    #         filt = input('Filter to define limb darkening parameters for (e.g. TESS, Kepler, V): ')
 
-            u1 = input('First quadratic limb darkening parameter for {0} (linear term): '.format(filt))
-            row.append(u1)
+    #         u1 = input('First quadratic limb darkening parameter for {0} (linear term): '.format(filt))
+    #         row.append(u1)
 
-            u2 = input('Second quadratic limb darkening parameter for {0} (non-linear term): '.format(filt))
-            row.append(u2)
+    #         u2 = input('Second quadratic limb darkening parameter for {0} (non-linear term): '.format(filt))
+    #         row.append(u2)
 
-            row.append(filt)
+    #         row.append(filt)
 
-            self.table.add_row(row)
+    #         self.table.add_row(row)
 
-        self.save()
+    #     self.save()
 
 
 class Init_planets(InitFile):
