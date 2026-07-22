@@ -2023,7 +2023,8 @@ class TTVFrame(ctk.CTkFrame):
 
         except KeyError:
 
-            return False
+            self.num.configure(text_color = '#CB2626')
+            return True
         
         except ValueError:
             return False
@@ -2106,7 +2107,8 @@ class InitTTVsGUI(InitGUI):
             self.planets[i].edit_cmd()
 
         except ValueError:
-            i = np.where(self.table.colnames == 'X')[0]
+
+            i = np.where(np.array(self.table.colnames) == 'X')[0][0]
             self.planets[i].num.configure(text_color = '#CB2626')
 
 
@@ -2127,3 +2129,14 @@ class InitTTVsGUI(InitGUI):
                 self.planets[j].grid_configure(row = j)
                 self.planets[j].idx = j
                 self.planets[j].data = self.table[self.table.colnames[j]]
+
+
+    def save_cmd(self):
+
+        for i in range(len(self.table)-1, -1, -1):
+
+            if np.all(np.isnan(list(self.table[i]))):
+
+                self.table.remove_row(i)
+
+        super().save_cmd()
