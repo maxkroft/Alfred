@@ -8,7 +8,7 @@ from astropy.io.ascii import InconsistentTableError
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
-from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI, InitPriorsGUI, InitStarGUI, InitLDGUI
+from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI, InitPriorsGUI, InitStarGUI, InitLDGUI, InitTTVsGUI
 
 
 class InitFile:
@@ -638,69 +638,104 @@ class Init_ttvs(InitFile):
 
         super().__init__(direc, name)
 
-        self.header_rows = ['name']
+        self.header_rows = ['name','unit']
+
+        self.table = Table({'X': [np.nan]}, units = ['BJD-2450000'], dtype = [float])
 
 
-    def create(self) -> Self:
-        """Creates an Init_ttvs table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
-        directory and file.
+    def __call__(self):
+
+        app = InitTTVsGUI(self)
+        app.mainloop()
+
+
+    def from_file(self) -> Self:
+        """Loads an an Init_ttvs table from a previously created file. This is stored in .table. If the load fails, trys again using the deprecated
+        formatting and converts it to the current format.
 
         Returns:
-            Init_ttvs: The whole Init_ttvs object after creating the table.
+            Init_star: The whole Init_ttvs object is returned by this function.
         """
 
-        self.table = Table()
+        try:
+            self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
+                                    header_rows = self.header_rows, converters = {'*': [float, bool, str]})
 
-        x = input('Creating ttv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+        except InconsistentTableError:
 
-        if x == 'stop':
-            return
+            table_old = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
+                                    header_rows = ['name'], converters = {'*': [float, bool, str]})
 
-        while True:
+            for col in table_old.colnames:
+                table_old[col].unit = 'BJD-2450000'
 
-            self.add_transit_times()
+            self.table = table_old
 
-            x = input('More TTV planets? y/n ')
-            
-            if x.lower() != 'y':
-                break
-        
-        self.save()
-        
+            self.save()
+
         return self
 
 
-    def add_transit_times(self):
-        """Adds a new column to the Init_ttvs table for a new planet's TTVs. Prompts the user to fill it in. Recommended to only use this function
-        rather than adding columns manually, because any existing columns must all be adjusted to the same length.
-        """
+    # def create(self) -> Self:
+    #     """Creates an Init_ttvs table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
+    #     directory and file.
 
-        col = []
+    #     Returns:
+    #         Init_ttvs: The whole Init_ttvs object after creating the table.
+    #     """
 
-        num = input('Planet number: ')
+    #     self.table = Table()
 
-        n = int(input('Number of transit times to input for planet {0}: '.format(num)))
+    #     x = input('Creating ttv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
 
-        for i in range(1, n+1):
+    #     if x == 'stop':
+    #         return
 
-            tt = input('Transit time {0} for planet {1} (BJD-2450000): '.format(i, num))
-            col.append(tt)
+    #     while True:
 
-        if len(self.table.columns) > 0:
+    #         self.add_transit_times()
 
-            if n > len(self.table):
+    #         x = input('More TTV planets? y/n ')
+            
+    #         if x.lower() != 'y':
+    #             break
+        
+    #     self.save()
+        
+    #     return self
+
+
+    # def add_transit_times(self):
+    #     """Adds a new column to the Init_ttvs table for a new planet's TTVs. Prompts the user to fill it in. Recommended to only use this function
+    #     rather than adding columns manually, because any existing columns must all be adjusted to the same length.
+    #     """
+
+    #     col = []
+
+    #     num = input('Planet number: ')
+
+    #     n = int(input('Number of transit times to input for planet {0}: '.format(num)))
+
+    #     for i in range(1, n+1):
+
+    #         tt = input('Transit time {0} for planet {1} (BJD-2450000): '.format(i, num))
+    #         col.append(tt)
+
+    #     if len(self.table.columns) > 0:
+
+    #         if n > len(self.table):
                 
-                for i in range(n-len(self.table)):
-                    self.table.add_row([np.nan]*len(self.table.columns))
+    #             for i in range(n-len(self.table)):
+    #                 self.table.add_row([np.nan]*len(self.table.columns))
 
-            elif n < len(self.table):
+    #         elif n < len(self.table):
 
-                col += [np.nan]*(len(self.table)-n)
+    #             col += [np.nan]*(len(self.table)-n)
 
-        col = Column(col, dtype = float)
-        self.table.add_column(col, name = num)
+    #     col = Column(col, dtype = float)
+    #     self.table.add_column(col, name = num)
 
-        self.save()
+    #     self.save()
 
 
 class Init_priors(InitFile):

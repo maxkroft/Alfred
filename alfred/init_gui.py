@@ -432,7 +432,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.close_cmd = close_cmd
 
         self.title('Planet {0}'.format(idx))
-        self.geometry('500x600')
+        self.geometry('600x600')
         self.grid_columnconfigure((0,1), weight = 1)
 
         self.p_entry = FloatEntryFrame(self, "P (days)", 1, 0, min_val = 0)
@@ -539,7 +539,7 @@ class PlanetFrame(ctk.CTkFrame):
 
         if not hasattr(self, 'edit_planet'):
 
-            self.edit_planet = PlanetGUI(self.data, self.idx+1, self.edit_close)
+            self.edit_planet = PlanetGUI(self.data, self.idx+1, self.save_close)
             self.edit_planet.protocol("WM_DELETE_WINDOW", self.edit_close)
 
             self.wait_window(self.edit_planet)
@@ -554,10 +554,15 @@ class PlanetFrame(ctk.CTkFrame):
             self.edit_planet.lift()
             self.edit_planet.focus()
 
+    
+    def save_close(self):
+
+        self.data = self.edit_planet.data
+        self.edit_planet.destroy()
+        delattr(self, 'edit_planet')
 
     def edit_close(self):
 
-        self.data = self.edit_planet.data
         self.edit_planet.destroy()
         delattr(self, 'edit_planet')
 
@@ -631,7 +636,7 @@ class InitPlanetsGUI(InitGUI):
             self.planets.pop(i)
 
             for j in range(len(self.planets)):
-                self.planets[j].grid(row = j, column = 0, pady = (10, 0), sticky = 'ew')
+                self.planets[j].grid_configure(row = j)
                 self.planets[j].idx = j
                 self.planets[j].data = self.table[j]
                 self.planets[j].update_label()
@@ -1858,3 +1863,267 @@ class InitLDGUI(InitGUI):
         self.initfile.table = self.table
 
         super().save_cmd()
+
+
+
+
+###################
+#####Init TTVs#####
+###################
+
+class TTVGUI(ctk.CTkToplevel):
+    def __init__(self, data: Column, close_cmd):
+        super().__init__()
+
+        self.data = data
+        self.close_cmd = close_cmd
+
+        self.title('Planet {0} TTVs'.format(data.name))
+        self.geometry('500x600')
+        self.grid_columnconfigure((0,1), weight = 1)
+        self.grid_rowconfigure(0, weight = 1)
+
+        self.setup_frame()
+
+        self.add = ctk.CTkButton(self, text = 'Add', command = self.add_cmd, font = (font, 18, 'bold'))
+        self.add.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.delete = ctk.CTkButton(self, text = 'Delete Selected', command = self.delete_cmd, font = (font, 18, 'bold'))
+        self.delete.grid(row = 1, column = 1, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
+        self.save.grid(row = 2, column = 0, padx = 10, pady = 10, sticky = "ew", columnspan = 2)
+
+
+    def setup_frame(self):
+
+        self.frame = ctk.CTkScrollableFrame(self)
+        self.frame.grid(row = 0, column = 0, sticky = 'nsew', columnspan = 2)
+        self.frame.grid_columnconfigure(1, weight = 1)
+
+        labels = ['Select','Transit Time\n(BJD-2450000)']
+        for i in range(2):
+
+            label = ctk.CTkLabel(self.frame, text = labels[i], font = (font, 18, 'bold'))
+            label.grid(row = 0, column = i, padx = (10,0) if i < 1 else 10, sticky = 'ew')
+
+        self.checkvals = []
+        self.checks = []
+        self.tts = []
+        for i in range(len(self.data)):
+
+            if np.isnan(self.data[i]):
+                break
+
+            self.add_tt(i)
+
+
+    def add_tt(self, i):
+
+        checkval = ctk.IntVar(value = 0)
+        self.checkvals.append(checkval)
+
+        check = ctk.CTkCheckBox(self.frame, variable = checkval, text = '')
+        check.grid(row = i+1, column = 0, padx = (10,0), pady = (10,0), sticky = 'ew')
+        self.checks.append(check)
+
+        tt = FloatEntry(self.frame, textvariable = ctk.StringVar(value = '' if np.isnan(self.data[i]) else self.data[i]), font = (font, 18), justify = 'center')
+        tt.grid(row = i+1, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.tts.append(tt)
+
+
+
+    def add_cmd(self):
+
+        if len(self.tts) >= len(self.data):
+            
+            self.data.info.parent_table.add_row([np.nan]*len(self.data.info.parent_table.colnames))
+            self.data = self.data.info.parent_table[self.data.name]
+
+        i = len(self.tts)
+        self.add_tt(i)
+
+
+    def delete_cmd(self):
+
+        delete_prompt = DeletePrompt()
+
+        self.wait_window(delete_prompt)
+
+        if delete_prompt.answer:
+
+            checked = [i for i, c in enumerate(self.checkvals) if c.get()]
+
+            if not checked:
+                return
+
+            vals = self.data.data
+            vals = np.delete(vals, checked)
+            vals = np.append(vals, [np.nan]*(len(checked)))
+            self.data.info.parent_table[self.data.name] = vals
+            self.data = self.data.info.parent_table[self.data.name]
+
+            for i in checked:
+                self.checks[i].grid_forget()
+                self.checks[i].destroy()
+                self.tts[i].grid_forget()
+                self.tts[i].destroy()
+
+            self.checkvals = [c for i, c in enumerate(self.checkvals) if i not in checked]
+            self.checks = [c for i, c in enumerate(self.checks) if i not in checked]
+            self.tts = [tt for i, tt in enumerate(self.tts) if i not in checked]
+
+            for i in range(len(self.tts)):
+                self.checks[i].grid_configure(row = i+1)
+                self.tts[i].grid_configure(row = i+1)
+
+
+
+    def save_cmd(self):
+
+        for i in range(len(self.tts)):
+            self.data[i] = self.tts[i].return_float()
+
+        self.close_cmd()
+
+
+
+class TTVFrame(ctk.CTkFrame):
+    def __init__(self, master, topmaster, data: Column, idx: int):
+        super().__init__(master)
+
+        self.grid_columnconfigure(list(range(1,3)), weight = 1)
+
+        self.data = data
+        self.topmaster = topmaster
+        self.idx = idx
+
+        self.num = ctk.CTkEntry(self, textvariable = ctk.StringVar(value = data.name), font = (font, 18, 'bold'), justify = 'center')
+        self.num.grid(row = 0, column = 0, padx = 10, sticky = 'ew')
+        validate_int_cmd = self.num.register(self.validate_int_input)
+        self.num.configure(validate = 'key', validatecommand = (validate_int_cmd, '%P'))
+
+        self.edit = ctk.CTkButton(self, text = 'Edit', command = self.edit_cmd, font = (font, 18, 'bold'))
+        self.edit.grid(row = 0, column = 1, padx = 10, sticky = 'ew')
+
+        self.delete = ctk.CTkButton(self, text = 'Delete', command = self.delete_cmd, font = (font, 18, 'bold'))
+        self.delete.grid(row = 0, column = 2, padx = 10, sticky = 'ew')
+
+
+    def validate_int_input(self, proposed_text):
+    
+        if proposed_text == "":
+            return True
+        
+        try:
+            val = int(proposed_text)
+            self.data.name = str(val)
+            self.num.configure(text_color = '#FFFFFF')
+            return True
+
+        except KeyError:
+
+            return False
+        
+        except ValueError:
+            return False
+
+
+    def edit_cmd(self):
+
+        if not hasattr(self, 'edit_ttvs'):
+
+            self.edit_ttvs = TTVGUI(self.data, self.save_close)
+            self.edit_ttvs.protocol("WM_DELETE_WINDOW", self.edit_close)
+
+            self.wait_window(self.edit_ttvs)
+
+        else:
+
+            self.edit_ttvs.withdraw()
+            self.edit_ttvs.update()
+            self.edit_ttvs.deiconify()
+            self.edit_ttvs.lift()
+            self.edit_ttvs.focus()
+
+
+    def save_close(self):
+
+        self.data = self.edit_ttvs.data
+        self.edit_ttvs.destroy()
+        delattr(self, 'edit_ttvs')
+
+    
+    def edit_close(self):
+
+        self.edit_ttvs.destroy()
+        delattr(self, 'edit_ttvs')
+
+
+    def delete_cmd(self):
+
+        self.topmaster.delete_cmd(self.idx)
+
+
+
+class InitTTVsGUI(InitGUI):
+    def __init__(self, initfile: InitFile):
+        super().__init__(initfile)
+
+        self.geometry('600x600')
+
+        self.setup_items_frame()
+
+        self.frame_title = ctk.CTkLabel(self, text = 'Planets with TTVs', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)
+
+    def setup_items_frame(self):
+
+        self.items_frame = ctk.CTkScrollableFrame(self)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid_columnconfigure(0, weight = 1)
+
+        self.planets = []
+
+        for i in range(len(self.table.colnames)):
+
+            self.add_planet(i)
+
+    def add_planet(self, i):
+
+        planet = TTVFrame(self.items_frame, self, self.table[self.table.colnames[i]], i)
+        planet.grid(row = i, column = 0, pady = (10,0), sticky = 'ew')
+        self.planets.append(planet)
+
+
+    def add_cmd(self):
+
+        try:
+            col = Column(data = [np.nan]*len(self.table), name = 'X', unit = 'BJD-2450000', dtype = float)
+            self.table.add_column(col)
+            i = len(self.planets)
+            self.add_planet(i)
+            self.planets[i].edit_cmd()
+
+        except ValueError:
+            i = np.where(self.table.colnames == 'X')[0]
+            self.planets[i].num.configure(text_color = '#CB2626')
+
+
+
+    def delete_cmd(self, i):
+
+        delete_prompt = DeletePrompt()
+
+        self.wait_window(delete_prompt)
+
+        if delete_prompt.answer:
+
+            self.table.remove_column(self.table.colnames[i])
+            self.planets[i].grid_forget()
+            self.planets.pop(i)
+
+            for j in range(len(self.planets)):
+                self.planets[j].grid_configure(row = j)
+                self.planets[j].idx = j
+                self.planets[j].data = self.table[self.table.colnames[j]]
