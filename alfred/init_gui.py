@@ -245,10 +245,15 @@ class FloatEntry(ctk.CTkEntry):
             if self.min_val is not None and val < self.min_val:
                 self.delete(0, "end")
                 self.insert(0, str(self.min_val))
+                self.configure(text_color = "#CB2626")
 
             elif self.max_val is not None and val > self.max_val:
                 self.delete(0, "end")
                 self.insert(0, str(self.max_val))
+                self.configure(text_color = "#CB2626")
+
+            else:
+                self.configure(text_color = '#FFFFFF')
 
         except ValueError:
             self.delete(0, "end")
@@ -1241,10 +1246,12 @@ class InitPriorsGUI(InitGUI):
 
 
 class StarFrame(ctk.CTkFrame):
-    def __init__(self, master, data: Row, **kwargs):
+    def __init__(self, master, data: Row, value_min=None, value_max=None, **kwargs):
         super().__init__(master, **kwargs)
 
         self.data = data
+        self.value_min = value_min
+        self.value_max = value_max
 
         self.grid_columnconfigure(0, weight = 1)
         self.grid_rowconfigure(list(range(6)), weight = 1)
@@ -1259,7 +1266,7 @@ class StarFrame(ctk.CTkFrame):
         valuelabel.grid(row = 2, column = 0, pady = (10,0), sticky = 'nsew')
 
         self.value_var = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value'])
-        self.value = FloatEntry(self, textvariable = self.value_var, font = (font, 18), justify = 'center')
+        self.value = FloatEntry(self, min_val = self.value_min, max_val = self.value_max, textvariable = self.value_var, font = (font, 18), justify = 'center')
         self.value.grid(row = 3, column = 0, sticky = 'nsew')
 
         errorlabel = ctk.CTkLabel(self, text = 'Error', font = (font, 18, 'bold'))
@@ -1336,16 +1343,24 @@ class StarQueryPrompt(ctk.CTkToplevel):
             tic = vizier.query_object(object_name = cid, catalog = 'IV/39/tic82', radius = 1*u.arcmin)[0][0]
 
             self.initgui.r.value_var.set(tic['Rad'])
+            self.initgui.r.value.configure(text_color = '#FFFFFF')
             self.initgui.r.error_var.set(tic['s_Rad'])
+            self.initgui.r.error.configure(text_color = '#FFFFFF')
 
             self.initgui.m.value_var.set(tic['Mass'])
+            self.initgui.m.value.configure(text_color = '#FFFFFF')
             self.initgui.m.error_var.set(tic['s_Mass'])
+            self.initgui.m.error.configure(text_color = '#FFFFFF')
 
             self.initgui.t.value_var.set(tic['Teff'])
+            self.initgui.t.value.configure(text_color = '#FFFFFF')
             self.initgui.t.error_var.set(tic['s_Teff'])
+            self.initgui.t.error.configure(text_color = '#FFFFFF')
 
             self.initgui.logg.value_var.set(tic['logg'])
+            self.initgui.logg.value.configure(text_color = '#FFFFFF')
             self.initgui.logg.error_var.set(tic['s_logg'])
+            self.initgui.logg.error.configure(text_color = '#FFFFFF')
 
             ticconvert = {'TESS': 'Tmag', 'B': 'Bmag', 'V': 'Vmag'}
 
@@ -1359,6 +1374,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                     phot.value_var.set(tic[ticconvert[band]])
                     phot.error_var.set(tic['e_'+ticconvert[band]])
+                    phot.error.configure(text_color = '#FFFFFF')
 
 
         except ConnectionError or TimeoutError:
@@ -1376,9 +1392,12 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
             self.initgui.feh.value_var.set(gaia['[Fe/H]'])
             self.initgui.feh.error_var.set((gaia['B_[Fe/H]']-gaia['b_[Fe/H]'])/2)
+            self.initgui.feh.error.configure(text_color = '#FFFFFF')
 
             self.initgui.plx.value_var.set(gaia['Plx'])
+            self.initgui.plx.value.configure(text_color = '#FFFFFF')
             self.initgui.plx.error_var.set(gaia['e_Plx'])
+            self.initgui.plx.error.configure(text_color = '#FFFFFF')
 
             gaiaconvert = {'Gaia G': 'Gmag', 'Gaia BP': 'BPmag', 'Gaia RP': 'RPmag'}
 
@@ -1392,6 +1411,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                     phot.value_var.set(gaia[gaiaconvert[band]])
                     phot.error_var.set(gaia['e_'+gaiaconvert[band]])
+                    phot.error.configure(text_color = '#FFFFFF')
 
         except:
 
@@ -1415,6 +1435,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                         phot.value_var.set(twomass[twomassconvert[band]])
                         phot.error_var.set(twomass['e_'+twomassconvert[band]])
+                        phot.error.configure(text_color = '#FFFFFF')
 
             except:
 
@@ -1438,6 +1459,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                         phot.value_var.set(wise[wiseconvert[band]])
                         phot.error_var.set(wise['e_'+wiseconvert[band]])
+                        phot.error.configure(text_color = '#FFFFFF')
 
             except:
 
@@ -1461,6 +1483,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                         phot.value_var.set(sdss[sdssconvert[band]])
                         phot.error_var.set(sdss['e_'+sdssconvert[band]])
+                        phot.error.configure(text_color = '#FFFFFF')
 
             except:
 
@@ -1501,22 +1524,22 @@ class InitStarGUI(InitGUI):
         self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew', columnspan = 2)
         self.items_frame.grid_columnconfigure(list(range(3)), weight = 1)
 
-        self.r = StarFrame(self.items_frame, self.table[0])
+        self.r = StarFrame(self.items_frame, self.table[0], value_min = 0)
         self.r.grid(row = 0, column = 0, padx = 10, pady = 10, sticky = 'nsew')
 
-        self.m = StarFrame(self.items_frame, self.table[1])
+        self.m = StarFrame(self.items_frame, self.table[1], value_min = 0)
         self.m.grid(row = 0, column = 1, padx = 10, pady = 10, sticky = 'nsew')
 
-        self.t = StarFrame(self.items_frame, self.table[2])
+        self.t = StarFrame(self.items_frame, self.table[2], value_min = 0)
         self.t.grid(row = 0, column = 2, padx = 10, pady = 10, sticky = 'nsew')
 
-        self.logg = StarFrame(self.items_frame, self.table[3])
+        self.logg = StarFrame(self.items_frame, self.table[3], value_min = 0)
         self.logg.grid(row = 1, column = 0, padx = 10, pady = 10, sticky = 'nsew')
 
         self.feh = StarFrame(self.items_frame, self.table[4])
         self.feh.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = 'nsew')
 
-        self.plx = StarFrame(self.items_frame, self.table[5])
+        self.plx = StarFrame(self.items_frame, self.table[5], value_min = 0)
         self.plx.grid(row = 1, column = 2, padx = 10, pady = 10, sticky = 'nsew')
 
         photlabel = ctk.CTkLabel(self.items_frame, text = 'Photometry (mags)', font = (font, 18, 'bold'))
@@ -1666,6 +1689,9 @@ class LDFrame(ctk.CTkScrollableFrame):
 
             self.u1_var.set(gen_prompt.u1)
             self.u2_var.set(gen_prompt.u2)
+
+            self.u1.configure(text_color = '#FFFFFF')
+            self.u2.configure(text_color = '#FFFFFF')
 
     def other_filter(self, choice):
 
