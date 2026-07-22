@@ -783,12 +783,12 @@ class InitLcsGUI(InitGUI):
             self.table['Nickname'] = update_string_col(self.table['Nickname'], lc.nickname.get().strip(), i)
             self.table['Time Col'] = update_string_col(self.table['Time Col'], lc.time.get().strip(), i)
             self.table['Flux Col'] = update_string_col(self.table['Flux Col'], lc.flux.get().strip(), i)
-            self.table['Err Col'][i] = lc.fluxerr.get().strip()
-            self.table['Quality Col'][i] = lc.quality.get().strip()
+            self.table['Err Col'] = update_string_col(self.table['Err Col'], lc.fluxerr.get().strip(), i)
+            self.table['Quality Col'] = update_string_col(self.table['Quality Col'], lc.quality.get().strip(), i)
             self.table['Time Offset'][i] = lc.offset.return_float()
             self.table['Err Scale'][i] = lc.errscale.return_float()
             self.table['Exp Time'][i] = lc.exptime.return_float()
-            self.table['Filter'][i] = lc.filter.get().strip()
+            self.table['Filter'] = update_string_col(self.table['Filter'], lc.filter.get().strip(), i)
             self.table['Detrend'][i] = lc.detrend.get() == 1
 
         self.initfile.table = self.table
@@ -1612,6 +1612,8 @@ class InitStarGUI(InitGUI):
         self.wait_window(query_prompt)
 
 
+
+
 #################
 #####Init LD#####
 #################
@@ -1629,9 +1631,15 @@ class LDFrame(ctk.CTkScrollableFrame):
         self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
         self.checkbox.grid(row = 0, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
-        self.filter = ctk.CTkOptionMenu(self, values = ld_grid_list, font = (font, 18), variable = ctk.StringVar(value = 'TESS' if data['Filter'] == '' else data['Filter']))
-        self.filter.grid(row = 0, column = 1, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.filter_frame = ctk.CTkFrame(self)
+        self.filter_frame.grid(row = 0, column = 1, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.filter_frame.grid_columnconfigure(0, weight = 1)
+
+        self.filter = ctk.CTkOptionMenu(self.filter_frame, values = ld_grid_list+['Other'], font = (font, 18), variable = ctk.StringVar(value = 'TESS' if data['Filter'] == '' else data['Filter']), state = 'readonly', command = self.other_filter)
+        self.filter.grid(row = 0, column = 0, sticky = 'nsew')
         self.filter._dropdown_menu.configure(font = (font, 18))
+
+        self.otherfilter = ctk.CTkEntry(self.filter_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = ''))
 
         self.u1_var = ctk.StringVar(value = '' if np.isnan(data['u1']) else data['u1'])
         self.u1 = FloatEntry(self, min_val = 0, max_val = 1, textvariable = self.u1_var, font = (font, 18), justify = 'center')
@@ -1647,6 +1655,9 @@ class LDFrame(ctk.CTkScrollableFrame):
 
     def gen_cmd(self):
 
+        if self.filter.get() == 'Other':
+            return
+
         gen_prompt = LDGenPrompt(self.filter.get())
         
         self.wait_window(gen_prompt)
@@ -1655,6 +1666,22 @@ class LDFrame(ctk.CTkScrollableFrame):
 
             self.u1_var.set(gen_prompt.u1)
             self.u2_var.set(gen_prompt.u2)
+
+    def other_filter(self, choice):
+
+        if choice == 'Other' and not self.otherfilter.grid_info():
+
+            self.otherfilter.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+
+            self.generate.configure(fg_color = "#CE2424", hover_color = '#CE2424')
+
+        elif self.otherfilter.grid_info():
+
+            self.otherfilter.grid_forget()
+
+            self.generate.configure(fg_color = '#1F6AA5', hover_color = '#144870')
+
+
 
 
 class LDGenPrompt(ctk.CTkToplevel):
@@ -1794,7 +1821,11 @@ class InitLDGUI(InitGUI):
 
             ld = self.lds[i]
 
-            self.table['Filter'] = update_string_col(self.table['Filter'], ld.filter.get().strip(), i)
+            filter = ld.filter.get().strip()
+            if filter == 'Other':
+                filter = ld.otherfilter.get().strip()
+
+            self.table['Filter'] = update_string_col(self.table['Filter'], filter, i)
             self.table['u1'][i] = ld.u1.return_float()
             self.table['u2'][i] = ld.u2.return_float()
 
