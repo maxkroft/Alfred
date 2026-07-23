@@ -739,7 +739,7 @@ class InitLcsGUI(InitGUI):
 
     def add_cmd(self):
         
-        self.table.add_row(['']*6 + [np.nan]*3 + [''] + [False])
+        self.table.add_row(['']*6 + [np.nan,1,np.nan] + [''] + [False])
         i = len(self.lcs)
         self.add_lc(i)
 
@@ -747,6 +747,9 @@ class InitLcsGUI(InitGUI):
     def copy_cmd(self):
 
         checked = [i for i, lc in enumerate(self.lcs) if lc.checkval.get()]
+
+        for i in checked:
+            self.update_table(i)
 
         tablecopy = self.table[checked]
 
@@ -787,23 +790,28 @@ class InitLcsGUI(InitGUI):
 
         for i in range(len(self.lcs)):
 
-            lc = self.lcs[i]
-
-            self.table['File'] = update_string_col(self.table['File'], lc.filename.get().strip(), i)
-            self.table['Nickname'] = update_string_col(self.table['Nickname'], lc.nickname.get().strip(), i)
-            self.table['Time Col'] = update_string_col(self.table['Time Col'], lc.time.get().strip(), i)
-            self.table['Flux Col'] = update_string_col(self.table['Flux Col'], lc.flux.get().strip(), i)
-            self.table['Err Col'] = update_string_col(self.table['Err Col'], lc.fluxerr.get().strip(), i)
-            self.table['Quality Col'] = update_string_col(self.table['Quality Col'], lc.quality.get().strip(), i)
-            self.table['Time Offset'][i] = lc.offset.return_float()
-            self.table['Err Scale'][i] = lc.errscale.return_float()
-            self.table['Exp Time'][i] = lc.exptime.return_float()
-            self.table['Filter'] = update_string_col(self.table['Filter'], lc.filter.get().strip(), i)
-            self.table['Detrend'][i] = lc.detrend.get() == 1
+            self.update_table(i)
 
         self.initfile.table = self.table
 
         super().save_cmd()
+
+
+    def update_table(self, i):
+
+        lc = self.lcs[i]
+
+        self.table['File'] = update_string_col(self.table['File'], lc.filename.get().strip(), i)
+        self.table['Nickname'] = update_string_col(self.table['Nickname'], lc.nickname.get().strip(), i)
+        self.table['Time Col'] = update_string_col(self.table['Time Col'], lc.time.get().strip(), i)
+        self.table['Flux Col'] = update_string_col(self.table['Flux Col'], lc.flux.get().strip(), i)
+        self.table['Err Col'] = update_string_col(self.table['Err Col'], lc.fluxerr.get().strip(), i)
+        self.table['Quality Col'] = update_string_col(self.table['Quality Col'], lc.quality.get().strip(), i)
+        self.table['Time Offset'][i] = lc.offset.return_float()
+        self.table['Err Scale'][i] = lc.errscale.return_float()
+        self.table['Exp Time'][i] = lc.exptime.return_float()
+        self.table['Filter'] = update_string_col(self.table['Filter'], lc.filter.get().strip(), i)
+        self.table['Detrend'][i] = lc.detrend.get() == 1
 
 
 
@@ -895,7 +903,7 @@ class InitRVGUI(InitGUI):
 
     def add_cmd(self):
         
-        self.table.add_row(['']*5 + [np.nan]*2 + [''])
+        self.table.add_row(['']*5 + [np.nan,1] + [''])
         i = len(self.rvs)
         self.add_rv(i)
 
@@ -903,6 +911,9 @@ class InitRVGUI(InitGUI):
     def copy_cmd(self):
 
         checked = [i for i, rv in enumerate(self.rvs) if rv.checkval.get()]
+
+        for i in checked:
+            self.update_table(i)
 
         tablecopy = self.table[checked]
 
@@ -944,20 +955,25 @@ class InitRVGUI(InitGUI):
 
         for i in range(len(self.rvs)):
 
-            rv = self.rvs[i]
-
-            self.table['File'] = update_string_col(self.table['File'], rv.filename.get().strip(), i)
-            self.table['Nickname'] = update_string_col(self.table['Nickname'], rv.nickname.get().strip(), i)
-            self.table['Time Col'] = update_string_col(self.table['Time Col'], rv.time.get().strip(), i)
-            self.table['RV Col'] = update_string_col(self.table['RV Col'], rv.rv.get().strip(), i)
-            self.table['Err Col'] = update_string_col(self.table['Err Col'], rv.rverr.get().strip(), i)
-            self.table['Time Offset'][i] = rv.offset.return_float()
-            self.table['Err Scale'][i] = rv.errscale.return_float()
-            self.table['m/s or km/s'][i] = rv.units.get()
+            self.update_table(i)
 
         self.initfile.table = self.table
 
         super().save_cmd()
+
+
+    def update_table(self, i):
+
+        rv = self.rvs[i]
+
+        self.table['File'] = update_string_col(self.table['File'], rv.filename.get().strip(), i)
+        self.table['Nickname'] = update_string_col(self.table['Nickname'], rv.nickname.get().strip(), i)
+        self.table['Time Col'] = update_string_col(self.table['Time Col'], rv.time.get().strip(), i)
+        self.table['RV Col'] = update_string_col(self.table['RV Col'], rv.rv.get().strip(), i)
+        self.table['Err Col'] = update_string_col(self.table['Err Col'], rv.rverr.get().strip(), i)
+        self.table['Time Offset'][i] = rv.offset.return_float()
+        self.table['Err Scale'][i] = rv.errscale.return_float()
+        self.table['m/s or km/s'] = update_string_col(self.table['m/s or km/s'], rv.units.get().strip(), i)
 
 
 
@@ -1191,6 +1207,9 @@ class InitPriorsGUI(InitGUI):
 
         checked = [i for i, prior in enumerate(self.priors) if prior.checkval.get()]
 
+        for i in checked:
+            self.update_table(i)
+
         tablecopy = self.table[checked]
 
         self.initfile.table = vstack([self.table, tablecopy])
@@ -1228,20 +1247,26 @@ class InitPriorsGUI(InitGUI):
 
     def save_cmd(self):
 
-        prior_convert = {'Uniform': 'U', 'Gaussian': 'G', 'Fixed': 'F', "Jeffrey's": 'J', "Mod. Jeffrey's": 'MJ'}
-
         for i in range(len(self.priors)):
 
-            prior = self.priors[i]
-
-            self.table['Variable'] = update_string_col(self.table['Variable'], prior.variable_anchor.cget('text').strip() + ' ' + prior.varnumber.get().strip() + (' ' + prior.tnumber.get().strip() if prior.tnumber.get().strip() != '' else ''), i)
-            self.table['Prior Type'] = update_string_col(self.table['Prior Type'], prior_convert[prior.priortype.get().strip()], i)
-            self.table['Param 1'][i] = prior.par1.return_float()
-            self.table['Param 2'][i] = prior.par2.return_float()
+            self.update_table(i)
 
         self.initfile.table = self.table
 
         super().save_cmd()
+
+
+
+    def update_table(self, i):
+
+        prior_convert = {'Uniform': 'U', 'Gaussian': 'G', 'Fixed': 'F', "Jeffrey's": 'J', "Mod. Jeffrey's": 'MJ'}
+
+        prior = self.priors[i]
+
+        self.table['Variable'] = update_string_col(self.table['Variable'], prior.variable_anchor.cget('text').strip() + ' ' + prior.varnumber.get().strip() + (' ' + prior.tnumber.get().strip() if prior.tnumber.get().strip() != '' else ''), i)
+        self.table['Prior Type'] = update_string_col(self.table['Prior Type'], prior_convert[prior.priortype.get().strip()], i)
+        self.table['Param 1'][i] = prior.par1.return_float()
+        self.table['Param 2'][i] = prior.par2.return_float()
 
 
 
@@ -1667,7 +1692,7 @@ class InitStarGUI(InitGUI):
 #####Init LD#####
 #################
 
-class LDFrame(ctk.CTkScrollableFrame):
+class LDFrame(ctk.CTkFrame):
     def __init__(self, master, data: Row, **kwargs):
         super().__init__(master, **kwargs)
 
@@ -1684,7 +1709,7 @@ class LDFrame(ctk.CTkScrollableFrame):
         self.filter_frame.grid(row = 0, column = 1, padx = (10,0), pady = (10,0), sticky = 'nsew')
         self.filter_frame.grid_columnconfigure(0, weight = 1)
 
-        self.filter = ctk.CTkOptionMenu(self.filter_frame, values = ld_grid_list+['Other'], font = (font, 18), variable = ctk.StringVar(value = 'TESS' if data['Filter'] == '' else data['Filter']), state = 'readonly', command = self.other_filter)
+        self.filter = ctk.CTkOptionMenu(self.filter_frame, values = ld_grid_list+['Other'], font = (font, 18), variable = ctk.StringVar(value = 'TESS' if data['Filter'] == '' else ('Other' if data['Filter'] not in ld_grid_list else data['Filter'])), state = 'readonly', command = self.other_filter)
         self.filter.grid(row = 0, column = 0, sticky = 'nsew')
         self.filter._dropdown_menu.configure(font = (font, 18))
 
@@ -1700,6 +1725,10 @@ class LDFrame(ctk.CTkScrollableFrame):
 
         self.generate = ctk.CTkButton(self, text = 'Generate', font = (font, 18, 'bold'), command = self.gen_cmd)
         self.generate.grid(row = 0, column = 4, padx = 10, pady = (10,0), sticky = 'nsew')
+
+        if self.filter.get() == 'Other':
+            self.otherfilter.set(data['Filter'])
+            self.other_filter('Other')
 
 
     def gen_cmd(self):
@@ -1832,6 +1861,9 @@ class InitLDGUI(InitGUI):
 
         checked = [i for i, ld in enumerate(self.lds) if ld.checkval.get()]
 
+        for i in checked:
+            self.update_table(i)
+
         tablecopy = self.table[checked]
 
         self.initfile.table = vstack([self.table, tablecopy])
@@ -1871,19 +1903,24 @@ class InitLDGUI(InitGUI):
 
         for i in range(len(self.lds)):
 
-            ld = self.lds[i]
-
-            filter = ld.filter.get().strip()
-            if filter == 'Other':
-                filter = ld.otherfilter.get().strip()
-
-            self.table['Filter'] = update_string_col(self.table['Filter'], filter, i)
-            self.table['u1'][i] = ld.u1.return_float()
-            self.table['u2'][i] = ld.u2.return_float()
+            self.update_table(i)
 
         self.initfile.table = self.table
 
         super().save_cmd()
+
+
+    def update_table(self, i):
+
+        ld = self.lds[i]
+
+        filter = ld.filter.get().strip()
+        if filter == 'Other':
+            filter = ld.otherfilter.get().strip()
+
+        self.table['Filter'] = update_string_col(self.table['Filter'], filter, i)
+        self.table['u1'][i] = ld.u1.return_float()
+        self.table['u2'][i] = ld.u2.return_float()
 
 
 
