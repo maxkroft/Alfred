@@ -25,7 +25,7 @@ import copy
 import shutil
 
 from alfred._rv_func import _rvModel
-from alfred.init_class import *
+from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs
 from alfred.ld_grids import *
 from alfred.priors import *
 from alfred import is_notebook
@@ -121,58 +121,55 @@ class ExoSystem:
 
         #stellar params
 
-        self.rs = tab_star['Radius'][0]
-        self.rserr = tab_star['Radius'][1]
+        self.rs = tab_star['Value'][0]
+        self.rserr = tab_star['Error'][0]
         
-        self.ms = tab_star['Mass'][0]
-        self.mserr = tab_star['Mass'][1]
+        self.ms = tab_star['Value'][1]
+        self.mserr = tab_star['Error'][1]
 
-        self.Ts = tab_star['Teff'][0]
-        self.Tserr = tab_star['Teff'][1]
+        self.Ts = tab_star['Value'][2]
+        self.Tserr = tab_star['Error'][2]
 
-        self.logg = tab_star['log(g)'][0]
-        self.loggerr = tab_star['log(g)'][1]
+        self.logg = tab_star['Value'][3]
+        self.loggerr = tab_star['Error'][3]
 
-        self.feh = tab_star['Fe/H'][0]
-        self.feherr = tab_star['Fe/H'][1]
+        self.feh = tab_star['Value'][4]
+        self.feherr = tab_star['Error'][4]
 
-        #parallax
-
-        self.plax = tab_star['Parallax'][0]
-        self.plaxerr = tab_star['Parallax'][1]
+        self.plax = tab_star['Value'][5]
+        self.plaxerr = tab_star['Error'][5]
 
         #photometry
 
-        self.Jmag = tab_star['J'][0]
-        self.Jmagerr = tab_star['J'][1]
+        #microns
+        bandwls = {'J':1.235,'H':1.662,'K':2.159,'G':0.582239,'BP':0.503575,'RP':0.761996,'W1':3.3526,'W2':4.6028,'W3':11.5608,
+                   'u':0.360804,'g':0.467178,'r':0.614112,'i':0.745789,'z':0.892278,'U':0.365988,'B':0.438074,'V':0.544543,'R':0.641147,'I':0.798209,
+                   'TESS':0.745264}
 
-        self.Hmag = tab_star['H'][0]
-        self.Hmagerr = tab_star['H'][1]
+        bandwidths = {'J':0.152026,'H':0.241018,'K':0.250619,'G':0.405297,'BP':0.215750,'RP':0.292444,'W1':0.662642,'W2':1.042266,'W3':5.505523,
+                      'u':0.054097,'g':0.106468,'r':0.105551,'i':0.110257,'z':0.116401,'U':0.064040,'B':0.095920,'V':0.089310,'R':0.159100,'I':0.149510,
+                      'TESS':0.389865}
 
-        self.Kmag = tab_star['K'][0]
-        self.Kmagerr = tab_star['K'][1]
+        self.magwls = []
+        self.magwidths = []
+        self.magbands = []
+        self.magobs = []
+        self.magobserr = []
 
-        self.Gmag = tab_star['G'][0]
-        self.Gmagerr = tab_star['G'][1]
-        
-        self.Bpmag = tab_star['Bp'][0]
-        self.Bpmagerr = tab_star['Bp'][1]
+        for i in range(6, len(tab_star)):
 
-        self.Rpmag = tab_star['Rp'][0]
-        self.Rpmagerr = tab_star['Rp'][1]
+            band = tab_star['Parameter'][i]
+            self.magwls.append(bandwls[band])
+            self.magwidths.append(bandwidths[band])
+            self.magbands.append(band)
+            self.magobs.append(tab_star['Value'][i])
+            self.magobserr.append(tab_star['Error'][i])
 
-        self.W1mag = tab_star['W1'][0]
-        self.W1magerr = tab_star['W1'][1]
-
-        self.W2mag = tab_star['W2'][0]
-        self.W2magerr = tab_star['W2'][1]
-
-        self.W3mag = tab_star['W3'][0]
-        self.W3magerr = tab_star['W3'][1]
-
-        self.magwls = [1.235,1.662,2.159,0.582239,0.503575,0.761996,3.3526,4.6028,11.5608]
-        self.magobs = np.array([self.Jmag,self.Hmag,self.Kmag,self.Gmag,self.Bpmag,self.Rpmag,self.W1mag,self.W2mag,self.W3mag])
-        self.magobserr = np.array([self.Jmagerr,self.Hmagerr,self.Kmagerr,self.Gmagerr,self.Bpmagerr,self.Rpmagerr,self.W1magerr,self.W2magerr,self.W3magerr])
+        self.magwls = np.array(self.magwls)
+        self.magwidths = np.array(self.magwidths)
+        self.magbands = np.array(self.magbands)
+        self.magobs = np.array(self.magobs)
+        self.magobserr = np.array(self.magobserr)
 
 
         #limb darkening
@@ -498,18 +495,18 @@ class ExoSystem:
             self.fit_ld = False
             self.order_a = False
 
-            self.misti = get_ichrone('mist')
+            self.misti = get_ichrone('mist', bands = list(self.magbands))
 
-            props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr),
-            'J': (self.Jmag, self.Jmagerr), 'H': (self.Hmag, self.Hmagerr), 'K': (self.Kmag, self.Kmagerr),
-            'W1': (self.W1mag, self.W1magerr), 'W2': (self.W2mag, self.W2magerr), 'W3': (self.W3mag, self.W3magerr),
-            'G': (self.Gmag, self.Gmagerr), 'BP': (self.Bpmag, self.Bpmagerr), 'RP': (self.Rpmag, self.Rpmagerr)}
+            props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr)}
 
             if not np.isnan(self.logg):
                 props['logg'] = (self.logg, self.loggerr)
             
             if not np.isnan(self.feh):
                 props['feh'] = (self.feh, self.feherr)
+
+            for i in range(len(self.magbands)):
+                props[self.magbands[i]] = (self.magobs[i], self.magobserr[i])
 
             self.starmod = SingleStarModel(self.misti, name = name, **props)
 
@@ -1353,7 +1350,12 @@ class ExoSystem:
             rstar = np.random.normal(self.rs, self.rserr, n)
             mstar = np.random.normal(self.ms, self.mserr, n)
 
-        J = np.random.normal(self.Jmag, self.Jmagerr, n)
+        hasJ = False
+        if 'J' in self.magbands:
+            i = np.where(self.magbands == 'J')[0]
+            J = np.random.normal(self.magobs[i], self.magobserr[i], n)
+            hasJ = True
+
         einsol = 1*u.Lsun / (4 * np.pi * u.AU**2)
 
         if self.fit_planets:
@@ -1484,7 +1486,7 @@ class ExoSystem:
                         rhos = 0.018916375 * ars**3 / p**2
                         self.dres['rhos {0}'.format(i+1)] = rhos
 
-                    if self.is_rv[i] and self.fit_rv:
+                    if self.is_rv[i] and self.fit_rv and hasJ:
 
                         sf = np.full(n, 0.19)
                         j = np.where(rp > 1.5)[0]
@@ -1786,8 +1788,10 @@ class ExoSystem:
         """
 
         mags = pickle.load(open(self.direc+'/Output/'+name+'_magfit.p', 'rb'))
-        self.magfit = mags['magfit']
-        self.magfiterr = mags['magfiterr']
+        magbands = mags['magbands']
+        idx = [np.where(magbands == self.magbands[i])[0][0] for i in range(len(self.magbands))]
+        self.magfit = mags['magfit'][idx]
+        self.magfiterr = mags['magfiterr'][idx]
 
     
     def load_samples(self, name: str):
@@ -3264,8 +3268,8 @@ class ExoSystem:
 
 
     def gen_magfit(self, name: str):
-        """Generates SED magnitudes and errors from the best fit parameters. Saves these to the pickle file Output/name_magfit.p. These model magnitudes are
-        accessible through ExoSystem.magfit and ExoSystem.magfiterr.
+        """Generates SED magnitudes and errors from the best fit parameters. Saves these to the pickle file Output/name_magfit.p. These model
+        magnitudes are accessible through ExoSystem.magfit and ExoSystem.magfiterr. Also saves out the bands, so that the order can be matched.
 
         Args:
             name (str): Name of the run. Sets the name of the output pickle file to name_magfit.p.
@@ -3277,11 +3281,11 @@ class ExoSystem:
             
             y = y | self.fixed
 
-        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],y['distance'],y['AV']], ['J','H','K','G','BP','RP','W1','W2','W3'])[3]
+        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],y['distance'],y['AV']], list(self.magbands))[3]
         self.magfit = np.median(mags, axis = 0)
         self.magfiterr = np.diff(np.percentile(mags, [16,50,84], axis = 0), axis = 0)
 
-        pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
+        pickle.dump({'magfit': self.magfit, 'magfiterr': self.magfiterr, 'magbands': self.magbands}, open(self.direc+'Output/'+name+'_magfit.p', 'wb'))
 
 
     def plot_sed_fit(self, name: str, show_plot = True):
@@ -3296,15 +3300,15 @@ class ExoSystem:
 
         fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14, 12), layout = 'constrained', sharex = True)
 
-        ax['a'].errorbar(self.magwls, self.magfit, yerr = self.magfiterr, fmt = '.r', label = 'Fit')
-        ax['a'].errorbar(self.magwls, self.magobs, yerr = self.magobserr, fmt = '.k', label = 'Data')
+        ax['a'].errorbar(self.magwls, self.magfit, xerr = self.magwidths/2, yerr = self.magfiterr, fmt = '.r', label = 'Fit')
+        ax['a'].errorbar(self.magwls, self.magobs, xerr = self.magwidths/2, yerr = self.magobserr, fmt = '.k', label = 'Data')
         ax['a'].invert_yaxis()
         ax['a'].set_ylabel('Magnitude', fontsize = 20)
         ax['a'].tick_params(axis = 'both', labelsize = 15)
         ax['a'].legend(fontsize = 15)
 
         ax['b'].axhline(0, c = 'red')
-        ax['b'].errorbar(self.magwls, self.magobs-self.magfit, yerr = np.sqrt(self.magobserr**2 + self.magfiterr**2), fmt = '.k')
+        ax['b'].errorbar(self.magwls, self.magobs-self.magfit, xerr = self.magwidths/2, yerr = np.sqrt(self.magobserr**2 + self.magfiterr**2), fmt = '.k')
         ax['b'].invert_yaxis()
         ax['b'].set_ylabel('Resid.', fontsize = 20)
         ax['b'].set_xlabel('Wavelength [$\\mu$m]', fontsize = 20)

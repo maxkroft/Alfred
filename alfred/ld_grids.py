@@ -68,7 +68,7 @@ def generate_ld_grid(filter: str, filter_nickname: str):
 
 def load_ld_grid(filter_name: str) -> tuple[LinearNDInterpolator, LinearNDInterpolator]:
     """Loads in a pickle file for a limb darkening grid, sets up the interpolators for each limb darkening parameters, and returns those. By default,
-    the only available filters included with alfred are TESS and Kepler. To generate more, install exoctk and run generate_ld_grid.
+    Alfred includes TESS, Kepler, V, R, I, u, g, r, i, and z. To generate more, install exoctk and run generate_ld_grid.
 
     Args:
         filter_name (str): The name of the filter. This must be the name of the pickle file (before _grid).
@@ -99,8 +99,8 @@ def calc_ld(filter_name: str, T: np.typing.ArrayLike, logg: np.typing.ArrayLike,
     """Calculates limb darkening parameters from a grid given the input stellar parameters.
 
     Args:
-        filter_name (str): The name of the filter to generate the limb darkening parameters in. Must have an existing grid in alfred. By default, only
-            TESS and Kepler are included. More can be generated with exoctk installed and by running generate_ld_grid.
+        filter_name (str): The name of the filter to generate the limb darkening parameters in. Must have an existing grid in alfred. By default, Alfred 
+            includes TESS, Kepler, V, R, I, u, g, r, i, and z. More can be generated with exoctk installed and by running generate_ld_grid.
         T (ArrayLike): The stellar effective temperature in K.
         logg (ArrayLike): The log10 of the stellar surface gravity in cm/s^2.
         feh (ArrayLike): Stellar metallicity in dex.

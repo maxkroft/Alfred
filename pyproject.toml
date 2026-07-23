@@ -27,7 +27,8 @@ dependencies = [
     "numba",
     "astroquery",
     "mplcursors",
-    "pytest"
+    "pytest",
+    "customtkinter"
     ]
 
 [tool.setuptools.dynamic]

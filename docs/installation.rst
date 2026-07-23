@@ -23,3 +23,19 @@ Next, activate your new environment and ``pip`` install the package:
     $ conda activate alfred
     $ python -m pip install alfred-exoplanets
 
+If you are planning to use Jupyter notebooks (.ipynb files), you will likely need to install ``ipykernel`` and/or ``ipywidgets``. You can do this with:
+
+.. code-block:: bash
+
+    $ conda install -c conda-forge ipykernel ipywidgets
+
+Finally, if you are using WSL, you may run into font formatting issues with ``Alfred``'s GUIs. This can be resolved by installing a different version of ``tk``:
+
+.. code-block:: bash
+
+    $ conda install -c conda-forge tk=*=xft_*
+
+
+Optionally, you can also install ``ExoCTK`` if you want to generate limb darkening grids for more bands than are included by default.
+This is not required to run ``Alfred``, and I recommend not installing it unless you specifically need more limb darkening grids. If you do choose to
+install ``ExoCTK``, follow the installation instructions `here <https://github.com/ExoCTK/exoctk>`_.
