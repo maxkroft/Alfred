@@ -400,7 +400,7 @@ class CheckDropDown(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight = 1)
 
         self.checkval = ctk.IntVar(value = 0)
-        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
+        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '', width = 24)
         self.checkbox.grid(row = 0, column = 0, sticky = 'nsew')
 
         self.dropdown_anchor = ctk.CTkButton(self, text = startval, font = (font, 18))
@@ -1259,27 +1259,36 @@ class StarFrame(ctk.CTkFrame):
         self.value_max = value_max
 
         self.grid_columnconfigure(0, weight = 1)
-        self.grid_rowconfigure(list(range(6)), weight = 1)
+        self.grid_rowconfigure(list(range(5)), weight = 1)
 
-        self.par = ctk.CTkLabel(self, text = data['Parameter'], font = (font, 18, 'bold'))
-        self.par.grid(row = 0, column = 0, sticky = 'nsew')
+        self.labelframe = ctk.CTkFrame(self, fg_color = 'transparent')
+        self.labelframe.grid(row = 0, column = 0, sticky = 'nsew')
+        self.labelframe.grid_columnconfigure(1, weight = 1)
+        self.labelframe.grid_rowconfigure((0,1), weight = 1)
 
-        self.unit = ctk.CTkLabel(self, text = data['Units'], font = (font, 16))
-        self.unit.grid(row = 1, column = 0, sticky = 'nsew')
+        self.checkval = ctk.IntVar(value = 0)
+        self.check = ctk.CTkCheckBox(self.labelframe, text = '', variable = self.checkval, width = 24)
+        self.check.grid(row = 0, column = 0, rowspan = 2, sticky = 'nsew')
+
+        self.par = ctk.CTkLabel(self.labelframe, text = data['Parameter'], font = (font, 18, 'bold'))
+        self.par.grid(row = 0, column = 1, sticky = 'nsew')
+
+        self.unit = ctk.CTkLabel(self.labelframe, text = data['Units'], font = (font, 16))
+        self.unit.grid(row = 1, column = 1, sticky = 'nsew')
 
         valuelabel = ctk.CTkLabel(self, text = 'Value', font = (font, 18, 'bold'))
-        valuelabel.grid(row = 2, column = 0, pady = (10,0), sticky = 'nsew')
+        valuelabel.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
 
         self.value_var = ctk.StringVar(value = '' if np.isnan(data['Value']) else data['Value'])
         self.value = FloatEntry(self, min_val = self.value_min, max_val = self.value_max, textvariable = self.value_var, font = (font, 18), justify = 'center')
-        self.value.grid(row = 3, column = 0, sticky = 'nsew')
+        self.value.grid(row = 2, column = 0, sticky = 'nsew')
 
         errorlabel = ctk.CTkLabel(self, text = 'Error', font = (font, 18, 'bold'))
-        errorlabel.grid(row = 4, column = 0, pady = (10,0), sticky = 'nsew')
+        errorlabel.grid(row = 3, column = 0, pady = (10,0), sticky = 'nsew')
         
         self.error_var = ctk.StringVar(value = '' if np.isnan(data['Error']) else data['Error'])
         self.error = FloatEntry(self, min_val = 0, textvariable = self.error_var, font = (font, 18), justify = 'center')
-        self.error.grid(row = 5, column = 0, sticky = 'nsew')
+        self.error.grid(row = 4, column = 0, sticky = 'nsew')
 
 
 class PhotFrame(ctk.CTkFrame):
@@ -1311,6 +1320,8 @@ class PhotFrame(ctk.CTkFrame):
         self.error.grid(row = 4, column = 0, sticky = 'nsew')
 
 
+##############query only for selected
+
 class StarQueryPrompt(ctk.CTkToplevel):
     def __init__(self, initgui: InitStarGUI):
         super().__init__()
@@ -1337,9 +1348,11 @@ class StarQueryPrompt(ctk.CTkToplevel):
         cid = self.entry_var.get().strip()
 
         bands = []
+        checked = []
         for phot in self.initgui.phots:
 
             bands.append(phot.band.dropdown_anchor.cget('text').strip())
+            checked.append(phot.band.checkval.get())
 
         vizier = Vizier(columns = ['**','+_r'])
 
@@ -1347,25 +1360,29 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
             tic = vizier.query_object(object_name = cid, catalog = 'IV/39/tic82', radius = 1*u.arcmin)[0][0]
 
-            self.initgui.r.value_var.set(tic['Rad'])
-            self.initgui.r.value.configure(text_color = '#FFFFFF')
-            self.initgui.r.error_var.set(tic['s_Rad'])
-            self.initgui.r.error.configure(text_color = '#FFFFFF')
+            if self.initgui.r.checkval.get():
+                self.initgui.r.value_var.set(tic['Rad'])
+                self.initgui.r.value.configure(text_color = '#FFFFFF')
+                self.initgui.r.error_var.set(tic['s_Rad'])
+                self.initgui.r.error.configure(text_color = '#FFFFFF')
 
-            self.initgui.m.value_var.set(tic['Mass'])
-            self.initgui.m.value.configure(text_color = '#FFFFFF')
-            self.initgui.m.error_var.set(tic['s_Mass'])
-            self.initgui.m.error.configure(text_color = '#FFFFFF')
+            if self.initgui.m.checkval.get():
+                self.initgui.m.value_var.set(tic['Mass'])
+                self.initgui.m.value.configure(text_color = '#FFFFFF')
+                self.initgui.m.error_var.set(tic['s_Mass'])
+                self.initgui.m.error.configure(text_color = '#FFFFFF')
 
-            self.initgui.t.value_var.set(tic['Teff'])
-            self.initgui.t.value.configure(text_color = '#FFFFFF')
-            self.initgui.t.error_var.set(tic['s_Teff'])
-            self.initgui.t.error.configure(text_color = '#FFFFFF')
+            if self.initgui.t.checkval.get():
+                self.initgui.t.value_var.set(tic['Teff'])
+                self.initgui.t.value.configure(text_color = '#FFFFFF')
+                self.initgui.t.error_var.set(tic['s_Teff'])
+                self.initgui.t.error.configure(text_color = '#FFFFFF')
 
-            self.initgui.logg.value_var.set(tic['logg'])
-            self.initgui.logg.value.configure(text_color = '#FFFFFF')
-            self.initgui.logg.error_var.set(tic['s_logg'])
-            self.initgui.logg.error.configure(text_color = '#FFFFFF')
+            if self.initgui.logg.checkvalue.get():
+                self.initgui.logg.value_var.set(tic['logg'])
+                self.initgui.logg.value.configure(text_color = '#FFFFFF')
+                self.initgui.logg.error_var.set(tic['s_logg'])
+                self.initgui.logg.error.configure(text_color = '#FFFFFF')
 
             ticconvert = {'TESS': 'Tmag', 'B': 'Bmag', 'V': 'Vmag'}
 
@@ -1373,7 +1390,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                 band = bands[i]
 
-                if band in ticconvert:
+                if band in ticconvert and checked[i]:
 
                     phot = self.initgui.phots[i]
 
@@ -1395,14 +1412,16 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
             gaia = vizier.query_object(object_name = cid, catalog = 'I/355/gaiadr3', radius = 1*u.arcmin)[0][0]
 
-            self.initgui.feh.value_var.set(gaia['[Fe/H]'])
-            self.initgui.feh.error_var.set((gaia['B_[Fe/H]']-gaia['b_[Fe/H]'])/2)
-            self.initgui.feh.error.configure(text_color = '#FFFFFF')
+            if self.initgui.feh.checkval.get():
+                self.initgui.feh.value_var.set(gaia['[Fe/H]'])
+                self.initgui.feh.error_var.set((gaia['B_[Fe/H]']-gaia['b_[Fe/H]'])/2)
+                self.initgui.feh.error.configure(text_color = '#FFFFFF')
 
-            self.initgui.plx.value_var.set(gaia['Plx'])
-            self.initgui.plx.value.configure(text_color = '#FFFFFF')
-            self.initgui.plx.error_var.set(gaia['e_Plx'])
-            self.initgui.plx.error.configure(text_color = '#FFFFFF')
+            if self.initgui.plx.checkval.get():
+                self.initgui.plx.value_var.set(gaia['Plx'])
+                self.initgui.plx.value.configure(text_color = '#FFFFFF')
+                self.initgui.plx.error_var.set(gaia['e_Plx'])
+                self.initgui.plx.error.configure(text_color = '#FFFFFF')
 
             gaiaconvert = {'Gaia G': 'Gmag', 'Gaia BP': 'BPmag', 'Gaia RP': 'RPmag'}
 
@@ -1410,7 +1429,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                 band = bands[i]
 
-                if band in gaiaconvert:
+                if band in gaiaconvert and checked[i]:
 
                     phot = self.initgui.phots[i]
 
@@ -1434,7 +1453,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                     band = bands[i]
 
-                    if band in twomassconvert:
+                    if band in twomassconvert and checked[i]:
 
                         phot = self.initgui.phots[i]
 
@@ -1458,7 +1477,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                     band = bands[i]
 
-                    if band in wiseconvert:
+                    if band in wiseconvert and checked[i]:
 
                         phot = self.initgui.phots[i]
 
@@ -1482,7 +1501,7 @@ class StarQueryPrompt(ctk.CTkToplevel):
 
                     band = bands[i]
 
-                    if band in sdssconvert:
+                    if band in sdssconvert and checked[i]:
 
                         phot = self.initgui.phots[i]
 
@@ -1514,12 +1533,14 @@ class InitStarGUI(InitGUI):
         self.frame_title = ctk.CTkLabel(self, text = 'Stellar Parameters', font = (font, 18, 'bold'))
         self.frame_title.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'ew', columnspan = 2)
 
+        self.query = ctk.CTkButton(self, text = 'Query for Selected Values', font = (font, 18, 'bold'), command = self.query_cmd)
+        self.query.grid(row = 2, column = 0, padx = 100, pady = (10, 0), sticky = 'ew', columnspan = 2)
+
         self.add.configure(text = 'Add Photometry')
+        self.add.grid_forget()
+        self.add.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
 
-        self.query = ctk.CTkButton(self, text = 'Query for Parameters', font = (font, 18, 'bold'), command = self.query_cmd)
-        self.query.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
-
-        self.delete = ctk.CTkButton(self, text = 'Delete Selected', font = (font, 18, 'bold'), command = self.delete_cmd)
+        self.delete = ctk.CTkButton(self, text = 'Delete Selected Photometry', font = (font, 18, 'bold'), command = self.delete_cmd)
         self.delete.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'ew')
 
     
