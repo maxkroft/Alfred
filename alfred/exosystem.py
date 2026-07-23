@@ -495,7 +495,7 @@ class ExoSystem:
             self.fit_ld = False
             self.order_a = False
 
-            self.misti = get_ichrone('mist', bands = self.magbands)
+            self.misti = get_ichrone('mist', bands = list(self.magbands))
 
             props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr)}
 
@@ -1350,7 +1350,12 @@ class ExoSystem:
             rstar = np.random.normal(self.rs, self.rserr, n)
             mstar = np.random.normal(self.ms, self.mserr, n)
 
-        J = np.random.normal(self.Jmag, self.Jmagerr, n)
+        hasJ = False
+        if 'J' in self.magbands:
+            i = np.where(self.magbands == 'J')[0]
+            J = np.random.normal(self.magobs[i], self.magobserr[i], n)
+            hasJ = True
+
         einsol = 1*u.Lsun / (4 * np.pi * u.AU**2)
 
         if self.fit_planets:
@@ -1481,7 +1486,7 @@ class ExoSystem:
                         rhos = 0.018916375 * ars**3 / p**2
                         self.dres['rhos {0}'.format(i+1)] = rhos
 
-                    if self.is_rv[i] and self.fit_rv:
+                    if self.is_rv[i] and self.fit_rv and hasJ:
 
                         sf = np.full(n, 0.19)
                         j = np.where(rp > 1.5)[0]
@@ -3276,7 +3281,7 @@ class ExoSystem:
             
             y = y | self.fixed
 
-        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],y['distance'],y['AV']], self.magbands)[3]
+        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],y['distance'],y['AV']], list(self.magbands))[3]
         self.magfit = np.median(mags, axis = 0)
         self.magfiterr = np.diff(np.percentile(mags, [16,50,84], axis = 0), axis = 0)
 
