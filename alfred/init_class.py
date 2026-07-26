@@ -37,7 +37,7 @@ class InitFile:
         """
 
         self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
-                                header_rows = self.header_rows, converters = {'*': [float, bool, str]})
+                                header_rows = self.header_rows, converters = self.converters, fill_values = [('', '0', '*'),('', 'NaN', '*'),('', '', '*')])
         return self
 
     def save(self):
@@ -89,6 +89,8 @@ class Init_lcs(InitFile):
         super().__init__(direc, name)
 
         self.header_rows = ['name', 'unit']
+
+        self.converters = {'File':str,'Nickname':str,'Time Col':str,'Flux Col':str,'Err Col':str,'Quality Col':str,'Time Offset':float,'Err Scale':float,'Exp Time':float,'Filter':str,'Detrend':bool}
 
         self.table = Table(names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter','Detrend'], 
                            units = [None,None,None,None,None,None,'BJD',None,'s',None,None],
@@ -228,6 +230,8 @@ class Init_rv(InitFile):
 
         self.header_rows = ['name', 'unit']
 
+        self.converters = {'File':str,'Nickname':str,'Time Col':str,'RV Col':str,'Err Col':str,'Time Offset':float,'Err Scale':float,'m/s or km/s':str}
+
         self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
                            units = [None, None, None, None, None, 'BJD', None, None],
                            dtype = [str,str,str,str,str,float,float,str])
@@ -357,6 +361,8 @@ class Init_star(InitFile):
         super().__init__(direc, name)
 
         self.header_rows = ['name']
+
+        self.converters = {'Parameter':str,'Units':str,'Value':float,'Error':float}
 
         blank_data = {'Parameter': ['Radius','Mass','Teff','log(g)','Fe/H','Parallax'],
                       'Units': ['Rsun','Msun','K','cgs','dex','mas'],
@@ -595,6 +601,8 @@ class Init_ld(InitFile):
         super().__init__(direc, name)
 
         self.header_rows = ['name']
+        
+        self.converters = {'Filter':str,'u1':float,'u2':float}
 
         self.table = Table(names = ['Filter','u1','u2'], dtype = [str,float,float])
 
@@ -724,6 +732,8 @@ class Init_planets(InitFile):
         super().__init__(direc, name)
 
         self.header_rows = ['name', 'unit']
+
+        self.converters = {'Transiting':bool, 'RV Signal':bool,  'Fit Ecc':bool, 'Fit TTVs':bool, 'Fit Eclipse':bool, 'Period':float, 'Tc':float, 'Rp/Rs':float, 'a/Rs':float, 'cos(i)':float, 'K':float, 'sqrt(e)cos(w)':float, 'sqrt(e)sin(w)':float, 'fp':float}
 
         self.table = Table(names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
             units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
@@ -873,6 +883,8 @@ class Init_ttvs(InitFile):
 
         self.header_rows = ['name','unit']
 
+        self.converters = {'*':float}
+
         self.table = Table({'X': [np.nan]}, units = ['BJD-2450000'], dtype = [float])
 
 
@@ -992,6 +1004,8 @@ class Init_priors(InitFile):
         super().__init__(direc, name)
 
         self.header_rows = ['name']
+
+        self.converters = {'Variable':str,'Prior Type':str,'Param 1':float,'Param 2':float}
 
         self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',

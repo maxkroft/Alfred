@@ -204,8 +204,8 @@ class ExoSystem:
         self.ferr = []
 
         for i, name in enumerate(self.fnames):
-
-            if not os.path.exists(self.direc+'/'+name):
+            
+            if not os.path.exists(self.direc+'/'+name) or name == '':
                 print('LC file {0} not found.'.format(name))
                 continue
 
@@ -325,26 +325,28 @@ class ExoSystem:
 
         for i, name in enumerate(self.rvfiles):
 
-            if os.path.exists(self.direc + name):
+            if not os.path.exists(self.direc+'/'+name) or name == '':
+                print('RV file {0} not found.'.format(name))
+                continue
                 
-                try:
-                    rvdata = Table.read(self.direc + name)
-                except:
-                    rvdata = Table.read(self.direc + name, format = 'ascii')
-                
-                rvdata.sort(tab_rv['Time Col'][i])
+            try:
+                rvdata = Table.read(self.direc + name)
+            except:
+                rvdata = Table.read(self.direc + name, format = 'ascii')
+            
+            rvdata.sort(tab_rv['Time Col'][i])
 
-                msscale = 1e3 if tab_rv['m/s or km/s'][i] == 'km/s' else 1
-                
-                tr0 = np.array(rvdata[tab_rv['Time Col'][i]]) + tab_rv['Time Offset'][i] - 2450000
-                rv0 =  np.array(rvdata[tab_rv['RV Col'][i]]) * msscale
-                rv0 = rv0 - (np.max(rv0)+np.min(rv0))/2
-                rverr0 = np.array(rvdata[tab_rv['Err Col'][i]]) * self.rv_err_scale[i] * msscale
+            msscale = 1e3 if tab_rv['m/s or km/s'][i] == 'km/s' else 1
+            
+            tr0 = np.array(rvdata[tab_rv['Time Col'][i]]) + tab_rv['Time Offset'][i] - 2450000
+            rv0 =  np.array(rvdata[tab_rv['RV Col'][i]]) * msscale
+            rv0 = rv0 - (np.max(rv0)+np.min(rv0))/2
+            rverr0 = np.array(rvdata[tab_rv['Err Col'][i]]) * self.rv_err_scale[i] * msscale
 
-                self.tr.append(tr0)
-                self.rv.append(rv0)
-                self.rverr.append(rverr0)
-                self.which_rv.append([i]*len(tr0))
+            self.tr.append(tr0)
+            self.rv.append(rv0)
+            self.rverr.append(rverr0)
+            self.which_rv.append([i]*len(tr0))
 
         if len(self.tr) > 0:
 
