@@ -14,9 +14,11 @@ exoplanet detection and characterization.
 Key Features:
 
 * Transit and radial velocity fitting for arbritary systems of exoplanets
+* Simultaneous light curve detrending with Gaussian processes
 * Optional simultaneous stellar SED fitting
-* Flexible user-defined priors
-* Easy-to-understand initialization files
+* Flexible, user-defined priors
+* Easy-to-understand initialization files, with tailored GUIs for each file
+* Support for photometry and RVs from multiple instruments
 
 At its core, ``Alfred`` is built around `batman <https://lkreidberg.github.io/batman/docs/html/index.html>`_
 (for transit modelling), a small numerical solver for Kepler's equation (for RV modeling), `isochrones <https://isochrones.readthedocs.io/en/latest/index.html#>`_ (for stellar modelling),
@@ -50,7 +52,7 @@ Future Features Wishlist
 ++++++++++++++++++++++++
 
 * Custom prior distributions
-* SED fitting improvements
+* Alternative samplers, such as SBI
 * Gaussian Process support in RV fitting
 * Transit depth and duration variations
 * Support for other limb darkening parameterizations
@@ -58,6 +60,25 @@ Future Features Wishlist
 
 Changelog
 +++++++++
+
+**1.1.1 (2026-July-28)**
+
+* Better handling of empty columns in init files.
+* Added default rows for empty init files.
+* Add units to the InitPriorsGUI.
+* Updated how gamma and RV offsets are initialized, removed subtracting mean of RV data before fitting.
+
+**1.1.0 (2026-July-23)**
+
+* Added GUIs to replace init file text prompts on creation and editing. Each init file type has its own tailored GUI that can be brought up by calling the init file object.
+
+**1.0.2 (2026-July-14)**
+
+* Corrected typo that altered a/Rs derived quantities.
+
+**1.0.1 (2026-June-23)**
+
+* Bug fixes.
 
 **1.0.0 (2026-Jun-10)**
 
