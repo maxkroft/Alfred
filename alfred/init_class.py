@@ -92,7 +92,8 @@ class Init_lcs(InitFile):
 
         self.converters = {'File':str,'Nickname':str,'Time Col':str,'Flux Col':str,'Err Col':str,'Quality Col':str,'Time Offset':float,'Err Scale':float,'Exp Time':float,'Filter':str,'Detrend':bool}
 
-        self.table = Table(names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter','Detrend'], 
+        self.table = Table(rows = [['']*6 + [np.nan,1,np.nan] + [''] + [False]],
+                           names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter','Detrend'], 
                            units = [None,None,None,None,None,None,'BJD',None,'s',None,None],
                            dtype = [str,str,str,str,str,str,float,float,float,str,bool])
 
@@ -232,7 +233,8 @@ class Init_rv(InitFile):
 
         self.converters = {'File':str,'Nickname':str,'Time Col':str,'RV Col':str,'Err Col':str,'Time Offset':float,'Err Scale':float,'m/s or km/s':str}
 
-        self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
+        self.table = Table(rows = [['']*5 + [np.nan,1] + ['']],
+                           names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
                            units = [None, None, None, None, None, 'BJD', None, None],
                            dtype = [str,str,str,str,str,float,float,str])
 
@@ -604,7 +606,7 @@ class Init_ld(InitFile):
         
         self.converters = {'Filter':str,'u1':float,'u2':float}
 
-        self.table = Table(names = ['Filter','u1','u2'], dtype = [str,float,float])
+        self.table = Table(rows = [[''] + [np.nan]*2], names = ['Filter','u1','u2'], dtype = [str,float,float])
 
 
     def __call__(self):
@@ -735,7 +737,8 @@ class Init_planets(InitFile):
 
         self.converters = {'Transiting':bool, 'RV Signal':bool,  'Fit Ecc':bool, 'Fit TTVs':bool, 'Fit Eclipse':bool, 'Period':float, 'Tc':float, 'Rp/Rs':float, 'a/Rs':float, 'cos(i)':float, 'K':float, 'sqrt(e)cos(w)':float, 'sqrt(e)sin(w)':float, 'fp':float}
 
-        self.table = Table(names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
+        self.table = Table(rows = [[False]*5 + [np.nan]*9],
+            names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
             units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
             dtype = [bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float])
 
@@ -1054,7 +1057,8 @@ class Init_priors(InitFile):
                                  'mean stellar density in g/cm^3 in stellar fitting']
         
 
-        self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
+        self.table = Table(rows = [['']*2 + [np.nan]*2],
+            names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
             dtype = [str, str, float, float])
         
 

@@ -990,13 +990,13 @@ class PriorFrame(ctk.CTkFrame):
 
         self.prior_convert = {'U': 'Uniform', 'G': 'Gaussian', 'F': 'Fixed', 'J': "Jeffrey's", 'MJ': "Mod. Jeffrey's"}
 
-        self.grid_columnconfigure(list(range(7)), weight = 1)
+        self.grid_columnconfigure(list(range(1,8)), weight = 1)
         self.grid_rowconfigure((0,1), weight = 1)
 
         checkboxlabel = ctk.CTkLabel(self, text = 'Select', font = (font, 16, 'bold'))
         checkboxlabel.grid(row = 0, column = 0, padx = (10,0), sticky = 'nsew')
         self.checkval = ctk.IntVar(value = 0)
-        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '')
+        self.checkbox = ctk.CTkCheckBox(self, variable = self.checkval, text = '', width = 24)
         self.checkbox.grid(row = 1, column = 0, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         varlabel = ctk.CTkLabel(self, text = 'Variable', font = (font, 16, 'bold'))
@@ -1008,36 +1008,42 @@ class PriorFrame(ctk.CTkFrame):
         self.variable_anchor.grid(row = 1, column = 1, padx = (10,0), pady = (10,0), sticky = 'nesw')
         self.variable = ScrollableDropdown(self, self.variable_anchor, values = varoptions, height = 400, command = self.varoption_cmd, font = (font, 18))
 
+        self.unitlabel = ctk.CTkLabel(self, text = 'Units', font = (font, 16, 'bold'))
+        self.unitlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
+        self.unitsvar = ctk.StringVar(value = '')
+        self.units = ctk.CTkLabel(self, textvariable = self.unitsvar, font = (font, 16))
+        self.units.grid(row = 1, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+
         self.varnumberlabel_var = ctk.StringVar(value = '')
         self.varnumberlabel = ctk.CTkLabel(self, textvariable = self.varnumberlabel_var, font = (font, 16, 'bold'))
-        self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
+        self.varnumberlabel.grid(row = 0, column = 3, padx = (10,0), sticky = 'nsew')
         self.varnumber_var = ctk.StringVar(value = '' if data['Variable'] == '' else (data['Variable'].split()[1:] if data['Variable'].split()[0] != 'TT' else data['Variable'].split()[1]))
         self.varnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = self.varnumber_var)
-        self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.varnumber.grid(row = 1, column = 3, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.tnumberlabel = ctk.CTkLabel(self, text = 'Transit Number', font = (font, 16, 'bold'))
         self.tnumber = ctk.CTkEntry(self,  font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = '' if data['Variable'] == '' or data['Variable'].split()[0] != 'TT' else data['Variable'].split()[2]))
 
         priortypelabel = ctk.CTkLabel(self, text = 'Prior Type', font = (font, 16, 'bold'))
-        priortypelabel.grid(row = 0, column = 4, padx = (10,0), sticky = 'nsew')
+        priortypelabel.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
         prioroptions = ['Uniform','Gaussian','Fixed',"Jeffrey's", "Mod. Jeffrey's"]
         self.priortype = ctk.CTkOptionMenu(self, values = prioroptions, font = (font, 18), variable = ctk.StringVar(value = 'Gaussian' if data['Prior Type'] == '' else self.prior_convert[data['Prior Type']]), command = self.priortype_cmd)
-        self.priortype.grid(row = 1, column = 4, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.priortype.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
         self.priortype._dropdown_menu.configure(font = (font, 18))
 
         self.par1label_var = ctk.StringVar(value = '')
         self.par1label = ctk.CTkLabel(self, textvariable = self.par1label_var, font = (font, 16, 'bold'))
-        self.par1label.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
+        self.par1label.grid(row = 0, column = 6, padx = (10,0), sticky = 'nsew')
         self.par1_var = ctk.StringVar(value = '' if np.isnan(data['Param 1']) else data['Param 1'])
         self.par1 = FloatEntry(self, textvariable = self.par1_var, font = (font, 18), justify = 'center')
-        self.par1.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
+        self.par1.grid(row = 1, column = 6, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.par2label_var = ctk.StringVar(value = '')
         self.par2label = ctk.CTkLabel(self, textvariable = self.par2label_var, font = (font, 16, 'bold'))
-        self.par2label.grid(row = 0, column = 6, padx = (10,0), sticky = 'nsew')
+        self.par2label.grid(row = 0, column = 7, padx = (10,0), sticky = 'nsew')
         self.par2_var = ctk.StringVar(value = '' if np.isnan(data['Param 2']) else data['Param 2'])
         self.par2 = FloatEntry(self, textvariable = self.par2_var, font = (font, 18), justify = 'center')
-        self.par2.grid(row = 1, column = 6, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.par2.grid(row = 1, column = 7, padx = 10, pady = (10,0), sticky = 'nsew')
 
         self.varoption_cmd(self.variable_anchor.cget('text'), update = False)
         self.priortype_cmd(self.priortype.get(), update = False)
@@ -1049,14 +1055,22 @@ class PriorFrame(ctk.CTkFrame):
             self.varnumber_var.set('')
         
         if not self.varnumber.grid_info():
-            self.varnumberlabel.grid(row = 0, column = 2, padx = (10,0), sticky = 'nsew')
-            self.varnumber.grid(row = 1, column = 2, padx = (10,0), pady = (10,0), sticky = 'nsew')
+            self.varnumberlabel.grid(row = 0, column = 3, padx = (10,0), sticky = 'nsew')
+            self.varnumber.grid(row = 1, column = 3, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         if self.tnumber.grid_info():
             self.tnumberlabel.grid_forget()
             self.tnumber.grid_forget()
 
         self.variable_anchor.configure(text=choice)
+
+        varunits = {'log(P)': 'days', 'P': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'a/rs': '', 'rhos': 'g/cm^3', 'cos(i)': '',
+                    'i': 'rads', 'log(K)': 'm/s', 'K': 'm/s', 'secw': '', 'sesw': '', 'e': '', 'w': 'rads', 'TT': 'BJD-2450000', 'fp': '',
+                    'F0': '', 'log(rho_gp)': 'days', 'rho_gp': 'days', 'log(sigma_gp)': '', 'sigma_gp': '', 'u1': '', 'u2': '', 'gamma': 'm/s',
+                    'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'eep': '', 'log10(age)': 'yr', 'age': 'yr', 'feh': 'dex',
+                    'distance': 'pc', 'AV': 'mag', 'mstar': 'Msun', 'rstar': 'Rsun', 'rhostar': 'g/cm^3'}
+        
+        self.unitsvar.set(varunits[choice])
 
         planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'fp']
         lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
@@ -1067,8 +1081,8 @@ class PriorFrame(ctk.CTkFrame):
 
         elif choice == 'TT':
             self.varnumberlabel_var.set('Planet Number')
-            self.tnumberlabel.grid(row = 0, column = 3, padx = (10,0), sticky = 'nsew')
-            self.tnumber.grid(row = 1, column = 3, padx = (10,0), pady = (10,0), sticky = 'nsew')
+            self.tnumberlabel.grid(row = 0, column = 4, padx = (10,0), sticky = 'nsew')
+            self.tnumber.grid(row = 1, column = 4, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         elif choice in lc_vars:
             self.varnumberlabel_var.set('LC Nickname\nx for all')
@@ -1103,8 +1117,8 @@ class PriorFrame(ctk.CTkFrame):
             self.par2.grid_forget()
         
         elif not self.par2.grid_info():
-            self.par2label.grid(row = 0, column = 6, padx = (10,0), sticky = 'nsew')
-            self.par2.grid(row = 1, column = 6, padx = (10,0), pady = (10,0), sticky = 'nsew')
+            self.par2label.grid(row = 0, column = 7, padx = (10,0), sticky = 'nsew')
+            self.par2.grid(row = 1, column = 7, padx = (10,0), pady = (10,0), sticky = 'nsew')
 
         self.update_prior_pars(update = update)
 
@@ -1162,7 +1176,7 @@ class InitPriorsGUI(InitGUI):
     def __init__(self, initfile: InitFile):
         super().__init__(initfile)
 
-        self.geometry('1100x700')
+        self.geometry('1200x700')
 
         self.setup_items_frame()
 
@@ -1709,7 +1723,7 @@ class LDFrame(ctk.CTkFrame):
         self.filter_frame.grid(row = 0, column = 1, padx = (10,0), pady = (10,0), sticky = 'nsew')
         self.filter_frame.grid_columnconfigure(0, weight = 1)
 
-        self.filter = ctk.CTkOptionMenu(self.filter_frame, values = ld_grid_list+['Other'], font = (font, 18), variable = ctk.StringVar(value = 'TESS' if data['Filter'] == '' else ('Other' if data['Filter'] not in ld_grid_list else data['Filter'])), state = 'readonly', command = self.other_filter)
+        self.filter = ctk.CTkOptionMenu(self.filter_frame, values = ld_grid_list+['Other'], font = (font, 18), variable = ctk.StringVar(value = 'Other' if data['Filter'] not in ld_grid_list else data['Filter']), state = 'readonly', command = self.other_filter)
         self.filter.grid(row = 0, column = 0, sticky = 'nsew')
         self.filter._dropdown_menu.configure(font = (font, 18))
 

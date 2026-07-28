@@ -340,7 +340,6 @@ class ExoSystem:
             
             tr0 = np.array(rvdata[tab_rv['Time Col'][i]]) + tab_rv['Time Offset'][i] - 2450000
             rv0 =  np.array(rvdata[tab_rv['RV Col'][i]]) * msscale
-            rv0 = rv0 - (np.max(rv0)+np.min(rv0))/2
             rverr0 = np.array(rvdata[tab_rv['Err Col'][i]]) * self.rv_err_scale[i] * msscale
 
             self.tr.append(tr0)
@@ -648,14 +647,14 @@ class ExoSystem:
 
         if self.fit_rv:
             
-            self.x0['gamma'] = 0
+            self.x0['gamma'] = np.mean(self.rv[self.which_rv == 0])
             if self.rv_bkg_order > 0:
                 self.x0['gamma_dot'] = 0
             if self.rv_bkg_order > 1:
                 self.x0['gamma_ddot'] = 0
 
             for i in np.unique(self.which_rv)[1:]:
-                self.x0['rv_offset {0}'.format(self.rvnames[i])] = 0
+                self.x0['rv_offset {0}'.format(self.rvnames[i])] = np.mean(self.rv[self.which_rv == i])
 
         if self.use_priors:
 
@@ -1239,8 +1238,10 @@ class ExoSystem:
 
         print('\nRunning MCMC sampling.')
 
+        prog = 'notebook' if is_notebook else True
+
         state = self.samples[-1]
-        self.sampler.run_mcmc(state, nrun, progress = True, skip_initial_state_check = skip_state_check)
+        self.sampler.run_mcmc(state, nrun, progress = prog, skip_initial_state_check = skip_state_check)
 
         self.samples = self.sampler.get_chain()
 
