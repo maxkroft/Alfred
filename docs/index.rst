@@ -30,7 +30,7 @@ If you find any bugs or want to request a feature, please create an issue on the
 Attribution
 +++++++++++
 
-* If you use ``Alfred`` in your work, please cite `Kroft et al. 2026 <https://arxiv.org/abs/2603.24682>`_. A scientific paper more fully detailing the code is coming soon.
+* If you use ``Alfred`` in your work, please cite `Kroft et al. 2026 <https://iopscience.iop.org/article/10.3847/2515-5172/ae9165>`_.
 * We also recommend citing the ``emcee`` paper, `Foreman-Mackey et al. 2013 <https://ui.adsabs.harvard.edu/abs/2013PASP..125..306F/abstract>`_.
 * Additionally, if you do any transit fitting, please cite ``batman`` with `Kreidberg 2015 <https://ui.adsabs.harvard.edu/abs/2015PASP..127.1161K/abstract>`_.
 * Finally, if you do any stellar fitting, please cite ``isochrones`` with `Morton 2015 <https://ui.adsabs.harvard.edu/abs/2015ascl.soft03010M/abstract>`_.
