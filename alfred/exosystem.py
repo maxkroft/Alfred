@@ -910,7 +910,20 @@ class ExoSystem:
 
                         if self.is_eclipse[k]:
 
-                            fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j], eclipse = True, fp = y['fp {0}'.format(k+1)], rstar = rstar if self.fit_star else self.rs)
+                            mp = 0
+                            ms = mstar if self.fit_star else self.ms
+
+                            if self.is_rv[k] and self.fit_rv:
+                            
+                                e = 0
+                                if self.fit_ecc[k]:
+                                    e = y['secw {0}'.format(k+1)]**2 + y['sesw {0}'.format(k+1)]**2
+        
+                                mp = calc_m_from_k(p, np.exp(y['log(K) {0}'.format(k+1)]), e, np.arccos(y['cos(i) {0}'.format(k+1)]), ms)
+
+                            q = mp/ms
+
+                            fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j], eclipse = True, fp = y['fp {0}'.format(k+1)], rstar = rstar if self.fit_star else self.rs, q = q)
 
                         else:
 
@@ -2460,8 +2473,18 @@ class ExoSystem:
                 fmphase.append(lightCurve(medpar, ttphase + tcs[l], np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess))
 
                 if self.is_eclipse[k]:
-                    tc2 = calc_t_sec(medpar[0], medpar[1], medpar[5], medpar[6]*np.pi/180, medpar[3], np.median(rstar) if self.fit_star else self.rs)
-                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = np.median(rstar) if self.fit_star else self.rs))
+
+                    rs = np.median(rstar) if self.fit_star else self.rs
+
+                    q = 0
+
+                    if self.fit_rv and self.is_rv[k]:
+                        mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
+                        ms = np.median(mstar) if self.fit_star else self.ms
+                        q = mp/ms
+
+                    tc2 = calc_t_sec(medpar[0], medpar[1], medpar[5], medpar[6]*np.pi/180, medpar[3], medpar[4]*np.pi/180, rs, q)
+                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = np.median(rstar) if self.fit_star else self.rs, q = q))
 
 
             fmphase_err = [[] for j in range(self.nt)]
@@ -2479,9 +2502,19 @@ class ExoSystem:
                     fmphase_err[l].append(lightCurve(pars[l][j], ttphase + tcs[l], ld[j] if ld.ndim > 1 else ld, phaseexp, phasess))
 
                     if self.is_eclipse[k]:
-                        tc2 = calc_t_sec(pars[l][j][0], pars[l][j][1], pars[l][j][5], pars[l][j][6]*np.pi/180, pars[l][j][3], rstar[j] if self.fit_star else self.rs)
+
+                        rs = rstar[j] if self.fit_star else self.rs
+                        
+                        q = 0
+    
+                        if self.fit_rv and self.is_rv[k]:
+                            mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
+                            ms = mstar[j] if self.fit_star else self.ms
+                            q = mp/ms
+
+                        tc2 = calc_t_sec(pars[l][j][0], pars[l][j][1], pars[l][j][5], pars[l][j][6]*np.pi/180, pars[l][j][3], pars[l][j][4]*np.pi/180, rs, q)
                         le = np.sum(self.is_eclipse[:k])
-                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rstar[j] if self.fit_star else self.rs))
+                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rstar[j] if self.fit_star else self.rs, q = q))
 
             fmphase_err = np.percentile(fmphase_err, [16,84], axis = 1)
             if np.any(self.is_eclipse):
@@ -2558,7 +2591,16 @@ class ExoSystem:
 
                     if self.is_eclipse[k]:
 
-                        fm0 = lightCurve(np.median(pars[l], axis = 0), self.tt[i], np.median(ld, axis = 0) if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = np.median(rstar) if self.fit_star else self.rs)
+                        rs = np.median(rstar) if self.fit_star else self.rs
+                        
+                        q = 0
+    
+                        if self.fit_rv and self.is_rv[k]:
+                            mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
+                            ms = np.median(mstar) if self.fit_star else self.ms
+                            q = mp/ms
+
+                        fm0 = lightCurve(np.median(pars[l], axis = 0), self.tt[i], np.median(ld, axis = 0) if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = rs, q = q)
 
                     else:
 
@@ -2618,7 +2660,16 @@ class ExoSystem:
 
                         if self.is_eclipse[k]:
 
-                            fm0 = lightCurve(pars[l][j], self.tt[i], ld[j] if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rstar[j] if self.fit_star else self.rs)
+                            rs = rstar[j] if self.fit_star else self.rs
+                            
+                            q = 0
+        
+                            if self.fit_rv and self.is_rv[k]:
+                                mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
+                                ms = mstar[j] if self.fit_star else self.ms
+                                q = mp/ms
+
+                            fm0 = lightCurve(pars[l][j], self.tt[i], ld[j] if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rs, q = q)
 
                         else:
 
@@ -2902,8 +2953,17 @@ class ExoSystem:
                     e = np.median(y['e {0}'.format(j+1)]) if 'e {0}'.format(j+1) in y else 0
                     w = np.median(y['w {0}'.format(j+1)]) if 'w {0}'.format(j+1) in y else np.pi/2
                     ar = np.median(y['a/rs {0}'.format(j+1)])
+                    inc = np.median(y['i {0}'.format(j+1)])*np.pi/180
                     rs = np.median(y['rstar'])
-                    tc2 = calc_t_sec(p, tc, e, w, ar, rs)
+
+                    mp = 0
+                    ms = np.median(y['mstar'])
+                    if self.fit_rv and self.is_rv[j]:
+                        mp = (np.median(y['Mp {0}'.format(j+1)])*u.earthMass).to(u.Msun).value
+
+                    q = mp/ms
+
+                    tc2 = calc_t_sec(p, tc, e, w, ar, inc, rs, q)
 
                     ke = np.sum(self.is_eclipse[:j])
 
@@ -3713,7 +3773,7 @@ def calc_m_from_k(p: np.typing.ArrayLike, k: np.typing.ArrayLike, e: np.typing.A
         return m
 
 
-def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: float, ss: int, eclipse = False, fp = 0, rstar = 0) -> np.typing.ArrayLike:
+def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: float, ss: int, eclipse = False, fp: float = 0, rstar: float = 0, q: float = 0) -> np.typing.ArrayLike:
         """Generates a model transit light curve using batman.
 
         Args:
@@ -3730,6 +3790,10 @@ def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: f
             ld (list): A list only containing the linear and non-linear quadratic limb darkening coefficients, in that order.
             expt (float): The exposure time of each point. Used for supersampling.
             ss (int): Number of supersamples per exposure. For each point, this many points are generated across the whole exposure time, then averaged.
+            eclipse (bool): Whether or not to include a secondary eclipse in the light curve. The default is False.
+            fp (float): The planet to star flux ratio, for the secondary eclipse. The default is 0.
+            rstar (float): The stellar radius in solar radii. Used with a/Rs to get the secondary eclipse center time. The default is 0.
+            q (float): The planet-to-star mass ratio. Used to get the secondary eclipse center time. The default is 0.
 
         Returns:
             ArrayLike: The model transit light curve at each of the input times, with a baseline of 0 flux.
@@ -3754,7 +3818,7 @@ def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: f
 
         if eclipse:
 
-            tc2 = calc_t_sec(par[0], par[1], par[5], par[6]*np.pi/180, par[3], rstar)
+            tc2 = calc_t_sec(par[0], par[1], par[5], par[6]*np.pi/180, par[3], par[4]*np.pi/180, rstar, q)
 
             params.fp = fp
             params.t_secondary = tc2
@@ -3766,7 +3830,7 @@ def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: f
         return flux
 
 
-def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.ArrayLike, w: np.typing.ArrayLike, a: np.typing.ArrayLike, r: np.typing.ArrayLike) -> np.typing.ArrayLike:
+def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.ArrayLike, w: np.typing.ArrayLike, a: np.typing.ArrayLike, i: np.typing.ArrayLike, r: np.typing.ArrayLike, q: np.typing.ArrayLike) -> np.typing.ArrayLike:
     """Calculates the time of secondary eclipse center, including light travel delay.
 
     Args:
@@ -3775,7 +3839,9 @@ def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.Arr
         e (ArrayLike): Orbital eccentricity.
         w (ArrayLike): Argument of periastron in radians.
         a (ArrayLike): Semi-major axis to stellar radius ratio.
+        i (ArrayLike): Orbital inclination in radians.
         r (ArrayLike): Stellar radius in solar radii.
+        q (ArrayLike): Mass ratio, planet mass/stellar mass.
 
     Returns:
         ArrayLike: The time of secondary eclipse center.
@@ -3789,7 +3855,9 @@ def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.Arr
     E2 = np.arctan2(np.sqrt(1-e**2)*np.sin(f2), e + np.cos(f2))
     M2 = E2 - e*np.sin(E2)
 
-    tc2 = p/(2*np.pi)*(M2-M1) + tc + (2*a*r*u.Rsun / constants.c).to(u.day).value
+    light_delay = (2 / constants.c * 1/(q+1) * a*r*u.Rsun * np.sin(i) * (1-e**2) / (1-(e*np.sin(w))**2)).to(u.day).value
+
+    tc2 = p/(2*np.pi)*(M2-M1) + tc + light_delay
 
     return tc2
 
@@ -4176,7 +4244,18 @@ def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, 
 
                     if exs.is_eclipse[j]:
 
-                        fm += lightCurve(tpars[k], exs.tt[i], ld, exs.exptimes[i], exs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rstar if exs.fit_star else exs.rs)
+                        mp = 0
+                        ms = mstar if exs.fit_star else exs.ms
+
+                        if exs.is_rv[j] and exs.fit_rv:
+
+                            kr = np.sum(exs.is_rv[:j])
+                            
+                            mp = calc_m_from_k(p, rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)
+
+                        q = mp/ms
+
+                        fm += lightCurve(tpars[k], exs.tt[i], ld, exs.exptimes[i], exs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rstar if exs.fit_star else exs.rs, q = q)
 
                     else:
 
