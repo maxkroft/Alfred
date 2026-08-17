@@ -3209,6 +3209,8 @@ class ExoSystem:
 
             y = y | self.fixed
 
+        gamma = np.median(y['gamma'])
+
         rv = self.rv.copy()
         for i, k in enumerate(np.unique(self.which_rv)):
 
@@ -3231,7 +3233,7 @@ class ExoSystem:
 
             j = np.sum(self.is_rv[:i])
 
-            ax['a'].plot(trplot, rvmplot[j], linewidth = 2, linestyle = '--', zorder = 1, label = 'Planet {0}'.format(i+1))
+            ax['a'].plot(trplot, rvmplot[j] + gamma, linewidth = 2, linestyle = '--', zorder = 1, label = 'Planet {0}'.format(i+1))
 
         ax['a'].plot(trplot, bkgplot, color = 'black', linewidth = 2, linestyle = ':', zorder = 0, label = 'Background')
 
