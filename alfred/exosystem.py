@@ -654,7 +654,7 @@ class ExoSystem:
                 self.x0['gamma_ddot'] = 0
 
             for i in np.unique(self.which_rv)[1:]:
-                self.x0['rv_offset {0}'.format(self.rvnames[i])] = np.mean(self.rv[self.which_rv == i])
+                self.x0['rv_offset {0}'.format(self.rvnames[i])] = np.mean(self.rv[self.which_rv == i]) - self.x0['gamma']
 
         if self.use_priors:
 
