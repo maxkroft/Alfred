@@ -371,10 +371,10 @@ class AllPriors:
             lbound = max(lbound, l)
             ubound = min(ubound, u)
 
-        if var == 'log10(age)' and 'age' in self.prior_dict:
+        elif var == 'log10(age)' and 'age' in self.prior_dict:
 
             l, u = self.prior_dict['age'].bounds()
-            lbound = max(lbound, np.log10(l))
+            lbound = max(lbound, np.log10(max(l,1e-100)))
             ubound = min(ubound, np.log10(u))
 
         elif var[:4] == 'log(':
@@ -384,7 +384,7 @@ class AllPriors:
             if svar in self.prior_dict:
 
                 l, u = self.prior_dict[svar].bounds()
-                lbound = max(lbound, np.log(l))
+                lbound = max(lbound, np.log(max(l,1e-100)))
                 ubound = min(ubound, np.log(u))
 
             if var.split()[0] == 'log(a/rs)':

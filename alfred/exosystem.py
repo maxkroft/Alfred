@@ -23,6 +23,10 @@ from tqdm.auto import tqdm
 import os
 import copy
 import shutil
+from multiprocessing import Pool
+import time
+from typing import Literal
+from contextlib import nullcontext
 
 from alfred._rv_func import _rvModel
 from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs
@@ -32,6 +36,8 @@ from alfred import is_notebook
 
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 np.set_printoptions(legacy='1.25')
+
+miniexs = None
 
 
 class ExoSystem:
@@ -365,9 +371,9 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk: int = 0, fit_ld = False,
-            use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False, sigma_clip: float = 5,
-            lc_supersample_size: int = 600, show_plots = True, order_a = False, skip_state_check = False) -> None:
+    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, parallel: bool | int | Literal['auto'] = False,
+            nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
+            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, order_a = False, skip_state_check = False) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -401,6 +407,11 @@ class ExoSystem:
             
             fit_star (bool): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
                 (with or without RV data as well). Cannot be fit with just RV data.
+
+            parallel (bool or int or 'auto', optional): Whether or not to run MCMC sampling in parallel. If False, MCMC will run in serial. If True,
+                MCMC will run in parallel with the total number of cores (or logical processors) your computer has. If an int, MCMC runs in parallel
+                with that many cores, capped at your total number. If 'auto', runs a short test before sampling to find the optimal number of cores
+                to use for best performance, including testing serial. Default is False.
 
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
                 less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
@@ -458,6 +469,7 @@ class ExoSystem:
         self.fit_transit = fit_transit
         self.fit_rv = fit_rv
         self.fit_star = fit_star
+        self.parallel = parallel
         self.order_a = order_a
         self.fit_planets = self.fit_transit or self.fit_rv
         self.lc_supersample_size = lc_supersample_size
@@ -706,7 +718,8 @@ class ExoSystem:
 
         else:
 
-            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead', args = (self,))
+            self.setup_miniexs()
+            res = minimize(lambda x, *args: -1 * (log_like({k:v for k,v in zip(self.keys, x)}, *args)[0] if np.any(self.fit_ttv) else log_like({k:v for k,v in zip(self.keys, x)}, *args)), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             self.x = {k:v for k,v in zip(self.keys, res.x)}
 
 
@@ -720,7 +733,27 @@ class ExoSystem:
         
         pos = self.initialize_chains()
 
-        self.run_sampler(pos, skip_state_check)
+        if type(self.parallel) == int:
+            cores = self.parallel
+            cores = min(cores, os.cpu_count())
+
+        elif self.parallel == True:
+            cores = os.cpu_count()
+
+        elif self.parallel.lower() == 'auto':
+            cores = self.find_opt_cores(pos)
+
+        else:
+            cores = 0
+
+        if cores == 0:
+
+            self.run_sampler(pos, skip_state_check)
+
+        else:
+
+            self.run_sampler_pool(pos, cores, skip_state_check)
+
         
         if save_samples:
 
@@ -787,7 +820,8 @@ class ExoSystem:
 
         for i in range(10):
 
-            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead', args = (self,))
+            self.setup_miniexs()
+            res = minimize(lambda x, *args: -1 * (log_like({k:v for k,v in zip(self.keys, x)}, *args)[0] if np.any(self.fit_ttv) else log_like({k:v for k,v in zip(self.keys, x)}, *args)), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             x = {k:v for k,v in zip(self.keys, res.x)}
 
             if not os.path.isdir(self.direc+'Plots/'+name+'/sigma_clip'):
@@ -1186,7 +1220,19 @@ class ExoSystem:
             skip_state_check (bool): Whether or not to skip the initial state check after the burn-in.
         """
 
-        self.sampler = emcee.EnsembleSampler(nwalkers = self.nwalk, ndim = len(self.x), log_prob_fn = log_like, args = (self,), parameter_names = self.parnames, blobs_dtype = [('ps', np.ndarray), ('tcs', np.ndarray)])
+        self.setup_miniexs()
+
+        sampler_kwargs = {'nwalkers': self.nwalk,
+                          'ndim': len(self.x),
+                          'log_prob_fn': log_like,
+                          'parameter_names': self.parnames,
+                          }
+
+        if self.fit_transit and np.any(self.fit_ttv):
+
+            sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
+
+        self.sampler = emcee.EnsembleSampler(**sampler_kwargs)
 
         print('\nRunning MCMC burn-in.')
 
@@ -1206,6 +1252,129 @@ class ExoSystem:
         if self.fit_transit and np.any(self.fit_ttv):
 
             self.blobs = self.sampler.get_blobs()
+
+    
+    def run_sampler_pool(self, pos: np.typing.NDArray, cores: int, skip_state_check: bool):
+        """Not meant to be run on its own. Runs the MCMC sampler for burn-in and sample steps using emcee with multiprocessing Pool parallelization.
+
+        Args:
+            pos (ndarray): The initial positions of the chains generated by initialize_chains.
+
+            cores (int): The number of cores to use.
+
+            skip_state_check (bool): Whether or not to skip the initial state check after the burn-in.
+        """
+
+        with Pool(processes = cores, initializer=self.setup_miniexs) as pool:
+
+            sampler_kwargs = {'nwalkers': self.nwalk,
+                              'ndim': len(self.x),
+                              'log_prob_fn': log_like,
+                              'parameter_names': self.parnames,
+                              'pool': pool
+                              }
+            
+            if self.fit_transit and np.any(self.fit_ttv):
+    
+                sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
+    
+            self.sampler = emcee.EnsembleSampler(**sampler_kwargs)
+
+            print('\nRunning MCMC burn-in.')
+
+            prog = 'notebook' if is_notebook else True
+
+            state = self.sampler.run_mcmc(pos, self.nburn, progress = prog)
+            self.sampler.reset()
+
+            print('\nRunning MCMC sampling.')
+
+            self.sampler.run_mcmc(state, self.nrun, progress = prog, skip_initial_state_check = skip_state_check)
+
+            self.samples = self.sampler.get_chain()
+
+            self.log_likes = self.sampler.get_log_prob()
+
+            if self.fit_transit and np.any(self.fit_ttv):
+
+                self.blobs = self.sampler.get_blobs()
+
+
+    def find_opt_cores(self, pos: np.typing.NDArray) -> int:
+        """Finds the optimal number of cores to run in parallel for best performance (or whether to use serial instead) by running short, 15-step
+        MCMC runs. This is called when parallel is set to 'auto' in ExoSystem.fit.
+
+        Args:
+            pos (ndarray): The initial positions of the chains generated by initialize_chains.
+
+        Returns:
+            int: The optimal number of cores to use, with 0 for serial.
+        """
+
+        max_cores = os.cpu_count()
+
+        test_cores = list(range(0, max_cores+1, 2))
+        if max_cores not in test_cores:
+            test_cores.append(max_cores)
+
+        best_time = np.inf
+        opt_cores = 0
+
+        sampler_kwargs = {'nwalkers': self.nwalk,
+                         'ndim': len(self.x),
+                         'log_prob_fn': log_like,
+                         'parameter_names': self.parnames,
+                         }
+    
+        if self.fit_transit and np.any(self.fit_ttv):
+
+            sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
+
+        for c in test_cores:
+
+            if c == 0:
+                ctx = nullcontext()
+            else:
+                ctx = Pool(processes = c, initializer = self.setup_miniexs)
+
+            try:
+                with ctx as pool:
+
+                    if c == 0:
+                        sampler_kwargs['pool'] = None
+                    else:
+                        sampler_kwargs['pool'] = pool
+
+                    benchsampler = emcee.EnsembleSampler(**sampler_kwargs)
+                    t0 = time.perf_counter()
+                    benchsampler.run_mcmc(pos, 15, progress = False)
+                    elapsed = time.perf_counter() - t0
+
+                    if elapsed < best_time:
+                        best_time = elapsed
+                        opt_cores = c
+
+            except Exception as e:
+                print('{0} cores failed benchmarking: {1}'.format(c, e))
+                continue
+
+        if opt_cores == 0:
+            print('\nRunning in serial.')
+        else:
+            print('\nRunning in parallel with {0} cores.'.format(opt_cores))
+
+        return opt_cores
+    
+
+    def setup_miniexs(self):
+        """Creates a MiniExoSystem object from the current ExoSystem, storing the data and options used in the log likelihood function for fitting.
+        This MiniExoSystem object is made global, allowing the log likelihood function to access it, and avoiding pickling all of the data during
+        parallel MCMC sampling.
+        """
+
+        global miniexs
+
+        miniexs = MiniExoSystem(self)
 
 
     def save_samples(self, name):
@@ -3748,6 +3917,24 @@ class ExoSystem:
 
 
 
+class MiniExoSystem:
+    """A class to store the data and options from an ExoSystem object used in the log likelihood function for fitting, without all of the methods.
+    Critically, this does not contain self.sampler, allowing it to be used in a multiprocessing Pool.
+    """
+
+    def __init__(self, exs: ExoSystem):
+        """Initializes the MiniExoSystem from an ExoSystem object. Copies the attributes from the ExoSystem which are necessary for fitting.
+        """
+
+        attrs = ('use_priors','fixed','n','fit_planets','order_a','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
+                 'is_rv','fit_rv','ttvi','allpriors','tt','lcnames','ld','filters','ldgrids','ttvsectors','exptimes','supersamples','is_eclipse','ms',
+                 'rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames','rv','rverr')
+
+        for att in attrs:
+            val = getattr(exs, att, None)
+            if val is not None:
+                setattr(self, att, val)
+
 
 
 def calc_m_from_k(p: np.typing.ArrayLike, k: np.typing.ArrayLike, e: np.typing.ArrayLike, inc: np.typing.ArrayLike, mstar: np.typing.ArrayLike) -> np.typing.ArrayLike:
@@ -4016,7 +4203,7 @@ def lnNorm(data: np.typing.ArrayLike, model: np.typing.ArrayLike, err: np.typing
     return - 0.5 * ( (model - data) / err)**2 - np.log( np.sqrt(2 * np.pi) * err)
 
 
-def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, np.typing.ArrayLike]:
+def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typing.ArrayLike]:
     """The log likelihood function for fitting.
 
     Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood and for stellar
@@ -4024,25 +4211,26 @@ def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, 
 
     Args:
         par_in (dict): Dictionary of fit parameters.
-        exs (ExoSystem): The exosystem object currently being used to fit. Stores all of the options, data sets, etc.
 
     Returns:
-        tuple: A tuple of the log likelihood, an array of periods of any planets that are fit for ttvs, and an array of conjunction times of any planets
-        that are fit for ttvs. The former is the primary return for running MCMC with emcee. The latter two are saved as "blobs" in the emcee
-        sampler object, and are used to track the period and time of conjunction at each step rather than recalculating the linear regression
-        after the fact, since these are not directly fit parameters. If any parameter is out of bounds or any portion of the log likelihood is nan,
-        returns negative infinity and empty lists.
+        float | tuple: Generally, just the log likelihood value is returned. If any parameter is out of bounds or any portion of the log likelihood
+            is nan, returns negative infinity. If fitting for TTVs, an array of periods and an array of conjunction times of any planets that are
+            being fit for TTVs are also returned. They are used to track the period and time of conjunction that are computed from linear regression
+            at each step, rather than redoing it later.
     """
 
-    if exs.use_priors:
+    if miniexs.use_priors:
 
-        par = par_in | exs.fixed
+        par = par_in | miniexs.fixed
 
-        for i in range(exs.n):
+        for i in range(miniexs.n):
 
             if  'w {0}'.format(i+1) in par_in and not -np.pi < par_in['w {0}'.format(i+1)] <= np.pi:
 
-                return -np.inf, [], []
+                if np.any(miniexs.fit_ttv):
+                    return -np.inf, [], []
+                else:
+                    return -np.inf
 
             if 'e {0}'.format(i+1) in par:
 
@@ -4053,84 +4241,108 @@ def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, 
 
         par = par_in.copy()
 
-    if exs.fit_planets:
+    if miniexs.fit_planets:
 
-        if exs.order_a and exs.fit_transit:
+        if miniexs.order_a and miniexs.fit_transit:
             logalist = []
 
-        for i in range(exs.n):
+        for i in range(miniexs.n):
         
-            if exs.is_transit[i] and exs.fit_transit:
+            if miniexs.is_transit[i] and miniexs.fit_transit:
 
                 if not 0 <= par['cos(i) {0}'.format(i+1)] <= 1:
-                    return -np.inf, [], []
+                    if np.any(miniexs.fit_ttv):
+                        return -np.inf, [], []
+                    else:
+                        return -np.inf
                 
-                if exs.order_a:
+                if miniexs.order_a:
                     logalist.append(par['log(a/rs) {0}'.format(i+1)])
                 
                 
-            if exs.fit_ecc[i]:
+            if miniexs.fit_ecc[i]:
 
                 if par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2 > 0.9:
-                    return -np.inf, [], []
+                    if np.any(miniexs.fit_ttv):
+                        return -np.inf, [], []
+                    else:
+                        return -np.inf
                 
 
-        if exs.fit_transit and exs.order_a:
-            logadiff = np.diff(np.array(logalist)[exs.transitsortorder])
+        if miniexs.fit_transit and miniexs.order_a:
+            logadiff = np.diff(np.array(logalist)[miniexs.transitsortorder])
             if np.any(logadiff <= 0):
-                return -np.inf, [], []
+                if np.any(miniexs.fit_ttv):
+                    return -np.inf, [], []
+                else:
+                    return -np.inf
 
 
-        if exs.fit_transit and exs.fit_ld:
+        if miniexs.fit_transit and miniexs.fit_ld:
             if not 0 <= par['u1'] <= 1 or not 0 <= par['u2'] <= 1:
-                return -np.inf, [], []
+                if np.any(miniexs.fit_ttv):
+                    return -np.inf, [], []
+                else:
+                    return -np.inf
         
 
 
     like = 0
 
-    if exs.fit_star:
+    if miniexs.fit_star:
 
         if not -0.5 <= par['feh'] <= 0.5:
-            return -np.inf, [], []
+            if np.any(miniexs.fit_ttv):
+                return -np.inf, [], []
+            else:
+                return -np.inf
         
         if par['AV'] < 0:
-            return -np.inf, [], []
+            if np.any(miniexs.fit_ttv):
+                return -np.inf, [], []
+            else:
+                return -np.inf
 
-        starlike = exs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
-        starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+        starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+        starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
 
         if np.isnan(starlike):
-            return -np.inf, [], []
+            if np.any(miniexs.fit_ttv):
+                return -np.inf, [], []
+            else:
+                return -np.inf
         
         like += starlike
 
-        if exs.fit_planets:
+        if miniexs.fit_planets:
 
-            rstar, mstar, Tstar, loggstar = exs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
+            rstar, mstar, Tstar, loggstar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
-                return -np.inf, [], []
+                if np.any(miniexs.fit_ttv):
+                    return -np.inf, [], []
+                else:
+                    return -np.inf
 
             arlist = []
-            for i in range(exs.n):
+            for i in range(miniexs.n):
 
-                if not exs.is_transit[i]:
+                if not miniexs.is_transit[i]:
                     arlist.append(np.nan)
                     continue
 
-                if exs.fit_ttv[i]:
+                if miniexs.fit_ttv[i]:
 
-                    p = get_ttv_params(par, i+1, exs.ttvi['{0}'.format(i+1)], ar = 1)[0]
+                    p = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)], ar = 1)[0]
 
                 else:
 
                     p = np.exp(par['log(P) {0}'.format(i+1)])
 
-                if exs.is_rv[i] and exs.fit_rv:
+                if miniexs.is_rv[i] and miniexs.fit_rv:
 
                     e = 0
-                    if exs.fit_ecc[i]:
+                    if miniexs.fit_ecc[i]:
                         e = par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2
 
                     mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)
@@ -4150,164 +4362,172 @@ def log_like(par_in: dict, exs: ExoSystem) -> tuple[float, np.typing.ArrayLike, 
     ps = []
     tcs = []
     
-    if exs.use_priors:
+    if miniexs.use_priors:
         priorpar = par.copy()
 
-    if exs.fit_planets:
+    if miniexs.fit_planets:
 
-        for i in range(exs.n):
+        for i in range(miniexs.n):
             
-            if exs.is_transit[i] and exs.fit_transit:
+            if miniexs.is_transit[i] and miniexs.fit_transit:
 
-                if exs.fit_ttv[i]:
+                if miniexs.fit_ttv[i]:
 
-                    pars = get_ttv_params(par, i+1, exs.ttvi['{0}'.format(i+1)], ar = arlist[i] if exs.fit_star else None)
+                    pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)], ar = arlist[i] if miniexs.fit_star else None)
                     ps.append(pars[0])
                     tcs.append(pars[1])
                     tpars.append(pars)
 
-                    if exs.use_priors:
+                    if miniexs.use_priors:
                         priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
                         priorpar['Tc {0}'.format(i+1)] = pars[1]
 
-                    if exs.is_rv[i] and exs.fit_rv:
+                    if miniexs.is_rv[i] and miniexs.fit_rv:
 
                         rpars.append(get_rv_params(par, i+1, pars[0], pars[1]))
 
                 else:
 
-                    tpars.append(get_transit_params(par, i+1, ar = arlist[i] if exs.fit_star else None))
+                    tpars.append(get_transit_params(par, i+1, ar = arlist[i] if miniexs.fit_star else None))
 
-                    if exs.is_rv[i] and exs.fit_rv:
+                    if miniexs.is_rv[i] and miniexs.fit_rv:
 
                         rpars.append(get_rv_params(par, i+1))
 
-            elif exs.is_rv[i] and exs.fit_rv:
+            elif miniexs.is_rv[i] and miniexs.fit_rv:
 
                 rpars.append(get_rv_params(par, i+1))
             
 
-    if exs.use_priors:
+    if miniexs.use_priors:
 
-        priorlike = exs.allpriors.apply(priorpar)
+        priorlike = miniexs.allpriors.apply(priorpar)
 
         if np.isinf(priorlike):
-            return -np.inf, [], []
+            if np.any(miniexs.fit_ttv):
+                return -np.inf, [], []
+            else:
+                return -np.inf
         
         else:
             like += priorlike
 
 
-    if exs.fit_transit:
+    if miniexs.fit_transit:
 
-        for i in range(len(exs.tt)):
+        for i in range(len(miniexs.tt)):
 
-            fm = par['F0 {0}'.format(exs.lcnames[i])]
+            fm = par['F0 {0}'.format(miniexs.lcnames[i])]
 
-            ld = exs.ld[exs.filters[i]]
+            ld = miniexs.ld[miniexs.filters[i]]
 
-            if exs.fit_ld:
+            if miniexs.fit_ld:
 
-                ld = [par['u1 {0}'.format(exs.filters[i])], par['u2 {0}'.format(exs.filters[i])]]
+                ld = [par['u1 {0}'.format(miniexs.filters[i])], par['u2 {0}'.format(miniexs.filters[i])]]
 
-            if exs.fit_star:
+            if miniexs.fit_star:
 
-                ld = [exs.ldgrids[exs.filters[i]][0]([Tstar, loggstar, par['feh']])[0], exs.ldgrids[exs.filters[i]][1]([Tstar, loggstar, par['feh']])[0]]
+                ld = [miniexs.ldgrids[miniexs.filters[i]][0]([Tstar, loggstar, par['feh']])[0], miniexs.ldgrids[miniexs.filters[i]][1]([Tstar, loggstar, par['feh']])[0]]
 
-            for j in range(exs.n):
+            for j in range(miniexs.n):
 
-                if not exs.is_transit[j]:
+                if not miniexs.is_transit[j]:
                     continue
 
-                k = np.sum(exs.is_transit[:j])
+                k = np.sum(miniexs.is_transit[:j])
 
-                if exs.fit_ttv[j]:
+                if miniexs.fit_ttv[j]:
 
                     p = tpars[k][0]
 
-                    for z in range(len(exs.ttvi['{0}'.format(j+1)])):
+                    for z in range(len(miniexs.ttvi['{0}'.format(j+1)])):
 
-                        if exs.ttvsectors['{0} {1}'.format(j+1, z+1)] != i:
+                        if miniexs.ttvsectors['{0} {1}'.format(j+1, z+1)] != i:
                             continue
 
                         ttime = par['TT {0} {1}'.format(j+1, z+1)]
 
                         tpars[k][1] = ttime
 
-                        ind = np.where((exs.tt[i] >= ttime - p/4) & (exs.tt[i] <= ttime + p/4))
+                        ind = np.where((miniexs.tt[i] >= ttime - p/4) & (miniexs.tt[i] <= ttime + p/4))
 
-                        fm0 = np.zeros(len(exs.tt[i]))
+                        fm0 = np.zeros(len(miniexs.tt[i]))
 
-                        fm0[ind] += lightCurve(tpars[k], exs.tt[i][ind], ld, exs.exptimes[i], exs.supersamples[i])
+                        fm0[ind] += lightCurve(tpars[k], miniexs.tt[i][ind], ld, miniexs.exptimes[i], miniexs.supersamples[i])
 
                         fm += fm0
 
                 else:
 
-                    if exs.is_eclipse[j]:
+                    if miniexs.is_eclipse[j]:
 
                         mp = 0
-                        ms = mstar if exs.fit_star else exs.ms
+                        ms = mstar if miniexs.fit_star else miniexs.ms
 
-                        if exs.is_rv[j] and exs.fit_rv:
+                        if miniexs.is_rv[j] and miniexs.fit_rv:
 
-                            kr = np.sum(exs.is_rv[:j])
+                            kr = np.sum(miniexs.is_rv[:j])
                             
                             mp = calc_m_from_k(p, rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)
 
                         q = mp/ms
 
-                        fm += lightCurve(tpars[k], exs.tt[i], ld, exs.exptimes[i], exs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rstar if exs.fit_star else exs.rs, q = q)
+                        fm += lightCurve(tpars[k], miniexs.tt[i], ld, miniexs.exptimes[i], miniexs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rstar if miniexs.fit_star else miniexs.rs, q = q)
 
                     else:
 
-                        fm += lightCurve(tpars[k], exs.tt[i], ld, exs.exptimes[i], exs.supersamples[i])
+                        fm += lightCurve(tpars[k], miniexs.tt[i], ld, miniexs.exptimes[i], miniexs.supersamples[i])
 
-            if exs.detrend[i]:
+            if miniexs.detrend[i]:
 
-                resid = exs.f[i] - fm
+                resid = miniexs.f[i] - fm
                 
-                ii = np.sum(exs.detrend[:i])
+                ii = np.sum(miniexs.detrend[:i])
 
                 try:
 
-                    gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(exs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(exs.lcnames[i])]), exs.tt[i], exs.ferr[i], exs.gps[ii])
+                    gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(miniexs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(miniexs.lcnames[i])]), miniexs.tt[i], miniexs.ferr[i], miniexs.gps[ii])
 
                 except:
 
-                    return -np.inf, [], []
+                    if np.any(miniexs.fit_ttv):
+                        return -np.inf, [], []
+                    else:
+                        return -np.inf
 
                 like += gp.log_likelihood(resid)
 
             else:
 
-                like += np.sum(lnNorm(exs.f[i], fm, exs.ferr[i]))
+                like += np.sum(lnNorm(miniexs.f[i], fm, miniexs.ferr[i]))
 
-    if exs.fit_rv:
+    if miniexs.fit_rv:
 
-        rvm = np.array([par['gamma']]*len(exs.tr)) + (par['gamma_dot'] * (exs.tr - exs.tr_ref) if exs.rv_bkg_order > 0 else 0) + (par['gamma_ddot'] * (exs.tr - exs.tr_ref)**2 if exs.rv_bkg_order > 1 else 0)
+        rvm = np.array([par['gamma']]*len(miniexs.tr)) + (par['gamma_dot'] * (miniexs.tr - miniexs.tr_ref) if miniexs.rv_bkg_order > 0 else 0) + (par['gamma_ddot'] * (miniexs.tr - miniexs.tr_ref)**2 if miniexs.rv_bkg_order > 1 else 0)
 
-        for i in np.unique(exs.which_rv)[1:]:
+        for i in np.unique(miniexs.which_rv)[1:]:
 
-            j = np.where(exs.which_rv == i)[0]
+            j = np.where(miniexs.which_rv == i)[0]
 
-            rvm[j] += par['rv_offset {0}'.format(exs.rvnames[i])]
+            rvm[j] += par['rv_offset {0}'.format(miniexs.rvnames[i])]
 
-        for i in range(exs.n):
+        for i in range(miniexs.n):
 
-            if not exs.is_rv[i]:
+            if not miniexs.is_rv[i]:
                 continue
 
-            j = np.sum(exs.is_rv[:i])
+            j = np.sum(miniexs.is_rv[:i])
 
-            rvm += rvModel(rpars[j], exs.tr)
-
-
-        like += np.sum(lnNorm(exs.rv, rvm, exs.rverr))
+            rvm += rvModel(rpars[j], miniexs.tr)
 
 
+        like += np.sum(lnNorm(miniexs.rv, rvm, miniexs.rverr))
 
-    return like if not np.isnan(like) else -np.inf, np.array(ps), np.array(tcs)
+
+    if np.any(miniexs.fit_ttv):
+        return like if not np.isnan(like) else -np.inf, np.array(ps, dtype = float), np.array(tcs, dtype = float)
+    else:
+        return like if not np.isnan(like) else -np.inf
 
 
 def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
