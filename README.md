@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/Alfred.png" width="200"/></p>
+<p align="center"><img src="https://github.com/maxkroft/Alfred/blob/86d6fd136874a59387db9b2d1db3662b5b6fa4bc/docs/Alfred.png" width="200"/></p>
 
 # Alfred
 
