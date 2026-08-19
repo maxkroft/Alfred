@@ -61,6 +61,10 @@ Future Features Wishlist
 Changelog
 +++++++++
 
+**1.1.2 (2026-August-19)**
+
+* Added support for parallel MCMC sampling. Users can manually set the number of cores to use, or automatically determine the optimal number by setting the parallel option to 'auto' in the fit function.
+
 **1.1.1 (2026-July-28)**
 
 * Better handling of empty columns in init files.
@@ -80,6 +84,6 @@ Changelog
 
 * Bug fixes.
 
-**1.0.0 (2026-Jun-10)**
+**1.0.0 (2026-June-10)**
 
 * Initial release.
