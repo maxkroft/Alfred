@@ -18,6 +18,7 @@ from astropy import units as u
 import numpy as np
 import re
 from astroquery.vizier import Vizier
+import platform
 
 
 class InitGUI(ctk.CTk):
@@ -48,6 +49,13 @@ class InitGUI(ctk.CTk):
 
         self.directory = ctk.CTkButton(self, text = 'Directory', command = self.direc_cmd, font = (font, 18, 'bold'))
         self.directory.grid(row = 5, column  = 1, padx = 10, pady = 10, sticky = 'ew')
+
+        if platform.system() == 'Windows':
+            self.deiconify()
+            self.attributes("-topmost", True)
+            self.lift()
+            self.focus_force()
+            self.after(200, lambda: self.attributes("-topmost", False))
 
     def add_cmd(self):
         return
@@ -113,6 +121,14 @@ class DeletePrompt(ctk.CTkToplevel):
         self.no = ctk.CTkButton(self, text = 'No', command = self.no_cmd, font = (font, 18, 'bold'))
         self.no.grid(row = 1, column = 1, padx = 10, sticky = 'ew')
 
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+        self.grab_set()
+
+        self.after(200, lambda: self.attributes("-topmost", False))
+
     def yes_cmd(self):
 
         self.answer = True
@@ -142,6 +158,14 @@ class RenamePrompt(ctk.CTkToplevel):
         self.save = ctk.CTkButton(self, text = 'Save', font = (font, 18, 'bold'), command = self.save_cmd)
         self.save.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
 
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+        self.grab_set()
+
+        self.after(200, lambda: self.attributes("-topmost", False))
+
     def save_cmd(self):
 
         self.newname = self.entry_var.get().strip()
@@ -169,6 +193,14 @@ class DirectoryPrompt(ctk.CTkToplevel):
 
         self.save = ctk.CTkButton(self, text = 'Save', font = (font, 18, 'bold'), command = self.save_cmd)
         self.save.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'ew')
+
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+        self.grab_set()
+
+        self.after(200, lambda: self.attributes("-topmost", False))
 
     def save_cmd(self):
 
@@ -355,29 +387,22 @@ class ScrollableDropdown(ctk.CTkToplevel):
             self._place_dropdown()
 
     def _place_dropdown(self):
-        # Crucial Fix: Force Tkinter to refresh geometry buffers before calculation
+
         self.attach.update_idletasks()
         
-        # Compute exact pixel coordinates *at the time of the click*
         x = self.attach.winfo_rootx()
         y = self.attach.winfo_rooty() + self.attach.winfo_height()
         
-        # Match button's actual rendered width if no custom override is passed
         width = self.requested_width if self.requested_width else self.attach.winfo_width()
         
-        # Resize internal elements safely
         self.frame.configure(width=width - 15)
         
-        # Position and display the pop-up overlay window directly below button boundary
         self.geometry(f"{width}x{self.requested_height}+{x}+{y}")
         self.deiconify()
-        
         self.lift()
-
         self.focus_force()
         
-        # Close drop menu safely if user clicks anywhere else in the application window
-        self.bind("<FocusOut>", lambda e: self.withdraw())
+        self.bind("<FocusOut>", self._on_focus_out)
 
     def _on_select(self, value):
         if self.command:
@@ -386,6 +411,21 @@ class ScrollableDropdown(ctk.CTkToplevel):
             self.attach.set(value)
         elif isinstance(self.attach, ctk.CTkButton):
             self.attach.configure(text=value)
+        self.withdraw()
+
+    def _on_focus_out(self, event):
+
+        mouse_x = self.winfo_pointerx()
+        mouse_y = self.winfo_pointery()
+        
+        geo_x = self.winfo_rootx()
+        geo_y = self.winfo_rooty()
+        geo_w = self.winfo_width()
+        geo_h = self.winfo_height()
+        
+        if (geo_x <= mouse_x <= geo_x + geo_w) and (geo_y <= mouse_y <= geo_y + geo_h):
+            return
+            
         self.withdraw()
     
 
@@ -487,6 +527,13 @@ class PlanetGUI(ctk.CTkToplevel):
 
         self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
         self.save.grid(row = 6, column = 0, padx = 10, pady = (10,0), sticky = "ew", columnspan = 2)
+
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+
+        self.after(200, lambda: self.attributes("-topmost", False))
 
 
 
@@ -1382,6 +1429,14 @@ class StarQueryPrompt(ctk.CTkToplevel):
         self.run = ctk.CTkButton(self, text = 'Run Query', font = (font, 18, 'bold'), command = self.run_cmd)
         self.run.grid(row = 2, column = 0, padx = 10, pady = 10, sticky = 'ew')
 
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+        self.grab_set()
+
+        self.after(200, lambda: self.attributes("-topmost", False))
+
     def run_cmd(self):
 
         cid = self.entry_var.get().strip()
@@ -1811,6 +1866,14 @@ class LDGenPrompt(ctk.CTkToplevel):
         self.run = ctk.CTkButton(self, text = 'Generate', font = (font, 18, 'bold'), command = self.run_cmd)
         self.run.grid(row = 6, column = 0, padx = 10, pady = 10, sticky = 'ew')
 
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+        self.grab_set()
+
+        self.after(200, lambda: self.attributes("-topmost", False))
+
 
     def run_cmd(self):
 
@@ -1965,6 +2028,13 @@ class TTVGUI(ctk.CTkToplevel):
 
         self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
         self.save.grid(row = 2, column = 0, padx = 10, pady = 10, sticky = "ew", columnspan = 2)
+
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+
+        self.after(200, lambda: self.attributes("-topmost", False))
 
 
     def setup_frame(self):
