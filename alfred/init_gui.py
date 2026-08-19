@@ -18,7 +18,6 @@ from astropy import units as u
 import numpy as np
 import re
 from astroquery.vizier import Vizier
-import platform
 
 
 class InitGUI(ctk.CTk):
@@ -50,12 +49,16 @@ class InitGUI(ctk.CTk):
         self.directory = ctk.CTkButton(self, text = 'Directory', command = self.direc_cmd, font = (font, 18, 'bold'))
         self.directory.grid(row = 5, column  = 1, padx = 10, pady = 10, sticky = 'ew')
 
-        if platform.system() == 'Windows':
-            self.deiconify()
-            self.attributes("-topmost", True)
-            self.lift()
-            self.focus_force()
-            self.after(200, lambda: self.attributes("-topmost", False))
+        self.after(0, self.bring_to_front)
+
+
+    def bring_to_front(self):
+
+        self.deiconify()
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
+        self.after(200, lambda: self.attributes("-topmost", False))
 
     def add_cmd(self):
         return
