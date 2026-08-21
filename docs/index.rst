@@ -61,6 +61,10 @@ Future Features Wishlist
 Changelog
 +++++++++
 
+**1.1.3 (2026-August-21)**
+
+* Some fixes to the GUIs on Windows 11. Updated the quickstart guide for the GUIs.
+
 **1.1.2 (2026-August-19)**
 
 * Added support for parallel MCMC sampling. Users can manually set the number of cores to use, or automatically determine the optimal number by setting the parallel option to 'auto' in the fit function.
