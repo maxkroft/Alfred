@@ -737,11 +737,32 @@ class LcFrame(ctk.CTkFrame):
         self.exptime = FloatEntry(self, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(data['Exp Time']) else data['Exp Time']), font = (font, 18), justify = 'center')
         self.exptime.grid(row = 9, column = 0, pady = (10,0), sticky = 'nsew')
 
-        self.filter = ctk.CTkEntry(self, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = data['Filter']))
-        self.filter.grid(row = 10, column = 0, pady = (10,0), sticky = 'nsew')
+        self.filter_frame = ctk.CTkFrame(self)
+        self.filter_frame.grid(row = 10, column = 0, pady = (10,0), sticky = 'nsew')
+
+        self.filter = ctk.CTkOptionMenu(self.filter_frame, values = ld_grid_list+['Other'], font = (font, 18), variable = ctk.StringVar(value = 'Other' if data['Filter'] not in ld_grid_list else data['Filter']), state = 'readonly', command = self.other_filter)
+        self.filter.grid(row = 0, column = 0, sticky = 'nsew')
+        self.filter._dropdown_menu.configure(font = (font, 18))
+
+        self.otherfilter = ctk.CTkEntry(self.filter_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = ''))
 
         self.detrend = ctk.CTkCheckBox(self, variable = ctk.IntVar(value = 1 if data['Detrend'] else 0), text = '')
         self.detrend.grid(row = 11, column = 0, pady = 10, sticky = 'nsew')
+
+        if self.filter.get() == 'Other':
+            self.otherfilter.set(data['Filter'])
+            self.other_filter('Other')
+
+
+    def other_filter(self, choice):
+    
+        if choice == 'Other' and not self.otherfilter.grid_info():
+
+            self.otherfilter.grid(row = 0, column = 1, sticky = 'nsew')
+
+        elif choice != 'Other' and self.otherfilter.grid_info():
+
+            self.otherfilter.grid_forget()
 
 
 class InitLcsGUI(InitGUI):
@@ -851,6 +872,10 @@ class InitLcsGUI(InitGUI):
 
         lc = self.lcs[i]
 
+        filter = lc.filter.get().strip()
+        if filter == 'Other':
+            filter = lc.otherfilter.get().strip()
+
         self.table['File'] = update_string_col(self.table['File'], lc.filename.get().strip(), i)
         self.table['Nickname'] = update_string_col(self.table['Nickname'], lc.nickname.get().strip(), i)
         self.table['Time Col'] = update_string_col(self.table['Time Col'], lc.time.get().strip(), i)
@@ -860,7 +885,7 @@ class InitLcsGUI(InitGUI):
         self.table['Time Offset'][i] = lc.offset.return_float()
         self.table['Err Scale'][i] = lc.errscale.return_float()
         self.table['Exp Time'][i] = lc.exptime.return_float()
-        self.table['Filter'] = update_string_col(self.table['Filter'], lc.filter.get().strip(), i)
+        self.table['Filter'] = update_string_col(self.table['Filter'], filter, i)
         self.table['Detrend'][i] = lc.detrend.get() == 1
 
 
@@ -1828,7 +1853,7 @@ class LDFrame(ctk.CTkFrame):
 
             self.generate.configure(fg_color = "#CE2424", hover_color = '#CE2424')
 
-        elif self.otherfilter.grid_info():
+        elif choice != 'Other' and self.otherfilter.grid_info():
 
             self.otherfilter.grid_forget()
 
