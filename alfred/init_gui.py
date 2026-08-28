@@ -1063,7 +1063,7 @@ class PriorFrame(ctk.CTkFrame):
 
         self.data = data
 
-        self.prior_convert = {'U': 'Uniform', 'G': 'Gaussian', 'F': 'Fixed', 'J': "Jeffrey's", 'MJ': "Mod. Jeffrey's"}
+        self.prior_convert = {'U': 'Uniform', 'G': 'Gaussian', 'F': 'Fixed', 'LU': "Log Uniform", 'MJ': "Mod. Jeffrey's"}
 
         self.grid_columnconfigure(list(range(1,8)), weight = 1)
         self.grid_rowconfigure((0,1), weight = 1)
@@ -1101,7 +1101,7 @@ class PriorFrame(ctk.CTkFrame):
 
         priortypelabel = ctk.CTkLabel(self, text = 'Prior Type', font = (font, 16, 'bold'))
         priortypelabel.grid(row = 0, column = 5, padx = (10,0), sticky = 'nsew')
-        prioroptions = ['Uniform','Gaussian','Fixed',"Jeffrey's", "Mod. Jeffrey's"]
+        prioroptions = ['Uniform','Gaussian','Fixed',"Log Uniform", "Mod. Jeffrey's"]
         self.priortype = ctk.CTkOptionMenu(self, values = prioroptions, font = (font, 18), variable = ctk.StringVar(value = 'Gaussian' if data['Prior Type'] == '' else self.prior_convert[data['Prior Type']]), command = self.priortype_cmd)
         self.priortype.grid(row = 1, column = 5, padx = (10,0), pady = (10,0), sticky = 'nsew')
         self.priortype._dropdown_menu.configure(font = (font, 18))
@@ -1181,7 +1181,7 @@ class PriorFrame(ctk.CTkFrame):
         prior_param_convert = {'Uniform': ['Lower Bound','Upper Bound'],
                                'Gaussian': ['Center', 'Width'],
                                'Fixed': ['Value',''],
-                               "Jeffrey's": ['Lower Bound', 'Upper Bound'],
+                               "Log Uniform": ['Lower Bound', 'Upper Bound'],
                                "Mod. Jeffrey's": ['Upper Bound', 'Knee Value']}
 
         self.par1label_var.set(prior_param_convert[choice][0])
@@ -1216,10 +1216,10 @@ class PriorFrame(ctk.CTkFrame):
                     'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp',
                     'eep', 'log10(age)', 'age', 'distance', 'mstar', 'rstar', 'rhostar']
 
-        if priortype in ["Jeffrey's", "Mod. Jeffrey's"] or variable in pos_def_vars:
+        if priortype in ["Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
             self.par1.min_val = 0
         
-        if priortype in ['Gaussian',"Jeffrey's", "Mod. Jeffrey's"] or variable in pos_def_vars:
+        if priortype in ['Gaussian',"Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
             self.par2.min_val = 0
 
         bounded_vars = {'cos(i)':[0,1], 'i':[-np.pi,np.pi], 'secw':[-1,1], 'sesw':[-1,1], 'e':[0,1], 'w':[-np.pi,np.pi], 
@@ -1229,7 +1229,7 @@ class PriorFrame(ctk.CTkFrame):
 
             self.par1.max_val = bounded_vars[variable][1]
 
-            if priortype in ["Jeffrey's", "Mod. Jeffrey's"]:
+            if priortype in ["Log Uniform", "Mod. Jeffrey's"]:
 
                 self.par1.min_val = max(bounded_vars[variable][0],0)
                 self.par2.min_val = max(bounded_vars[variable][0],0)
@@ -1348,7 +1348,7 @@ class InitPriorsGUI(InitGUI):
 
     def update_table(self, i):
 
-        prior_convert = {'Uniform': 'U', 'Gaussian': 'G', 'Fixed': 'F', "Jeffrey's": 'J', "Mod. Jeffrey's": 'MJ'}
+        prior_convert = {'Uniform': 'U', 'Gaussian': 'G', 'Fixed': 'F', "Log Uniform": 'LU', "Mod. Jeffrey's": 'MJ'}
 
         prior = self.priors[i]
 

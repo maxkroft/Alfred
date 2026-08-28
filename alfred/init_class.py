@@ -991,8 +991,8 @@ class Init_ttvs(InitFile):
 class Init_priors(InitFile):
     """Class for creating, loading, and editing prior initialization files. Inherits from InitFile. Contains any priors the user wishes to apply to the
     fit. Currently supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), fixed priors (fixing a
-    parameter at a specific value so it is not fit), Jeffrey's priors (uninformative prior independent of scale), and modified Jeffrey's priors
-    (becomes log uniform below the knee value). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances
+    parameter at a specific value so it is not fit), log uniform priors (uninformative prior independent of scale), and modified Jeffrey's priors
+    (uniform below the knee value, log uniform above). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances
     of a type of parameter in the fit (e.g. P x, the periods of all planets).
     """
 

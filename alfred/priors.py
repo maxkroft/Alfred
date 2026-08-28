@@ -53,16 +53,16 @@ class Priors:
         self.prior_funcs.append(uniform_prior)
 
 
-    def add_jeffreys_prior(self, lower: float, upper: float):
-        """Adds a Jeffrey's prior function to the list of priors with the given bounds. Variable must be positive definite. The prior function
-        returns negative infinity if the given trial value is out of the bounds, otherwise the normalized Jeffrey's prior. Does not work if the
+    def add_log_uniform_prior(self, lower: float, upper: float):
+        """Adds a log uniform prior function to the list of priors with the given bounds. Variable must be positive definite. The prior function
+        returns negative infinity if the given trial value is out of the bounds, otherwise the normalized log uniform prior. Does not work if the
         lower bound is 0!!! In that case, use a modified Jeffrey's prior. Updates the lower and upper bounds of the Priors object.
         """
 
         self.lbound = max(self.lbound, lower)
         self.ubound = min(self.ubound, upper)
 
-        def jeffreys_prior(x):
+        def log_uniform_prior(x):
 
             if not lower <= x <= upper:
 
@@ -70,7 +70,7 @@ class Priors:
             
             return -np.log(x) - np.log(np.log(upper/lower))
 
-        self.prior_funcs.append(jeffreys_prior)
+        self.prior_funcs.append(log_uniform_prior)
 
     
     def add_modified_jeffreys_prior(self, upper: float, knee: float):
@@ -266,9 +266,9 @@ class AllPriors:
 
             self.fixed[var] = params[0]
 
-        elif prior_type == 'J':
+        elif prior_type == 'LU':
 
-            self.prior_dict[var].add_jeffreys_prior(params[0], params[1])
+            self.prior_dict[var].add_log_uniform_prior(params[0], params[1])
 
         elif prior_type == 'MJ':
 
