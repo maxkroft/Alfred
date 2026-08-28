@@ -1639,7 +1639,7 @@ class ExoSystem:
                         mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
                         self.dres['Mpsini {0}'.format(i+1)] = mp
 
-                if self.fit_star or (not (self.fit_transit and self.is_transit) and (self.is_rv[i] and self.fit_rv)):
+                if self.fit_star or (not (self.fit_transit and self.is_transit[i]) and (self.is_rv[i] and self.fit_rv)):
 
                     a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
                     self.dres['a {0}'.format(i+1)] = a
