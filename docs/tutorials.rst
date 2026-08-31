@@ -3,5 +3,11 @@
 Tutorials
 =========
 
+.. toctree::
+   :titlesonly:
+   
+   tutorials/init_tut
+   tutorials/priors_tut
 
-Tutorials are coming soon!
+
+More tutorials are coming soon!

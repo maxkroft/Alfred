@@ -61,6 +61,14 @@ Future Features Wishlist
 Changelog
 +++++++++
 
+**1.1.5 (2026-August-28)**
+
+* Fixed critical typo in make results
+
+**1.1.4 (2026-August-21)**
+
+* Re-released so logo would appear on PyPi.
+
 **1.1.3 (2026-August-21)**
 
 * Some fixes to the GUIs on Windows 11. Updated the quickstart guide for the GUIs.
