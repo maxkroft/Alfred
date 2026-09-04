@@ -373,7 +373,7 @@ class ExoSystem:
 
     def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, parallel: bool | int | Literal['auto'] = False,
             nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
-            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, order_a = False, skip_state_check = False) -> None:
+            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, skip_state_check = False) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -449,11 +449,6 @@ class ExoSystem:
                 Default is 600 seconds.
             
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
-            
-            order_a (bool, optional): Whether or not to put an order prior on the planetary semi-major axes in a transit fit with multiple transiting
-                planets. If True, restricts the semi-major axis of each planet to be greater than those of planets with shorter orbital periods. If
-                fitting the stellar parameters, overrides this to False, since the stellar mass is instead used to set semi-major axes. Default is
-                False.
 
             skip_state_check (bool, optional): Passed to the emcee sampler. Whether or not to skip checking whether the initial parameters can fully
                 explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
@@ -470,7 +465,6 @@ class ExoSystem:
         self.fit_rv = fit_rv
         self.fit_star = fit_star
         self.parallel = parallel
-        self.order_a = order_a
         self.fit_planets = self.fit_transit or self.fit_rv
         self.lc_supersample_size = lc_supersample_size
 
@@ -506,7 +500,6 @@ class ExoSystem:
         if self.fit_star:
 
             self.fit_ld = False
-            self.order_a = False
 
             self.misti = get_ichrone('mist', bands = list(self.magbands))
 
@@ -3926,7 +3919,7 @@ class MiniExoSystem:
         """Initializes the MiniExoSystem from an ExoSystem object. Copies the attributes from the ExoSystem which are necessary for fitting.
         """
 
-        attrs = ('use_priors','fixed','n','fit_planets','order_a','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
+        attrs = ('use_priors','fixed','n','fit_planets','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
                  'is_rv','fit_rv','ttvi','allpriors','tt','lcnames','ld','filters','ldgrids','ttvsectors','exptimes','supersamples','is_eclipse','ms',
                  'rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames','rv','rverr')
 
@@ -4243,9 +4236,6 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
 
     if miniexs.fit_planets:
 
-        if miniexs.order_a and miniexs.fit_transit:
-            logalist = []
-
         for i in range(miniexs.n):
         
             if miniexs.is_transit[i] and miniexs.fit_transit:
@@ -4256,9 +4246,6 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
                     else:
                         return -np.inf
                 
-                if miniexs.order_a:
-                    logalist.append(par['log(a/rs) {0}'.format(i+1)])
-                
                 
             if miniexs.fit_ecc[i]:
 
@@ -4267,15 +4254,6 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
                         return -np.inf, [], []
                     else:
                         return -np.inf
-                
-
-        if miniexs.fit_transit and miniexs.order_a:
-            logadiff = np.diff(np.array(logalist)[miniexs.transitsortorder])
-            if np.any(logadiff <= 0):
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
 
 
         if miniexs.fit_transit and miniexs.fit_ld:

@@ -199,7 +199,7 @@ class AllPriors:
             split = var.split()
 
             svar = split[0]
-            if svar in searchvars:
+            if svar in searchvars and searchvars[svar] in x0:
                 svar = searchvars[svar]
 
             fvar = ' '.join([svar]+split[1:])
@@ -444,7 +444,7 @@ class AllPriors:
 
         elif var[:6] == 'cos(i)':
 
-            svar = ' '.join(['cos(i)']+var.split()[1:])
+            svar = ' '.join(['i']+var.split()[1:])
 
             if svar in self.prior_dict:
 
