@@ -9,7 +9,7 @@ import batman
 from scipy.stats import linregress, truncnorm
 from celerite2 import GaussianProcess, terms
 from scipy.optimize import minimize
-from astropy.table import Table
+from astropy.table import Table, vstack
 from astropy.io import fits
 from astropy import units as u
 from astropy import constants
@@ -661,9 +661,21 @@ class ExoSystem:
             for i in np.unique(self.which_rv)[1:]:
                 self.x0['rv_offset {0}'.format(self.rvnames[i])] = np.mean(self.rv[self.which_rv == i]) - self.x0['gamma']
 
+
+        req_priors = Table(rows = [
+            ['e x', 'U', 0, 0.9],
+            ['w x', 'U', -np.pi, np.pi],
+            ['cos(i) x', 'U', 0, 1],
+            ['u1 x', 'U', 0, 1],
+            ['u2 x', 'U', 0, 1]
+        ], names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'])
+        
+
         if self.use_priors:
 
-            self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+            prior_tab = vstack([self.init_priors.table, req_priors])
+
+            self.allpriors = AllPriors(prior_tab, self.x0, self.fit_ttv)
             
             self.fixed = self.allpriors.fixed.copy()
 
@@ -682,6 +694,13 @@ class ExoSystem:
                 if f in self.x0:
 
                     self.x0.pop(f)
+
+        else:
+
+            self.allpriors = AllPriors(req_priors, self.x0, self.fit_ttv)
+
+            self.fixed = {}
+
 
         self.keys = list(self.x0.keys())
 
@@ -814,7 +833,7 @@ class ExoSystem:
         for i in range(10):
 
             self.setup_miniexs()
-            res = minimize(lambda x, *args: -1 * (log_like({k:v for k,v in zip(self.keys, x)}, *args)[0] if np.any(self.fit_ttv) else log_like({k:v for k,v in zip(self.keys, x)}, *args)), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
+            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             x = {k:v for k,v in zip(self.keys, res.x)}
 
             if not os.path.isdir(self.direc+'Plots/'+name+'/sigma_clip'):
@@ -1221,10 +1240,6 @@ class ExoSystem:
                           'parameter_names': self.parnames,
                           }
 
-        if self.fit_transit and np.any(self.fit_ttv):
-
-            sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
-
         self.sampler = emcee.EnsembleSampler(**sampler_kwargs)
 
         print('\nRunning MCMC burn-in.')
@@ -1241,10 +1256,6 @@ class ExoSystem:
         self.samples = self.sampler.get_chain()
 
         self.log_likes = self.sampler.get_log_prob()
-
-        if self.fit_transit and np.any(self.fit_ttv):
-
-            self.blobs = self.sampler.get_blobs()
 
     
     def run_sampler_pool(self, pos: np.typing.NDArray, cores: int, skip_state_check: bool):
@@ -1266,10 +1277,6 @@ class ExoSystem:
                               'parameter_names': self.parnames,
                               'pool': pool
                               }
-            
-            if self.fit_transit and np.any(self.fit_ttv):
-    
-                sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
     
             self.sampler = emcee.EnsembleSampler(**sampler_kwargs)
 
@@ -1287,10 +1294,6 @@ class ExoSystem:
             self.samples = self.sampler.get_chain()
 
             self.log_likes = self.sampler.get_log_prob()
-
-            if self.fit_transit and np.any(self.fit_ttv):
-
-                self.blobs = self.sampler.get_blobs()
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
@@ -1318,10 +1321,6 @@ class ExoSystem:
                          'log_prob_fn': log_like,
                          'parameter_names': self.parnames,
                          }
-    
-        if self.fit_transit and np.any(self.fit_ttv):
-
-            sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
 
         for c in test_cores:
 
@@ -1381,9 +1380,6 @@ class ExoSystem:
 
         z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
 
-        if hasattr(self, 'blobs'):
-            z['blobs'] = self.blobs
-
         pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
 
 
@@ -1422,10 +1418,6 @@ class ExoSystem:
 
         self.log_likes = self.sampler.get_log_prob()
 
-        if self.fit_transit and np.any(self.fit_ttv):
-
-            self.blobs = self.sampler.get_blobs()
-
         if save_samples:
 
             self.save_samples(name)
@@ -1443,8 +1435,7 @@ class ExoSystem:
 
 
     def flatten_chains(self):
-        """Flattens and thins by a factor of 20 ExoSystem.samples, ExoSystem.log_likes, and ExoSystem.blobs (if it exists, stores linear regression periods and Tcs of
-        TTV planets from each sample). Stores these as ExoSystem.flat_samples, ExoSystem.flat_log_likes, and ExoSystem.flat_blobs, respectively.
+        """Flattens and thins by a factor of 20 ExoSystem.samples and ExoSystem.log_likes. Stores these as ExoSystem.flat_samples and ExoSystem.flat_log_likes, respectively.
         """
 
         self.flat_samples = self.samples[19::20]
@@ -1454,12 +1445,6 @@ class ExoSystem:
         self.flat_log_likes = self.log_likes[19::20]
         shape = self.flat_log_likes.shape
         self.flat_log_likes = np.reshape(self.flat_log_likes, (shape[0]*shape[1]))
-
-        if hasattr(self, 'blobs'):
-
-            self.flat_blobs = self.blobs[19::20]
-            shape = self.flat_blobs.shape
-            self.flat_blobs = np.reshape(self.flat_blobs, (shape[0]*shape[1]))
 
 
     def make_results(self, name: str):
@@ -1479,11 +1464,6 @@ class ExoSystem:
         Args:
             name (str): Name of the run. Sets the names of the output files from this function.
         """
-
-        if self.fit_transit and np.any(self.fit_ttv):
-
-            ps = np.array([x for x in self.flat_blobs['ps']]).T
-            tcs = np.array([x for x in self.flat_blobs['tcs']]).T
 
         self.res = {}
 
@@ -1559,12 +1539,14 @@ class ExoSystem:
 
                     if self.fit_ttv[i]:
 
-                        k = np.sum(self.fit_ttv[:i])
+                        ttvi = np.array([self.ttvi['{0}'.format(i+1)]]).T
+                        tts = np.array([y['TT {0} {1}'.format(i, j+1)] for j in range(ttvi.shape[0])])
+                        
+                        res = linregress(ttvi, tts)
+                        p = res.slope
+                        tc = res.intercept
 
-                        p = np.array(ps[k])
                         self.dres['P {0}'.format(i+1)] = p
-
-                        tc = np.array(tcs[k])
                         self.dres['Tc {0}'.format(i+1)] = tc
 
                     else:
@@ -1974,8 +1956,7 @@ class ExoSystem:
     
     def load_samples(self, name: str):
         """Loads in unflattened, un-thinned MCMC chains. Paramater name map is saved to ExoSystem.parnames, chains are saved to ExoSystem.samples,
-        log likelihood values are saved to ExoSystem.log_likes. If any TTVs were fit, linear regression periods and Tcs for each sample are saved to
-        Exosystem.blobs.
+        log likelihood values are saved to ExoSystem.log_likes.
 
         Args:
             name (str): Name of the previous run to load in.
@@ -1985,8 +1966,6 @@ class ExoSystem:
         self.parnames = z['parnames']
         self.samples = z['samples']
         self.log_likes = z['log_like']
-        if 'blobs' in z:
-            self.blobs = z['blobs']
 
     
     def load_run_settings(self, name: str):
@@ -3667,9 +3646,6 @@ class ExoSystem:
         self.samples = np.delete(self.samples, idxs, axis = 1)
         self.log_likes = np.delete(self.log_likes, idxs, axis = 1)
 
-        if hasattr(self, 'blobs'):
-            self.blobs = np.delete(self.blobs, idxs, axis = 1)
-
         if save_samples:
 
             self.save_samples(name)
@@ -3708,9 +3684,6 @@ class ExoSystem:
 
         self.samples = self.samples[num_steps:]
         self.log_likes = self.log_likes[num_steps:]
-
-        if hasattr(self, 'blobs'):
-            self.blobs = self.blobs[num_steps:]
 
         if save_samples:
 
@@ -3921,7 +3894,7 @@ class MiniExoSystem:
 
         attrs = ('use_priors','fixed','n','fit_planets','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
                  'is_rv','fit_rv','ttvi','allpriors','tt','lcnames','ld','filters','ldgrids','ttvsectors','exptimes','supersamples','is_eclipse','ms',
-                 'rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames','rv','rverr')
+                 'rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames','rv','rverr','parnames')
 
         for att in attrs:
             val = getattr(exs, att, None)
@@ -4196,7 +4169,7 @@ def lnNorm(data: np.typing.ArrayLike, model: np.typing.ArrayLike, err: np.typing
     return - 0.5 * ( (model - data) / err)**2 - np.log( np.sqrt(2 * np.pi) * err)
 
 
-def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typing.ArrayLike]:
+def log_like(par_in: dict) -> float:
     """The log likelihood function for fitting.
 
     Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood and for stellar
@@ -4212,57 +4185,15 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
             at each step, rather than redoing it later.
     """
 
-    if miniexs.use_priors:
+    par = par_in | miniexs.fixed
 
-        par = par_in | miniexs.fixed
+    for i in range(miniexs.n):
 
-        for i in range(miniexs.n):
+        if 'e {0}'.format(i+1) in par:
 
-            if  'w {0}'.format(i+1) in par_in and not -np.pi < par_in['w {0}'.format(i+1)] <= np.pi:
-
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
-
-            if 'e {0}'.format(i+1) in par:
-
-                par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
-                par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
-
-    else:
-
-        par = par_in.copy()
-
-    if miniexs.fit_planets:
-
-        for i in range(miniexs.n):
-        
-            if miniexs.is_transit[i] and miniexs.fit_transit:
-
-                if not 0 <= par['cos(i) {0}'.format(i+1)] <= 1:
-                    if np.any(miniexs.fit_ttv):
-                        return -np.inf, [], []
-                    else:
-                        return -np.inf
-                
-                
-            if miniexs.fit_ecc[i]:
-
-                if par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2 > 0.9:
-                    if np.any(miniexs.fit_ttv):
-                        return -np.inf, [], []
-                    else:
-                        return -np.inf
-
-
-        if miniexs.fit_transit and miniexs.fit_ld:
-            if not 0 <= par['u1'] <= 1 or not 0 <= par['u2'] <= 1:
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
-        
+            par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
+            par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
+ 
 
 
     like = 0
@@ -4270,25 +4201,16 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
     if miniexs.fit_star:
 
         if not -0.5 <= par['feh'] <= 0.5:
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
+            return -np.inf
         
         if par['AV'] < 0:
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
+            return -np.inf
 
         starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
         starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
 
         if np.isnan(starlike):
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
+            return -np.inf
         
         like += starlike
 
@@ -4297,10 +4219,7 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
             rstar, mstar, Tstar, loggstar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
+                return -np.inf
 
             arlist = []
             for i in range(miniexs.n):
@@ -4340,8 +4259,7 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
     ps = []
     tcs = []
     
-    if miniexs.use_priors:
-        priorpar = par.copy()
+    priorpar = par.copy()
 
     if miniexs.fit_planets:
 
@@ -4356,9 +4274,8 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
                     tcs.append(pars[1])
                     tpars.append(pars)
 
-                    if miniexs.use_priors:
-                        priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
-                        priorpar['Tc {0}'.format(i+1)] = pars[1]
+                    priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
+                    priorpar['Tc {0}'.format(i+1)] = pars[1]
 
                     if miniexs.is_rv[i] and miniexs.fit_rv:
 
@@ -4377,18 +4294,15 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
                 rpars.append(get_rv_params(par, i+1))
             
 
-    if miniexs.use_priors:
+    
 
-        priorlike = miniexs.allpriors.apply(priorpar)
+    priorlike = miniexs.allpriors.apply(priorpar)
 
-        if np.isinf(priorlike):
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
-        
-        else:
-            like += priorlike
+    if np.isinf(priorlike):
+        return -np.inf
+    
+    else:
+        like += priorlike
 
 
     if miniexs.fit_transit:
@@ -4502,10 +4416,7 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
         like += np.sum(lnNorm(miniexs.rv, rvm, miniexs.rverr))
 
 
-    if np.any(miniexs.fit_ttv):
-        return like if not np.isnan(like) else -np.inf, np.array(ps, dtype = float), np.array(tcs, dtype = float)
-    else:
-        return like if not np.isnan(like) else -np.inf
+    return like if not np.isnan(like) else -np.inf
 
 
 def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
