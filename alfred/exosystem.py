@@ -759,7 +759,7 @@ class ExoSystem:
             self.cores = 0
 
         self.run_sampler(pos, skip_state_check)
-        
+
         
         if save_samples:
 
@@ -1373,16 +1373,27 @@ class ExoSystem:
                 explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
         """
 
-        print('\nRunning MCMC sampling.')
+        if self.cores == 0:
+            self.setup_miniexs()
+            ctx = nullcontext()
+        else:
+            ctx = Pool(processes = self.cores, initializer = self.setup_miniexs)
 
-        prog = 'notebook' if is_notebook else True
+        with ctx as pool:
+        
+            if self.cores > 0:
+                self.sampler.pool = pool
 
-        state = self.samples[-1]
-        self.sampler.run_mcmc(state, nrun, progress = prog, skip_initial_state_check = skip_state_check)
+            print('\nRunning MCMC sampling.')
 
-        self.samples = self.sampler.get_chain()
+            prog = 'notebook' if is_notebook else True
 
-        self.log_likes = self.sampler.get_log_prob()
+            state = self.samples[-1]
+            self.sampler.run_mcmc(state, nrun, progress = prog, skip_initial_state_check = skip_state_check)
+
+            self.samples = self.sampler.get_chain()
+
+            self.log_likes = self.sampler.get_log_prob()
 
         if save_samples:
 
