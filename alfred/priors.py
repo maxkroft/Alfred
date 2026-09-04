@@ -2,6 +2,7 @@ import numpy as np
 from astropy.table import Table
 from isochrones import SingleStarModel
 from isochrones.priors import FlatPrior, GaussianPrior
+from scipy.optimize import minimize_scalar
 
 
 class Priors:
@@ -27,6 +28,9 @@ class Priors:
             std (float): The standard deviation of the Gaussian distribution.
         """
 
+        self.lbound = max(self.lbound, mean-10*std)
+        self.ubound = min(self.ubound, mean+10*std)
+
         def gaussian_prior(x):
 
             return - 0.5 * ((x - mean) / std)**2 - np.log( np.sqrt(2 * np.pi) * std)
@@ -44,11 +48,11 @@ class Priors:
 
         def uniform_prior(x):
 
-            if not lower <= x <= upper:
+            if np.isscalar(x):
+                return -np.log(upper-lower) if lower <= x <= upper else -np.inf
 
-                return -np.inf
-            
-            return 0
+            else:
+                return np.where((x >= lower) & (x <= upper), -np.log(upper-lower), -np.inf)
         
         self.prior_funcs.append(uniform_prior)
 
@@ -64,11 +68,11 @@ class Priors:
 
         def log_uniform_prior(x):
 
-            if not lower <= x <= upper:
+            if np.isscalar(x):
+                return -np.log(x) - np.log(np.log(upper/lower)) if lower <= x <= upper else -np.inf
 
-                return -np.inf
-            
-            return -np.log(x) - np.log(np.log(upper/lower))
+            else:
+                return np.where((x >= lower) & (x <= upper), -np.log(x) - np.log(np.log(upper/lower)), -np.inf)
 
         self.prior_funcs.append(log_uniform_prior)
 
@@ -84,30 +88,34 @@ class Priors:
 
         def modified_jeffreys_prior(x):
 
-            if not 0 <= x <= upper:
+            if np.isscalar(x):
+                return -np.log(x+knee) - np.log(np.log((knee+upper)/knee)) if 0 <= x <= upper else -np.inf
 
-                return -np.inf
-            
-            return -np.log(x+knee) - np.log(np.log((knee+upper)/knee))
+            else:
+                return np.where((x >= 0) & (x <= upper), -np.log(x+knee) - np.log(np.log((knee+upper)/knee)), -np.inf)
 
         self.prior_funcs.append(modified_jeffreys_prior)
 
 
-    def apply_priors(self, x: float) -> float:
+    def apply_priors(self, x: np.typing.ArrayLike) -> np.typing.ArrayLike:
         """Applies all priors in the list of functions to the given trial value, and returns the log likelihood value to be added during fitting.
 
         Args:
-            x (float): The value to apply the priors to.
+            x (ArrayLike): The value to apply the priors to.
 
         Returns:
-            float: The log likelihood value from the priors.
+            ArrayLike: The log likelihood value from the priors.
         """
 
         loglike = 0
 
+        if not np.isscalar(x):
+            x = np.array(x)
+            loglike = np.zeros(x.shape)
+
         for prior in self.prior_funcs:
 
-            loglike += np.sum(prior(x))
+            loglike += prior(x)
 
         return loglike
     
@@ -120,7 +128,36 @@ class Priors:
         """
 
         return self.lbound, self.ubound
-    
+
+
+    def sample(self, n: int):
+
+        xmin, xmax = self.bounds()
+
+        res = minimize_scalar(lambda x: -self.apply_priors(x), bounds = (xmin, xmax) if np.all(np.isfinite([xmin, xmax])) else None)
+        max_log_prob = -res.fun
+
+        accepted = []
+        col = 0
+
+        while col < n:
+
+            cands = np.random.uniform(low = xmin, high = xmax, size = 2*n)
+
+            lp = self.apply_priors(cands)
+
+            u = np.random.random(cands.shape)
+            accept = np.log(u) < lp - max_log_prob
+            valid = accept & np.isfinite(lp)
+
+            valid_cands = cands[valid]
+
+            if len(valid_cands) > 0:
+                accepted.append(valid_cands)
+                col += len(valid_cands)
+
+        return np.concatenate(accepted)[:n]
+
 
 class AllPriors:
     """A class for parsing the Init_priors tables into actual priors, and applying them to all parameters. Stores a dict of Priors objects for each
