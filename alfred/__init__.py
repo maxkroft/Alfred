@@ -6,7 +6,7 @@ ld_grid_dir = os.path.dirname(os.path.realpath(__file__))+'/ld_grids/'
 data_dir = os.path.dirname(os.path.realpath(__file__))+'/example_data/'
 
 try:
-    import exoctk
+    import exoctk.limb_darkening
     exoctk_inst = True
 except:
     exoctk_inst = False
