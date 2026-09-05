@@ -199,12 +199,10 @@ class AllPriors:
             split = var.split()
 
             svar = split[0]
-            if svar in searchvars and searchvars[svar] in x0:
+            if svar in searchvars:
                 svar = searchvars[svar]
 
             fvar = ' '.join([svar]+split[1:])
-
-            found = False
 
             if svar in ['log(P)','Tc'] and np.any(fit_ttv):
 
@@ -218,20 +216,14 @@ class AllPriors:
 
                         if fit_ttv[j] and 'ror {0}'.format(j+1) in x0:
 
-                            found = True
-
                             self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
                 elif fit_ttv[int(split[-1])-1] and 'ror {0}'.format(split[-1]) in x0:
-
-                    found = True
 
                     self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
 
             if fvar in x0:
-
-                found = True
 
                 self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
@@ -241,14 +233,10 @@ class AllPriors:
 
                     if y.split()[0] == svar:
 
-                        found = True
-
                         yvar = ' '.join([split[0]]+y.split()[1:])
 
                         self.set_up_prior(yvar, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
-            if not found:
-                print('Unable to apply prior to {0}, this variable is not being fit.'.format(var))
 
 
         keys = list(self.fixed.keys())
