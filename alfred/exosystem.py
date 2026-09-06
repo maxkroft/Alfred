@@ -372,9 +372,10 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, parallel: bool | int | Literal['auto'] = False,
-            nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
-            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, skip_state_check = False) -> None:
+    def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_star: bool, nburn: int | float, nrun: int,
+            parallel: bool | int | Literal['auto'] = False, sampler_type: Literal['emcee','zeus'] = 'emcee', min_nrun: int = 500, ntau: int = 50,
+            dtau: float = 0.01, nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
+            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, skip_state_check = False, conv_check_inter: int = 100) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -395,12 +396,6 @@ class ExoSystem:
             name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
                 and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
                 or plotted again.
-
-            nburn (int): Number of burn-in steps for the MCMC. These steps are thrown out before saving the results and making plots. The burn-in
-                allows the chains to settle into the maximum likelihood.
-
-            nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
-                burn-in steps.
             
             fit_transit (bool): Whether or not to fit transits to the light curve data.
             
@@ -409,10 +404,28 @@ class ExoSystem:
             fit_star (bool): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
                 (with or without RV data as well). Cannot be fit with just RV data.
 
+            nburn (int or float): If an integer, the number of burn-in steps for the MCMC. If a float, the fraction of the total steps to burn.
+                These steps are thrown out before saving the results and making plots. The burn-in allows the chains to settle into the maximum
+                likelihood.
+
+            nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
+                burn-in steps.
+
             parallel (bool or int or 'auto', optional): Whether or not to run MCMC sampling in parallel. If False, MCMC will run in serial. If True,
                 MCMC will run in parallel with the total number of cores (or logical processors) your computer has. If an int, MCMC runs in parallel
                 with that many cores, capped at your total number. If 'auto', runs a short test before sampling to find the optimal number of cores
                 to use for best performance, including testing serial. Default is False.
+
+            sampler_type ('emcee' or 'zeus', optional): Which MCMC sampler to use. emcee is an affine invariant MCMC ensemble sampler. zeus is an MCMC
+                ensemble slice sampler. emcee steps are computed more quickly than zeus, but zeus will converge with less steps. The default is 'emcee'.
+
+            min_nrun (int, optional): Minimum number of MCMC steps to run even if the chains converge sooner. Default is 500.
+
+            ntau (int, optional): For convergence, the chain length must reach ntau times the mean integrated autocorrelation time of the chains.
+                Default is 50.
+
+            dtau (float, optional): For convergence, the rate of change of the mean integrated autocorrelation time of the chains must drop below dtau.
+                Default is 0.01.
 
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
                 less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
@@ -451,13 +464,18 @@ class ExoSystem:
             
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
 
-            skip_state_check (bool, optional): Passed to the emcee sampler. Whether or not to skip checking whether the initial parameters can fully
-                explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
+            skip_state_check (bool, optional): Passed only to the emcee sampler. Whether or not to skip checking whether the initial parameters can
+                fully explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
+
+            conv_check_inter (int, optional): Number of MCMC steps between convergence checks. Default is 100.
         """
 
 
         self.nburn = nburn
         self.nrun = nrun
+        self.min_nrun = min_nrun
+        self.ntau = ntau
+        self.dtau = dtau
         self.nwalk = nwalk
         self.rv_bkg_order = rv_bkg_order
         self.sigma_clip = sigma_clip
@@ -466,8 +484,10 @@ class ExoSystem:
         self.fit_rv = fit_rv
         self.fit_star = fit_star
         self.parallel = parallel
+        self.sampler_type = sampler_type
         self.fit_planets = self.fit_transit or self.fit_rv
         self.lc_supersample_size = lc_supersample_size
+        self.conv_check_inter = conv_check_inter
 
 
         self.delete_run(name)
@@ -759,7 +779,14 @@ class ExoSystem:
         else:
             self.cores = 0
 
-        self.run_sampler_zeus(pos, skip_state_check)
+
+        if self.sampler_type == 'emcee':
+
+            self.run_sampler_emcee(pos, skip_state_check)
+
+        elif self.sampler_type == 'zeus':
+
+            self.run_sampler_zeus(pos)
 
         
         if save_samples:
@@ -1218,7 +1245,7 @@ class ExoSystem:
         return pos
 
 
-    def run_sampler(self, pos: np.typing.NDArray, skip_state_check: bool):
+    def run_sampler_emcee(self, pos: np.typing.NDArray, skip_state_check: bool):
         """Not meant to be run on its own. Runs the MCMC sampler for burn-in and sample steps using emcee.
 
         Args:
@@ -1244,56 +1271,72 @@ class ExoSystem:
             if self.cores > 0:
                 sampler_kwargs['pool'] = pool
 
-            t0 = time.perf_counter()
             self.sampler = emcee.EnsembleSampler(**sampler_kwargs)
 
-            prog = 'notebook' if is_notebook else True
+            if isinstance(self.nburn, int):
+
+                burnfrac = 0.
+
+                print('\nRunning MCMC burn-in.')
+
+                prog = 'notebook' if is_notebook else True
+
+                pos = self.sampler.run_mcmc(pos, self.nburn, progress = prog)
+                self.sampler.reset()
+
+            elif isinstance(self.nburn, float):
+
+                burnfrac = self.nburn
 
             print('\nRunning MCMC sampling.')
 
-            # self.sampler.run_mcmc(pos, self.nrun, progress = prog, skip_initial_state_check = skip_state_check)
             last_tau = None
+            min_it = self.min_nrun/(1-burnfrac)
 
             with tqdm(total=self.nrun, desc="MCMC Sampling", unit="step") as pbar:
 
-                for it, state in enumerate(self.sampler.sample(pos, iterations = self.nrun), start = 1):
+                for it, state in enumerate(self.sampler.sample(pos, iterations = self.nrun, skip_initial_state_check = skip_state_check), start = 1):
 
                     pbar.update(1)
 
-                    conv, last_tau = check_emcee_conv(self.sampler, it, last_tau)
+                    if it < min_it or it%self.conv_check_inter != 0:
+                        continue
 
-                    if last_tau is not None and it % 100 == 0:
-                        pbar.set_description(f"MCMC Sampling (Mean 𝜏: {np.mean(last_tau):.1f})")
+                    conv, last_tau = check_emcee_conv(self.sampler, it, last_tau, burnfrac, ntau = self.ntau, deltatau = self.dtau)
+
+                    if last_tau is not None:
+                        pbar.set_description(f"MCMC Sampling (Mean 𝜏: {last_tau:.1f})")
 
                     if conv:
                         pbar.total = it
+                        
+                        if hasattr(pbar, "container"):
+                            pbar.container.children[1].max = it
+                            pbar.container.children[1].value = it
+                            pbar.container.children[1].bar_style = 'success'
+
                         pbar.refresh()
                         break
 
-            tf = time.perf_counter()
-            print(tf-t0)
 
-            self.samples = self.sampler.get_chain(discard = int(0.5*it))
+            self.samples = self.sampler.get_chain(discard = int(burnfrac*it))
 
-            self.log_likes = self.sampler.get_log_prob(discard = int(0.5*it))
+            self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
 
 
 
-    def run_sampler_zeus(self, pos: np.typing.NDArray, skip_state_check: bool):
+    def run_sampler_zeus(self, pos: np.typing.NDArray):
         """Not meant to be run on its own. Runs the MCMC sampler for burn-in and sample steps using emcee.
 
         Args:
             pos (ndarray): The initial positions of the chains generated by initialize_chains.
-
-            skip_state_check (bool): Whether or not to skip the initial state check after the burn-in.
         """
 
         sampler_kwargs = {'nwalkers': self.nwalk,
                             'ndim': len(self.x),
-                        #   'log_prob_fn': log_like,
-                        #   'parameter_names': self.parnames,
                             'logprob_fn': log_like_zeus,
                             'args': (self.keys,),
+                            'verbose': False,
                             }
 
         if self.cores == 0:
@@ -1307,28 +1350,54 @@ class ExoSystem:
             if self.cores > 0:
                 sampler_kwargs['pool'] = pool
 
-            t0 = time.perf_counter()
             self.sampler = zeus.EnsembleSampler(**sampler_kwargs)
 
-            # print('\nRunning MCMC burn-in.')
+            if isinstance(self.nburn, int):
+            
+                burnfrac = 0.
 
-            prog = 'notebook' if is_notebook else True
+                print('\nRunning MCMC burn-in.')
 
-            # state = self.sampler.run_mcmc(pos, self.nburn, progress = prog)
-            # self.sampler.reset()
+                pos = self.sampler.run_mcmc(pos, self.nburn, progress = True)
+                self.sampler.reset()
+
+            elif isinstance(self.nburn, float):
+
+                burnfrac = self.nburn
 
             print('\nRunning MCMC sampling.')
 
-            cb0 = zeus.callbacks.AutocorrelationCallback(ncheck=100, dact=0.01, nact=50, discard=0.5)
-            cb1 = zeus.callbacks.MinIterCallback(nmin=500)
+            last_tau = None
+            min_it = self.min_nrun/(1-burnfrac)
 
-            self.sampler.run_mcmc(pos, self.nrun, progress = prog, callbacks = [cb0,cb1])#, skip_initial_state_check = skip_state_check)
-            tf = time.perf_counter()
-            print(tf-t0)
+            with tqdm(total=self.nrun, desc="MCMC Sampling", unit="step") as pbar:
 
-            self.samples = self.sampler.get_chain(discard = 0.5)
+                for it, state in enumerate(self.sampler.sample(pos, iterations = self.nrun, progress = False), start = 1):
 
-            self.log_likes = self.sampler.get_log_prob(discard = 0.5)
+                    pbar.update(1)
+
+                    if it < min_it or it%self.conv_check_inter != 0:
+                        continue
+
+                    conv, last_tau = check_zeus_conv(self.sampler, it, last_tau, burnfrac, ntau = self.ntau, deltatau = self.dtau)
+
+                    if last_tau is not None:
+                        pbar.set_description(f"MCMC Sampling (Mean 𝜏: {last_tau:.1f})")
+
+                    if conv:
+                        pbar.total = it
+
+                        if hasattr(pbar, "container"):
+                            pbar.container.children[1].max = it
+                            pbar.container.children[1].value = it
+                            pbar.container.children[1].bar_style = 'success'
+
+                        pbar.refresh()
+                        break
+
+            self.samples = self.sampler.get_chain(discard = burnfrac)
+
+            self.log_likes = self.sampler.get_log_prob(discard = burnfrac)
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
@@ -1353,9 +1422,17 @@ class ExoSystem:
 
         sampler_kwargs = {'nwalkers': self.nwalk,
                          'ndim': len(self.x),
-                         'log_prob_fn': log_like,
-                         'parameter_names': self.parnames,
                          }
+
+        if self.sampler_type == 'emcee':
+            sampler_kwargs.update({'log_prob_fn': log_like,
+                                   'parameter_names': self.parnames})
+
+        elif self.sampler_type == 'zeus':
+            sampler_kwargs.update({'logprob_fn': log_like_zeus,
+                                   'args': (self.keys,),
+                                   'verbose': False,
+                                   })
 
         for c in test_cores:
 
@@ -1373,7 +1450,12 @@ class ExoSystem:
                     else:
                         sampler_kwargs['pool'] = pool
 
-                    benchsampler = emcee.EnsembleSampler(**sampler_kwargs)
+                    if self.sampler_type == 'emcee':
+                        benchsampler = emcee.EnsembleSampler(**sampler_kwargs)
+
+                    elif self.sampler_type == 'zeus':
+                        benchsampler = zeus.EnsembleSampler(**sampler_kwargs)
+
                     t0 = time.perf_counter()
                     benchsampler.run_mcmc(pos, 15, progress = False)
                     elapsed = time.perf_counter() - t0
@@ -1485,13 +1567,11 @@ class ExoSystem:
         """Flattens and thins by a factor of 20 ExoSystem.samples and ExoSystem.log_likes. Stores these as ExoSystem.flat_samples and ExoSystem.flat_log_likes, respectively.
         """
 
-        self.flat_samples = self.samples[19::20]
-        shape = self.flat_samples.shape
-        self.flat_samples = np.reshape(self.flat_samples, (shape[0]*shape[1], shape[2]))
+        shape = self.samples.shape
+        self.flat_samples = np.reshape(self.samples, (shape[0]*shape[1], shape[2]))
 
-        self.flat_log_likes = self.log_likes[19::20]
-        shape = self.flat_log_likes.shape
-        self.flat_log_likes = np.reshape(self.flat_log_likes, (shape[0]*shape[1]))
+        shape = self.log_likes.shape
+        self.flat_log_likes = np.reshape(self.log_likes, (shape[0]*shape[1]))
 
 
     def make_results(self, name: str):
@@ -2678,7 +2758,7 @@ class ExoSystem:
             fmphase_err = [[] for j in range(self.nt)]
             eclphase_err = [[] for j in range(np.sum(self.is_eclipse))]
 
-            for j in tqdm(range(0,n,10)):
+            for j in tqdm(range(0,n,200)):
 
                 for k in range(self.n):
 
@@ -2813,7 +2893,7 @@ class ExoSystem:
 
             fm_err = [[] for j in range(self.nt)]
 
-            for j in tqdm(range(0,n,10)):
+            for j in tqdm(range(0,n,200)):
 
                 fmsum = 0
 
@@ -3299,7 +3379,7 @@ class ExoSystem:
         rvallplot_err = []
         rvmphase_err = [[] for i in range(self.nr)]
 
-        for i in tqdm(range(0,n)):
+        for i in tqdm(range(0,n,20)):
 
             rvallplot0 = 0
 
@@ -4223,12 +4303,10 @@ def log_like_zeus(par: np.typing.NDArray, keys: np.typing.NDArray) -> float:
     return log_like(pardict)
 
 
-def check_emcee_conv(sampler, it, last_tau, min_it = 500, burn_frac = 0.5):
-
-    if it < min_it or it%100 != 0:
-        return False, last_tau
+def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, burn_frac: float, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
 
     burnin = int(burn_frac*it)
+    cleanlen = it-burnin
 
     clean_chain = sampler.get_chain(discard = burnin)
 
@@ -4237,7 +4315,28 @@ def check_emcee_conv(sampler, it, last_tau, min_it = 500, burn_frac = 0.5):
     except Exception:
         return False, last_tau
 
+    conv = False
+
+    if last_tau is not None:
+
+        dtau = np.abs(tau-last_tau)/last_tau
+
+        conv = cleanlen >= ntau*tau and dtau < deltatau
+
+    return conv, tau
+
+
+def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, burn_frac: float, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
+
+    burnin = int(burn_frac*it)
     cleanlen = it-burnin
+
+    clean_chain = sampler.get_chain(discard = burnin)
+
+    try:
+        tau = np.mean(zeus.AutoCorrTime(clean_chain))
+    except Exception:
+        return False, last_tau
 
     conv = False
 
@@ -4245,7 +4344,7 @@ def check_emcee_conv(sampler, it, last_tau, min_it = 500, burn_frac = 0.5):
 
         dtau = np.abs(tau-last_tau)/last_tau
 
-        conv = cleanlen >= 50*tau and dtau < 0.01
+        conv = cleanlen >= ntau*tau and dtau < deltatau
 
     return conv, tau
 
