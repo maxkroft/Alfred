@@ -404,9 +404,9 @@ class ExoSystem:
             fit_star (bool): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
                 (with or without RV data as well). Cannot be fit with just RV data.
 
-            nburn (int or float): If an integer, the number of burn-in steps for the MCMC. If a float, the fraction of the total steps to burn.
-                These steps are thrown out before saving the results and making plots. The burn-in allows the chains to settle into the maximum
-                likelihood.
+            nburn (int or float): If an integer, the number of burn-in steps for the MCMC. If a float between 0 and 1, the fraction of the total
+                steps to burn. These steps are thrown out before saving the results and making plots. The burn-in allows the chains to settle into
+                the maximum likelihood.
 
             nrun (int): Maximum number of sampling steps to run the MCMC if convergence isn't reached. Does not include burn-in steps.
 
@@ -420,10 +420,10 @@ class ExoSystem:
 
             min_nrun (int, optional): Minimum number of MCMC steps to run even if the chains converge sooner. Default is 500.
 
-            ntau (int, optional): For convergence, the chain length must reach ntau times the mean integrated autocorrelation time of the chains.
+            ntau (int, optional): For convergence, the chain length must reach ntau times the maximum integrated autocorrelation time of the chains.
                 Default is 50.
 
-            dtau (float, optional): For convergence, the rate of change of the mean integrated autocorrelation time of the chains must drop below dtau.
+            dtau (float, optional): For convergence, the rate of change of the maximum integrated autocorrelation time of the chains must drop below dtau.
                 Default is 0.01.
 
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
@@ -491,6 +491,10 @@ class ExoSystem:
 
         self.delete_run(name)
 
+        if isinstance(self.nburn, float) and not 0 <= self.nburn < 1:
+
+            print('nburn must be an integer or a float between 0 and 1.')
+            return None
 
         if self.rv_bkg_order not in [0,1,2]:
             print('Invalid RV background polynomial order. Must be 0, 1, or 2.')
@@ -1322,7 +1326,7 @@ class ExoSystem:
                     conv, last_tau = conv_func(self.sampler, it, last_tau, burnin, ntau = self.ntau, deltatau = self.dtau)
 
                     if last_tau is not None:
-                        pbar.set_description(f"MCMC Sampling (Mean 𝜏: {last_tau:.1f})")
+                        pbar.set_description(f"MCMC Sampling (𝜏: {last_tau:.1f})")
 
                     if conv:
                         pbar.total = it
@@ -1491,7 +1495,7 @@ class ExoSystem:
 
             conv_func = check_emcee_conv
 
-            last_tau = np.mean(emcee.autocorr.integrated_time(self.samples, quiet=True))
+            last_tau = np.max(emcee.autocorr.integrated_time(self.samples, quiet=True))
 
         with ctx as pool:
         
@@ -1518,7 +1522,7 @@ class ExoSystem:
 
                     conv_func = check_zeus_conv
 
-                    last_tau = np.mean(zeus.AutoCorrTime(self.samples))
+                    last_tau = np.max(zeus.AutoCorrTime(self.samples))
     
                 with tqdm(total=nrun, desc="MCMC Sampling", unit="step") as pbar:
     
@@ -1532,7 +1536,7 @@ class ExoSystem:
                         conv, last_tau = conv_func(self.sampler, it + nprev, last_tau, burnin, ntau = self.ntau, deltatau = self.dtau)
     
                         if last_tau is not None:
-                            pbar.set_description(f"MCMC Sampling (Mean 𝜏: {last_tau:.1f})")
+                            pbar.set_description(f"MCMC Sampling (𝜏: {last_tau:.1f})")
     
                         if conv:
                             pbar.total = it
@@ -4312,7 +4316,7 @@ def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, b
     clean_chain = sampler.get_chain(discard = burnin)
 
     try:
-        tau = np.mean(emcee.autocorr.integrated_time(clean_chain, quiet=True))
+        tau = np.max(emcee.autocorr.integrated_time(clean_chain, quiet=True))
     except Exception:
         return False, last_tau
 
@@ -4334,7 +4338,7 @@ def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, bur
     clean_chain = sampler.get_chain(discard = burnin)
 
     try:
-        tau = np.mean(zeus.AutoCorrTime(clean_chain))
+        tau = np.max(zeus.AutoCorrTime(clean_chain))
     except Exception:
         return False, last_tau
 
