@@ -1,6 +1,7 @@
 numpy
 matplotlib
 emcee
+zeus
 corner
 batman-package
 scipy
