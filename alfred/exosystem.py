@@ -4,12 +4,13 @@ import matplotlib
 import matplotlib.patheffects as pe
 import mplcursors
 import emcee
+import zeus
 import corner
 import batman
 from scipy.stats import linregress, truncnorm
 from celerite2 import GaussianProcess, terms
 from scipy.optimize import minimize
-from astropy.table import Table
+from astropy.table import Table, vstack
 from astropy.io import fits
 from astropy import units as u
 from astropy import constants
@@ -371,9 +372,10 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, parallel: bool | int | Literal['auto'] = False,
-            nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
-            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, order_a = False, skip_state_check = False) -> None:
+    def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_star: bool, nburn: int | float, nrun: int,
+            parallel: bool | int | Literal['auto'] = False, sampler_type: Literal['emcee','zeus'] = 'emcee', min_nrun: int = 500, ntau: int = 50,
+            dtau: float = 0.01, nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
+            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, skip_state_check = False, conv_check_inter: int = 100) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -394,12 +396,6 @@ class ExoSystem:
             name (str): Name of the fit. This name will be attached to all ouputs, including pickle files of data, human readable results tables,
                 and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
                 or plotted again.
-
-            nburn (int): Number of burn-in steps for the MCMC. These steps are thrown out before saving the results and making plots. The burn-in
-                allows the chains to settle into the maximum likelihood.
-
-            nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
-                burn-in steps.
             
             fit_transit (bool): Whether or not to fit transits to the light curve data.
             
@@ -408,10 +404,27 @@ class ExoSystem:
             fit_star (bool): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
                 (with or without RV data as well). Cannot be fit with just RV data.
 
+            nburn (int or float): If an integer, the number of burn-in steps for the MCMC. If a float between 0 and 1, the fraction of the total
+                steps to burn. These steps are thrown out before saving the results and making plots. The burn-in allows the chains to settle into
+                the maximum likelihood.
+
+            nrun (int): Maximum number of sampling steps to run the MCMC if convergence isn't reached. Does not include burn-in steps.
+
             parallel (bool or int or 'auto', optional): Whether or not to run MCMC sampling in parallel. If False, MCMC will run in serial. If True,
                 MCMC will run in parallel with the total number of cores (or logical processors) your computer has. If an int, MCMC runs in parallel
                 with that many cores, capped at your total number. If 'auto', runs a short test before sampling to find the optimal number of cores
                 to use for best performance, including testing serial. Default is False.
+
+            sampler_type ('emcee' or 'zeus', optional): Which MCMC sampler to use. emcee is an affine invariant MCMC ensemble sampler. zeus is an MCMC
+                ensemble slice sampler. emcee steps are computed more quickly than zeus, but zeus will converge with less steps. The default is 'emcee'.
+
+            min_nrun (int, optional): Minimum number of MCMC steps to run even if the chains converge sooner. Default is 500.
+
+            ntau (int, optional): For convergence, the chain length must reach ntau times the maximum integrated autocorrelation time of the chains.
+                Default is 50.
+
+            dtau (float, optional): For convergence, the rate of change of the maximum integrated autocorrelation time of the chains must drop below dtau.
+                Default is 0.01.
 
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
                 less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
@@ -449,19 +462,19 @@ class ExoSystem:
                 Default is 600 seconds.
             
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
-            
-            order_a (bool, optional): Whether or not to put an order prior on the planetary semi-major axes in a transit fit with multiple transiting
-                planets. If True, restricts the semi-major axis of each planet to be greater than those of planets with shorter orbital periods. If
-                fitting the stellar parameters, overrides this to False, since the stellar mass is instead used to set semi-major axes. Default is
-                False.
 
-            skip_state_check (bool, optional): Passed to the emcee sampler. Whether or not to skip checking whether the initial parameters can fully
-                explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
+            skip_state_check (bool, optional): Passed only to the emcee sampler. Whether or not to skip checking whether the initial parameters can
+                fully explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
+
+            conv_check_inter (int, optional): Number of MCMC steps between convergence checks. Default is 100.
         """
 
 
         self.nburn = nburn
         self.nrun = nrun
+        self.min_nrun = min_nrun
+        self.ntau = ntau
+        self.dtau = dtau
         self.nwalk = nwalk
         self.rv_bkg_order = rv_bkg_order
         self.sigma_clip = sigma_clip
@@ -470,13 +483,18 @@ class ExoSystem:
         self.fit_rv = fit_rv
         self.fit_star = fit_star
         self.parallel = parallel
-        self.order_a = order_a
+        self.sampler_type = sampler_type
         self.fit_planets = self.fit_transit or self.fit_rv
         self.lc_supersample_size = lc_supersample_size
+        self.conv_check_inter = conv_check_inter
 
 
         self.delete_run(name)
 
+        if isinstance(self.nburn, float) and not 0 <= self.nburn < 1:
+
+            print('nburn must be an integer or a float between 0 and 1.')
+            return None
 
         if self.rv_bkg_order not in [0,1,2]:
             print('Invalid RV background polynomial order. Must be 0, 1, or 2.')
@@ -506,7 +524,6 @@ class ExoSystem:
         if self.fit_star:
 
             self.fit_ld = False
-            self.order_a = False
 
             self.misti = get_ichrone('mist', bands = list(self.magbands))
 
@@ -668,9 +685,21 @@ class ExoSystem:
             for i in np.unique(self.which_rv)[1:]:
                 self.x0['rv_offset {0}'.format(self.rvnames[i])] = np.mean(self.rv[self.which_rv == i]) - self.x0['gamma']
 
+
+        req_priors = Table(rows = [
+            ['e x', 'U', 0, 0.9],
+            ['w x', 'U', -np.pi, np.pi],
+            ['cos(i) x', 'U', 0, 1],
+            ['u1 x', 'U', 0, 1],
+            ['u2 x', 'U', 0, 1]
+        ], names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'])
+        
+
         if self.use_priors:
 
-            self.allpriors = AllPriors(self.init_priors.table, self.x0, self.fit_ttv)
+            prior_tab = vstack([self.init_priors.table, req_priors])
+
+            self.allpriors = AllPriors(prior_tab, self.x0, self.fit_ttv)
             
             self.fixed = self.allpriors.fixed.copy()
 
@@ -689,6 +718,13 @@ class ExoSystem:
                 if f in self.x0:
 
                     self.x0.pop(f)
+
+        else:
+
+            self.allpriors = AllPriors(req_priors, self.x0, self.fit_ttv)
+
+            self.fixed = {}
+
 
         self.keys = list(self.x0.keys())
 
@@ -734,32 +770,27 @@ class ExoSystem:
         pos = self.initialize_chains()
 
         if type(self.parallel) == int:
-            cores = self.parallel
-            cores = min(cores, os.cpu_count())
+            self.cores = self.parallel
+            self.cores = min(self.cores, os.cpu_count())
 
         elif self.parallel == True:
-            cores = os.cpu_count()
+            self.cores = os.cpu_count()
 
         elif self.parallel.lower() == 'auto':
-            cores = self.find_opt_cores(pos)
+            self.cores = self.find_opt_cores(pos)
 
         else:
-            cores = 0
+            self.cores = 0
 
-        if cores == 0:
 
-            self.run_sampler(pos, skip_state_check)
-
-        else:
-
-            self.run_sampler_pool(pos, cores, skip_state_check)
+        self.run_sampler(pos, skip_state_check)
 
         
         if save_samples:
 
             self.save_samples(name)
 
-        self.calc_gelman_rubin()
+        self.calc_autocorr()
 
         self.flatten_chains()
 
@@ -767,7 +798,7 @@ class ExoSystem:
 
         self.make_plots(name, show_plots)
 
-        print('')
+        print('\nResults')
         self.restab.pprint_all()
 
 
@@ -821,7 +852,7 @@ class ExoSystem:
         for i in range(10):
 
             self.setup_miniexs()
-            res = minimize(lambda x, *args: -1 * (log_like({k:v for k,v in zip(self.keys, x)}, *args)[0] if np.any(self.fit_ttv) else log_like({k:v for k,v in zip(self.keys, x)}, *args)), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
+            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             x = {k:v for k,v in zip(self.keys, res.x)}
 
             if not os.path.isdir(self.direc+'Plots/'+name+'/sigma_clip'):
@@ -1212,92 +1243,106 @@ class ExoSystem:
 
 
     def run_sampler(self, pos: np.typing.NDArray, skip_state_check: bool):
-        """Not meant to be run on its own. Runs the MCMC sampler for burn-in and sample steps using emcee.
+        """Not meant to be run on its own. Runs the MCMC sampler for burn-in and sample steps using the chosen sampler.
 
         Args:
             pos (ndarray): The initial positions of the chains generated by initialize_chains.
 
-            skip_state_check (bool): Whether or not to skip the initial state check after the burn-in.
+            skip_state_check (bool): Whether or not to skip the initial state check after the burn-in. Only used
+                with emcee sampler.
         """
-
-        self.setup_miniexs()
 
         sampler_kwargs = {'nwalkers': self.nwalk,
                           'ndim': len(self.x),
-                          'log_prob_fn': log_like,
-                          'parameter_names': self.parnames,
                           }
 
-        if self.fit_transit and np.any(self.fit_ttv):
+        if self.sampler_type == 'emcee':
 
-            sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
+            sampler_kwargs.update({'log_prob_fn': log_like,
+                                   'parameter_names': self.parnames
+                                   })
 
-        self.sampler = emcee.EnsembleSampler(**sampler_kwargs)
+            run_sample_kwargs = {'skip_initial_state_check': skip_state_check}
 
-        print('\nRunning MCMC burn-in.')
+            conv_func = check_emcee_conv
+            sampler = emcee.EnsembleSampler
 
-        prog = 'notebook' if is_notebook else True
+        elif self.sampler_type == 'zeus':
 
-        state = self.sampler.run_mcmc(pos, self.nburn, progress = prog)
-        self.sampler.reset()
+            sampler_kwargs.update({'logprob_fn': log_like_zeus,
+                                   'args': (self.keys,),
+                                   'verbose': False,
+                                   })
 
-        print('\nRunning MCMC sampling.')
+            run_sample_kwargs = {'progress': False}
 
-        self.sampler.run_mcmc(state, self.nrun, progress = prog, skip_initial_state_check = skip_state_check)
+            conv_func = check_zeus_conv
+            sampler = zeus.EnsembleSampler
 
-        self.samples = self.sampler.get_chain()
+        if self.cores == 0:
+            self.setup_miniexs()
+            ctx = nullcontext()
+        else:
+            ctx = Pool(processes = self.cores, initializer = self.setup_miniexs)
 
-        self.log_likes = self.sampler.get_log_prob()
+        with ctx as pool:
+        
+            if self.cores > 0:
+                sampler_kwargs['pool'] = pool
 
-        if self.fit_transit and np.any(self.fit_ttv):
+            self.sampler = sampler(**sampler_kwargs)
 
-            self.blobs = self.sampler.get_blobs()
+            if isinstance(self.nburn, int):
 
-    
-    def run_sampler_pool(self, pos: np.typing.NDArray, cores: int, skip_state_check: bool):
-        """Not meant to be run on its own. Runs the MCMC sampler for burn-in and sample steps using emcee with multiprocessing Pool parallelization.
+                burnfrac = 0.
 
-        Args:
-            pos (ndarray): The initial positions of the chains generated by initialize_chains.
+                print('\nRunning MCMC burn-in.')
 
-            cores (int): The number of cores to use.
+                prog = 'notebook' if is_notebook and self.sampler_type == 'emcee' else True
 
-            skip_state_check (bool): Whether or not to skip the initial state check after the burn-in.
-        """
+                pos = self.sampler.run_mcmc(pos, self.nburn, progress = prog)
+                self.sampler.reset()
 
-        with Pool(processes = cores, initializer=self.setup_miniexs) as pool:
+            elif isinstance(self.nburn, float):
 
-            sampler_kwargs = {'nwalkers': self.nwalk,
-                              'ndim': len(self.x),
-                              'log_prob_fn': log_like,
-                              'parameter_names': self.parnames,
-                              'pool': pool
-                              }
-            
-            if self.fit_transit and np.any(self.fit_ttv):
-    
-                sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
-    
-            self.sampler = emcee.EnsembleSampler(**sampler_kwargs)
-
-            print('\nRunning MCMC burn-in.')
-
-            prog = 'notebook' if is_notebook else True
-
-            state = self.sampler.run_mcmc(pos, self.nburn, progress = prog)
-            self.sampler.reset()
+                burnfrac = self.nburn
 
             print('\nRunning MCMC sampling.')
 
-            self.sampler.run_mcmc(state, self.nrun, progress = prog, skip_initial_state_check = skip_state_check)
+            last_tau = None
+            min_it = int(self.min_nrun/(1-burnfrac))
 
-            self.samples = self.sampler.get_chain()
+            with tqdm(total=self.nrun, desc="MCMC Sampling", unit="step") as pbar:
 
-            self.log_likes = self.sampler.get_log_prob()
+                for it, state in enumerate(self.sampler.sample(pos, iterations = self.nrun, **run_sample_kwargs), start = 1):
 
-            if self.fit_transit and np.any(self.fit_ttv):
+                    pbar.update(1)
 
-                self.blobs = self.sampler.get_blobs()
+                    if it < min_it or it%self.conv_check_inter != 0:
+                        continue
+
+                    burnin = int(burnfrac*it)
+
+                    conv, last_tau = conv_func(self.sampler, it, last_tau, burnin, ntau = self.ntau, deltatau = self.dtau)
+
+                    if last_tau is not None:
+                        pbar.set_description(f"MCMC Sampling (𝜏: {last_tau:.1f})")
+
+                    if conv:
+                        pbar.total = it
+                        
+                        if hasattr(pbar, "container"):
+                            pbar.container.children[1].max = it
+                            pbar.container.children[1].value = it
+                            pbar.container.children[1].bar_style = 'success'
+
+                        pbar.refresh()
+                        break
+
+
+            self.samples = self.sampler.get_chain(discard = int(burnfrac*it))
+
+            self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
@@ -1322,17 +1367,22 @@ class ExoSystem:
 
         sampler_kwargs = {'nwalkers': self.nwalk,
                          'ndim': len(self.x),
-                         'log_prob_fn': log_like,
-                         'parameter_names': self.parnames,
                          }
-    
-        if self.fit_transit and np.any(self.fit_ttv):
 
-            sampler_kwargs['blobs_dtype'] = [('ps', float, (self.nttv,)), ('tcs', float, (self.nttv,))]
+        if self.sampler_type == 'emcee':
+            sampler_kwargs.update({'log_prob_fn': log_like,
+                                   'parameter_names': self.parnames})
+
+        elif self.sampler_type == 'zeus':
+            sampler_kwargs.update({'logprob_fn': log_like_zeus,
+                                   'args': (self.keys,),
+                                   'verbose': False,
+                                   })
 
         for c in test_cores:
 
             if c == 0:
+                self.setup_miniexs()
                 ctx = nullcontext()
             else:
                 ctx = Pool(processes = c, initializer = self.setup_miniexs)
@@ -1345,7 +1395,12 @@ class ExoSystem:
                     else:
                         sampler_kwargs['pool'] = pool
 
-                    benchsampler = emcee.EnsembleSampler(**sampler_kwargs)
+                    if self.sampler_type == 'emcee':
+                        benchsampler = emcee.EnsembleSampler(**sampler_kwargs)
+
+                    elif self.sampler_type == 'zeus':
+                        benchsampler = zeus.EnsembleSampler(**sampler_kwargs)
+
                     t0 = time.perf_counter()
                     benchsampler.run_mcmc(pos, 15, progress = False)
                     elapsed = time.perf_counter() - t0
@@ -1388,13 +1443,10 @@ class ExoSystem:
 
         z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
 
-        if hasattr(self, 'blobs'):
-            z['blobs'] = self.blobs
-
         pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
 
 
-    def continue_run(self, name: str, nrun: int, save_samples = False, show_plots = True, skip_state_check = False):
+    def continue_run(self, name: str, nrun: int, check_converge = True, min_nrun = 500, save_samples = False, show_plots = True, skip_state_check = False):
         """Continues running the MCMC sampler from where it left off, without a burn in. Remakes all results and plots, and saves to the provided name
         (does not have to be the same name as the previous run).
 
@@ -1405,8 +1457,13 @@ class ExoSystem:
                 and the folder in Plots in which this run's plots will be saved. This name is also used for loading results back in to be manipulated
                 or plotted again.
 
-            nrun (int): Number of sampling steps for the MCMC. These steps are saved and used for results and making plots. They do not include the
-                burn-in steps.
+            nrun (int): Maximum number of sampling steps to run the MCMC if convergence isn't reached. If check_converge is False, runs for this many
+                steps regardless.
+
+            check_converge (bool, optional): Whether or not to stop running MCMC once convergence criteria from original fit is reached. Default is True.
+
+            min_nrun (int, optional): Minimum number of MCMC steps to run even if the chains converge sooner. Ignored if check_converge is False.
+                Default is 500.
 
             save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
                 if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
@@ -1414,30 +1471,93 @@ class ExoSystem:
 
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
 
-            skip_state_check (bool, optional): Passed to the emcee sampler. Whether or not to skip checking whether the initial parameters can fully
-                explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
+            skip_state_check (bool, optional): Passed only to the emcee sampler. Whether or not to skip checking whether the initial parameters can
+                fully explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
         """
 
-        print('\nRunning MCMC sampling.')
+        if self.cores == 0:
+            self.setup_miniexs()
+            ctx = nullcontext()
+        else:
+            ctx = Pool(processes = self.cores, initializer = self.setup_miniexs)
 
-        prog = 'notebook' if is_notebook else True
+        nprev = len(self.samples)
 
-        state = self.samples[-1]
-        self.sampler.run_mcmc(state, nrun, progress = prog, skip_initial_state_check = skip_state_check)
+        burnin = 0
+        if isinstance(self.nburn, float):
+            burnin = int(self.nburn*nprev/(1-self.nburn))
 
-        self.samples = self.sampler.get_chain()
+        run_sample_kwargs = {}
+        
+        if self.sampler_type == 'emcee':
 
-        self.log_likes = self.sampler.get_log_prob()
+            run_sample_kwargs['skip_initial_state_check'] = skip_state_check
 
-        if self.fit_transit and np.any(self.fit_ttv):
+            conv_func = check_emcee_conv
 
-            self.blobs = self.sampler.get_blobs()
+            last_tau = np.max(emcee.autocorr.integrated_time(self.samples, quiet=True))
+
+        with ctx as pool:
+        
+            if self.cores > 0:
+                self.sampler.pool = pool
+
+            print('\nRunning MCMC sampling.')
+
+            state = self.samples[-1]
+
+            if not check_converge:
+
+                prog = 'notebook' if is_notebook and self.sampler_type == 'emcee' else True
+
+                self.sampler.run_mcmc(state, nrun, progress = prog, **run_sample_kwargs)
+
+            else:
+
+                min_it = min_nrun
+
+                if self.sampler_type == 'zeus':
+
+                    run_sample_kwargs['progress'] = False
+
+                    conv_func = check_zeus_conv
+
+                    last_tau = np.max(zeus.AutoCorrTime(self.samples))
+    
+                with tqdm(total=nrun, desc="MCMC Sampling", unit="step") as pbar:
+    
+                    for it, state in enumerate(self.sampler.sample(state, iterations = nrun, **run_sample_kwargs), start = 1):
+    
+                        pbar.update(1)
+    
+                        if it < min_it or it%self.conv_check_inter != 0:
+                            continue
+        
+                        conv, last_tau = conv_func(self.sampler, it + nprev, last_tau, burnin, ntau = self.ntau, deltatau = self.dtau)
+    
+                        if last_tau is not None:
+                            pbar.set_description(f"MCMC Sampling (𝜏: {last_tau:.1f})")
+    
+                        if conv:
+                            pbar.total = it
+                            
+                            if hasattr(pbar, "container"):
+                                pbar.container.children[1].max = it
+                                pbar.container.children[1].value = it
+                                pbar.container.children[1].bar_style = 'success'
+    
+                            pbar.refresh()
+                            break
+
+            self.samples = self.sampler.get_chain(discard = burnin)
+
+            self.log_likes = self.sampler.get_log_prob(discard = burnin)
 
         if save_samples:
 
             self.save_samples(name)
 
-        self.calc_gelman_rubin()
+        self.calc_autocorr()
 
         self.flatten_chains()
 
@@ -1445,28 +1565,19 @@ class ExoSystem:
 
         self.make_plots(name, show_plots)
 
-        print('')
+        print('\nResults')
         self.restab.pprint_all()
 
 
     def flatten_chains(self):
-        """Flattens and thins by a factor of 20 ExoSystem.samples, ExoSystem.log_likes, and ExoSystem.blobs (if it exists, stores linear regression periods and Tcs of
-        TTV planets from each sample). Stores these as ExoSystem.flat_samples, ExoSystem.flat_log_likes, and ExoSystem.flat_blobs, respectively.
+        """Flattens and thins by a factor of 20 ExoSystem.samples and ExoSystem.log_likes. Stores these as ExoSystem.flat_samples and ExoSystem.flat_log_likes, respectively.
         """
 
-        self.flat_samples = self.samples[19::20]
-        shape = self.flat_samples.shape
-        self.flat_samples = np.reshape(self.flat_samples, (shape[0]*shape[1], shape[2]))
+        shape = self.samples.shape
+        self.flat_samples = np.reshape(self.samples, (shape[0]*shape[1], shape[2]))
 
-        self.flat_log_likes = self.log_likes[19::20]
-        shape = self.flat_log_likes.shape
-        self.flat_log_likes = np.reshape(self.flat_log_likes, (shape[0]*shape[1]))
-
-        if hasattr(self, 'blobs'):
-
-            self.flat_blobs = self.blobs[19::20]
-            shape = self.flat_blobs.shape
-            self.flat_blobs = np.reshape(self.flat_blobs, (shape[0]*shape[1]))
+        shape = self.log_likes.shape
+        self.flat_log_likes = np.reshape(self.log_likes, (shape[0]*shape[1]))
 
 
     def make_results(self, name: str):
@@ -1486,11 +1597,6 @@ class ExoSystem:
         Args:
             name (str): Name of the run. Sets the names of the output files from this function.
         """
-
-        if self.fit_transit and np.any(self.fit_ttv):
-
-            ps = np.array([x for x in self.flat_blobs['ps']]).T
-            tcs = np.array([x for x in self.flat_blobs['tcs']]).T
 
         self.res = {}
 
@@ -1566,12 +1672,14 @@ class ExoSystem:
 
                     if self.fit_ttv[i]:
 
-                        k = np.sum(self.fit_ttv[:i])
+                        ttvi = np.array([self.ttvi['{0}'.format(i+1)]]).T
+                        tts = np.array([y['TT {0} {1}'.format(i, j+1)] for j in range(ttvi.shape[0])])
+                        
+                        res = linregress(ttvi, tts)
+                        p = res.slope
+                        tc = res.intercept
 
-                        p = np.array(ps[k])
                         self.dres['P {0}'.format(i+1)] = p
-
-                        tc = np.array(tcs[k])
                         self.dres['Tc {0}'.format(i+1)] = tc
 
                     else:
@@ -1981,8 +2089,7 @@ class ExoSystem:
     
     def load_samples(self, name: str):
         """Loads in unflattened, un-thinned MCMC chains. Paramater name map is saved to ExoSystem.parnames, chains are saved to ExoSystem.samples,
-        log likelihood values are saved to ExoSystem.log_likes. If any TTVs were fit, linear regression periods and Tcs for each sample are saved to
-        Exosystem.blobs.
+        log likelihood values are saved to ExoSystem.log_likes.
 
         Args:
             name (str): Name of the previous run to load in.
@@ -1992,8 +2099,6 @@ class ExoSystem:
         self.parnames = z['parnames']
         self.samples = z['samples']
         self.log_likes = z['log_like']
-        if 'blobs' in z:
-            self.blobs = z['blobs']
 
     
     def load_run_settings(self, name: str):
@@ -2659,7 +2764,7 @@ class ExoSystem:
             fmphase_err = [[] for j in range(self.nt)]
             eclphase_err = [[] for j in range(np.sum(self.is_eclipse))]
 
-            for j in tqdm(range(0,n,10)):
+            for j in tqdm(range(0,n,200)):
 
                 for k in range(self.n):
 
@@ -2794,7 +2899,7 @@ class ExoSystem:
 
             fm_err = [[] for j in range(self.nt)]
 
-            for j in tqdm(range(0,n,10)):
+            for j in tqdm(range(0,n,200)):
 
                 fmsum = 0
 
@@ -3280,7 +3385,7 @@ class ExoSystem:
         rvallplot_err = []
         rvmphase_err = [[] for i in range(self.nr)]
 
-        for i in tqdm(range(0,n)):
+        for i in tqdm(range(0,n,20)):
 
             rvallplot0 = 0
 
@@ -3651,7 +3756,7 @@ class ExoSystem:
 
     def remove_chains(self, name: str, idxs: np.typing.ArrayLike, save_samples: bool = False, show_plots: bool = True):
         """Removes chains of the specified indices from samples, log_likes, and the lists of derived periods and tcs in a ttv fit. Then, reruns
-        ExoSystem.calc_gelman_rubin, ExoSystem.flatten_chains, ExoSystem.make_results, and ExoSystem.make_plots.
+        ExoSystem.calc_autocorr, ExoSystem.flatten_chains, ExoSystem.make_results, and ExoSystem.make_plots.
 
         One way to find outlier chains is by running ExoSystem.examine_chains first, then hovering over the plot to get indices of the outliers.
 
@@ -3674,14 +3779,11 @@ class ExoSystem:
         self.samples = np.delete(self.samples, idxs, axis = 1)
         self.log_likes = np.delete(self.log_likes, idxs, axis = 1)
 
-        if hasattr(self, 'blobs'):
-            self.blobs = np.delete(self.blobs, idxs, axis = 1)
-
         if save_samples:
 
             self.save_samples(name)
 
-        self.calc_gelman_rubin()
+        self.calc_autocorr()
 
         self.flatten_chains()
 
@@ -3689,13 +3791,13 @@ class ExoSystem:
 
         self.make_plots(name, show_plots)
 
-        print('')
+        print('\nResults')
         self.restab.pprint_all()
         
 
     def burn_steps(self, name: str, num_steps: int, save_samples: bool = False, show_plots: bool = True):
         """Useful if the burn-in wasn't long enough. Cuts the first num_steps steps from samples, log_likes, and the lists of derived periods and tcs
-        in a ttv fit. Then, reruns ExoSystem.calc_gelman_rubin, ExoSystem.flatten_chains, ExoSystem.make_results, and ExoSystem.make_plots.
+        in a ttv fit. Then, reruns ExoSystem.calc_autocorr, ExoSystem.flatten_chains, ExoSystem.make_results, and ExoSystem.make_plots.
 
         Must have the full samples of the run available as Exosystem.samples. Either this is from having just run a fit with this ExoSystem object,
         or from loading in the results of a previous run which had save_samples set to True.
@@ -3716,14 +3818,11 @@ class ExoSystem:
         self.samples = self.samples[num_steps:]
         self.log_likes = self.log_likes[num_steps:]
 
-        if hasattr(self, 'blobs'):
-            self.blobs = self.blobs[num_steps:]
-
         if save_samples:
 
             self.save_samples(name)
 
-        self.calc_gelman_rubin()
+        self.calc_autocorr()
 
         self.flatten_chains()
 
@@ -3731,7 +3830,7 @@ class ExoSystem:
 
         self.make_plots(name, show_plots)
 
-        print('')
+        print('\nResults')
         self.restab.pprint_all()
 
 
@@ -3831,26 +3930,26 @@ class ExoSystem:
             print(self.rvnames[i], ': resid. std', resstd, ', median err', mederr, ', resid. std / median err', resstd / mederr, ', new err scale', resstd/mederr*self.rv_err_scale[i])
 
 
-    def calc_gelman_rubin(self):
-        """Calculates the Gelman-Rubin Statistic for each parameter in the MCMC fit. Generally, if the Gelman-Rubin Statistic is below 1.1 for all
-        parameters, then the MCMC has converged. If it looks converged, but the statistic is above 1.1 for some parameters, try running for more steps.
+    def calc_autocorr(self):
+        """Prints the integrated autocorrelation time (ACT) for each parameter in the MCMC fit, and how it compares to the chain lengths. Generally, if
+        the chain length is 50 times the ACT for all parameters, then the MCMC has converged. This is also checked during fitting to stop the MCMC once
+        it is converged. This function is for after the fit is finished.
         """
 
-        print('\nGelman-Rubin Statistics:')
+        print('\nIntegrated Autorcorrelation Times:')
 
-        for k, v in self.parnames.items():
+        if self.sampler_type == 'emcee':
 
-            s = self.samples[:,:,v]
+            taus = emcee.autocorr.integrated_time(self.samples, quiet=True)
 
-            L, J = s.shape
+        elif self.sampler_type == 'zeus':
 
-            xj = np.mean(s, axis = 0)
-            xs = np.mean(xj)
-            B = L/(J-1)*np.sum((xj - xs)**2)
-            W = np.mean([1/(L-1)*np.sum((s[:,j]-xj[j])**2) for j in range(J)])
-            R = ((L-1)/L*W + B/L)/W
-            
-            print(k, R)
+            taus = zeus.AutoCorrTime(self.samples)
+
+        n = len(self.samples)
+
+        tab = Table({'Parameter': self.keys, 'Autocorr Time': taus, 'Len/Autocorr Time': n/taus})
+        tab.pprint_all()
 
 
     def rv_lomb_scargle(self, min_freq: float = None, max_freq: float = None, freq: np.typing.ArrayLike = None, plot_periods = False, use_residual = True) -> tuple:
@@ -3926,7 +4025,7 @@ class MiniExoSystem:
         """Initializes the MiniExoSystem from an ExoSystem object. Copies the attributes from the ExoSystem which are necessary for fitting.
         """
 
-        attrs = ('use_priors','fixed','n','fit_planets','order_a','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
+        attrs = ('use_priors','fixed','n','fit_planets','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
                  'is_rv','fit_rv','ttvi','allpriors','tt','lcnames','ld','filters','ldgrids','ttvsectors','exptimes','supersamples','is_eclipse','ms',
                  'rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames','rv','rverr')
 
@@ -4203,7 +4302,58 @@ def lnNorm(data: np.typing.ArrayLike, model: np.typing.ArrayLike, err: np.typing
     return - 0.5 * ( (model - data) / err)**2 - np.log( np.sqrt(2 * np.pi) * err)
 
 
-def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typing.ArrayLike]:
+def log_like_zeus(par: np.typing.NDArray, keys: np.typing.NDArray) -> float:
+
+    pardict = dict(zip(keys, par))
+
+    return log_like(pardict)
+
+
+def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, burnin: int, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
+
+    cleanlen = it-burnin
+
+    clean_chain = sampler.get_chain(discard = burnin)
+
+    try:
+        tau = np.max(emcee.autocorr.integrated_time(clean_chain, quiet=True))
+    except Exception:
+        return False, last_tau
+
+    conv = False
+
+    if last_tau is not None:
+
+        dtau = np.abs(tau-last_tau)/last_tau
+
+        conv = cleanlen >= ntau*tau and dtau < deltatau
+
+    return conv, tau
+
+
+def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, burnin: int, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
+
+    cleanlen = it-burnin
+
+    clean_chain = sampler.get_chain(discard = burnin)
+
+    try:
+        tau = np.max(zeus.AutoCorrTime(clean_chain))
+    except Exception:
+        return False, last_tau
+
+    conv = False
+
+    if last_tau is not None:
+
+        dtau = np.abs(tau-last_tau)/last_tau
+
+        conv = cleanlen >= ntau*tau and dtau < deltatau
+
+    return conv, tau
+
+
+def log_like(par_in: dict) -> float:
     """The log likelihood function for fitting.
 
     Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood and for stellar
@@ -4219,72 +4369,15 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
             at each step, rather than redoing it later.
     """
 
-    if miniexs.use_priors:
+    par = par_in | miniexs.fixed
 
-        par = par_in | miniexs.fixed
+    for i in range(miniexs.n):
 
-        for i in range(miniexs.n):
+        if 'e {0}'.format(i+1) in par:
 
-            if  'w {0}'.format(i+1) in par_in and not -np.pi < par_in['w {0}'.format(i+1)] <= np.pi:
-
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
-
-            if 'e {0}'.format(i+1) in par:
-
-                par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
-                par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
-
-    else:
-
-        par = par_in.copy()
-
-    if miniexs.fit_planets:
-
-        if miniexs.order_a and miniexs.fit_transit:
-            logalist = []
-
-        for i in range(miniexs.n):
-        
-            if miniexs.is_transit[i] and miniexs.fit_transit:
-
-                if not 0 <= par['cos(i) {0}'.format(i+1)] <= 1:
-                    if np.any(miniexs.fit_ttv):
-                        return -np.inf, [], []
-                    else:
-                        return -np.inf
-                
-                if miniexs.order_a:
-                    logalist.append(par['log(a/rs) {0}'.format(i+1)])
-                
-                
-            if miniexs.fit_ecc[i]:
-
-                if par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2 > 0.9:
-                    if np.any(miniexs.fit_ttv):
-                        return -np.inf, [], []
-                    else:
-                        return -np.inf
-                
-
-        if miniexs.fit_transit and miniexs.order_a:
-            logadiff = np.diff(np.array(logalist)[miniexs.transitsortorder])
-            if np.any(logadiff <= 0):
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
-
-
-        if miniexs.fit_transit and miniexs.fit_ld:
-            if not 0 <= par['u1'] <= 1 or not 0 <= par['u2'] <= 1:
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
-        
+            par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
+            par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
+ 
 
 
     like = 0
@@ -4292,25 +4385,16 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
     if miniexs.fit_star:
 
         if not -0.5 <= par['feh'] <= 0.5:
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
+            return -np.inf
         
         if par['AV'] < 0:
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
+            return -np.inf
 
         starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
         starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
 
         if np.isnan(starlike):
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
+            return -np.inf
         
         like += starlike
 
@@ -4319,10 +4403,7 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
             rstar, mstar, Tstar, loggstar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
-                if np.any(miniexs.fit_ttv):
-                    return -np.inf, [], []
-                else:
-                    return -np.inf
+                return -np.inf
 
             arlist = []
             for i in range(miniexs.n):
@@ -4362,8 +4443,7 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
     ps = []
     tcs = []
     
-    if miniexs.use_priors:
-        priorpar = par.copy()
+    priorpar = par.copy()
 
     if miniexs.fit_planets:
 
@@ -4378,9 +4458,8 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
                     tcs.append(pars[1])
                     tpars.append(pars)
 
-                    if miniexs.use_priors:
-                        priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
-                        priorpar['Tc {0}'.format(i+1)] = pars[1]
+                    priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
+                    priorpar['Tc {0}'.format(i+1)] = pars[1]
 
                     if miniexs.is_rv[i] and miniexs.fit_rv:
 
@@ -4399,18 +4478,15 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
                 rpars.append(get_rv_params(par, i+1))
             
 
-    if miniexs.use_priors:
+    
 
-        priorlike = miniexs.allpriors.apply(priorpar)
+    priorlike = miniexs.allpriors.apply(priorpar)
 
-        if np.isinf(priorlike):
-            if np.any(miniexs.fit_ttv):
-                return -np.inf, [], []
-            else:
-                return -np.inf
-        
-        else:
-            like += priorlike
+    if np.isinf(priorlike):
+        return -np.inf
+    
+    else:
+        like += priorlike
 
 
     if miniexs.fit_transit:
@@ -4489,11 +4565,7 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
                     gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(miniexs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(miniexs.lcnames[i])]), miniexs.tt[i], miniexs.ferr[i], miniexs.gps[ii])
 
                 except:
-
-                    if np.any(miniexs.fit_ttv):
-                        return -np.inf, [], []
-                    else:
-                        return -np.inf
+                    return -np.inf
 
                 like += gp.log_likelihood(resid)
 
@@ -4524,10 +4596,7 @@ def log_like(par_in: dict) -> float | tuple[float, np.typing.ArrayLike, np.typin
         like += np.sum(lnNorm(miniexs.rv, rvm, miniexs.rverr))
 
 
-    if np.any(miniexs.fit_ttv):
-        return like if not np.isnan(like) else -np.inf, np.array(ps, dtype = float), np.array(tcs, dtype = float)
-    else:
-        return like if not np.isnan(like) else -np.inf
+    return like if not np.isnan(like) else -np.inf
 
 
 def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
