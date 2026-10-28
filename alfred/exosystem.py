@@ -263,6 +263,7 @@ class ExoSystem:
         self.rverr = []
         self.which_rv = []
         self.bis = []
+        self.na = []
 
         for i, name in enumerate(self.rvfiles):
 
@@ -285,6 +286,8 @@ class ExoSystem:
                 self.which_rv.append([i]*len(tr0))
                 if 'BIS' in rvdata.columns:
                     self.bis.append(np.array(rvdata['BIS']))
+                if 'NaI' in rvdata.columns:
+                    self.na.append(np.array(rvdata['NaI']))
 
         if len(self.tr) > 0:
 
@@ -294,6 +297,8 @@ class ExoSystem:
             self.which_rv = np.concatenate(self.which_rv)
             if len(self.bis) > 0:
                 self.bis = np.concatenate(self.bis)
+            if len(self.na) > 0:
+                self.na = np.concatenate(self.na)
 
             o = np.argsort(self.tr)
             self.tr = self.tr[o]
@@ -302,6 +307,8 @@ class ExoSystem:
             self.which_rv = self.which_rv[o]
             if len(self.bis) > 0:
                 self.bis = self.bis[o]
+            if len(self.na) > 0:
+                self.na = self.na[o]
 
             self.tr_ref = (np.max(self.tr) + np.min(self.tr))/2
             self.tr_plot = np.linspace(np.min(self.tr)-5, np.max(self.tr+5), 1000)
@@ -310,7 +317,7 @@ class ExoSystem:
 
     def fit(self, name: str, nburn: int, nrun: int, fit_transit: bool, fit_rv: bool, fit_star: bool, nwalk = 0, fit_ld = False, use_priors = False,
             rv_bkg_order = 0, star_run: str = None, save_samples = False, sigma_clip = 5, lc_supersample_size = 600, show_plots = True, order_a = False,
-            use_BIS = False) -> None:
+            use_BIS = False, use_NaI = False) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -400,6 +407,7 @@ class ExoSystem:
         self.fit_star = fit_star
         self.order_a = order_a
         self.use_BIS = use_BIS
+        self.use_NaI = use_NaI
 
 
         if self.rv_bkg_order not in [0,1,2]:
@@ -600,6 +608,9 @@ class ExoSystem:
 
             if self.use_BIS:
                 self.x0['BIS_C'] = 0
+
+            if self.use_NaI:
+                self.x0['NaI_C'] = 0
 
         keys = list(self.x0.keys())
 
@@ -857,7 +868,7 @@ class ExoSystem:
             if 'offset' in k:
                 pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
-            if k == 'BIS_C':
+            if k == 'BIS_C' or k == 'NaI_C':
                 pos.append(np.random.normal(x[k], 0.1, self.nwalk))
 
             if k in ['u1','u2']:
@@ -2706,6 +2717,10 @@ class ExoSystem:
 
             rv -= np.median(self.res['BIS_C'])*self.bis
 
+        if 'NaI_C' in self.res:
+
+            rv -= np.median(self.res['NaI_C'])*self.na
+
         for i, k in enumerate(np.unique(self.which_rv)):
 
             j = np.where(self.which_rv == k)[0]
@@ -2991,6 +3006,10 @@ class ExoSystem:
 
             rvm += np.median(self.res['BIS_C'])*self.bis
 
+        if 'NaI_C' in self.res:
+
+            rvm += np.median(self.res['NaI_C'])*self.na
+
         for i in np.unique(self.which_rv)[1:]:
 
             j = np.where(self.which_rv == i)[0]
@@ -3044,6 +3063,10 @@ class ExoSystem:
         if 'BIS_C' in self.res:
 
             rvm += np.median(self.res['BIS_C'])*self.bis
+
+        if 'NaI_C' in self.res:
+
+            rvm += np.median(self.res['NaI_C'])*self.na
 
         rv = self.rv.copy()
         for i in np.unique(self.which_rv):
@@ -3120,6 +3143,10 @@ class ExoSystem:
             if 'BIS_C' in self.res:
 
                 rvres -= np.median(self.res['BIS_C'])*self.bis
+
+            if 'NaI_C' in self.res:
+
+                rvres -= np.median(self.res['NaI_C'])*self.na
 
         else:
             rvres = self.rv
@@ -3490,6 +3517,9 @@ def log_like(par: dict, exs: ExoSystem):
 
         if exs.use_BIS:
             rvm += par['BIS_C']*exs.bis
+
+        if exs.use_NaI:
+            rvm += par['NaI_C']*exs.na
 
         for i in np.unique(exs.which_rv)[1:]:
 
