@@ -111,58 +111,55 @@ class ExoSystem:
 
         #stellar params
 
-        self.rs = tab_star['Radius'][0]
-        self.rserr = tab_star['Radius'][1]
+        self.rs = tab_star['Value'][0]
+        self.rserr = tab_star['Error'][0]
         
-        self.ms = tab_star['Mass'][0]
-        self.mserr = tab_star['Mass'][1]
+        self.ms = tab_star['Value'][1]
+        self.mserr = tab_star['Error'][1]
 
-        self.Ts = tab_star['Teff'][0]
-        self.Tserr = tab_star['Teff'][1]
+        self.Ts = tab_star['Value'][2]
+        self.Tserr = tab_star['Error'][2]
 
-        self.logg = tab_star['log(g)'][0]
-        self.loggerr = tab_star['log(g)'][1]
+        self.logg = tab_star['Value'][3]
+        self.loggerr = tab_star['Error'][3]
 
-        self.feh = tab_star['Fe/H'][0]
-        self.feherr = tab_star['Fe/H'][1]
+        self.feh = tab_star['Value'][4]
+        self.feherr = tab_star['Error'][4]
 
-        #parallax
-
-        self.plax = tab_star['Parallax'][0]
-        self.plaxerr = tab_star['Parallax'][1]
+        self.plax = tab_star['Value'][5]
+        self.plaxerr = tab_star['Error'][5]
 
         #photometry
 
-        self.Jmag = tab_star['J'][0]
-        self.Jmagerr = tab_star['J'][1]
+        #microns
+        bandwls = {'J':1.235,'H':1.662,'K':2.159,'G':0.582239,'BP':0.503575,'RP':0.761996,'W1':3.3526,'W2':4.6028,'W3':11.5608,
+                    'u':0.360804,'g':0.467178,'r':0.614112,'i':0.745789,'z':0.892278,'U':0.365988,'B':0.438074,'V':0.544543,'R':0.641147,'I':0.798209,
+                    'TESS':0.745264}
 
-        self.Hmag = tab_star['H'][0]
-        self.Hmagerr = tab_star['H'][1]
+        bandwidths = {'J':0.152026,'H':0.241018,'K':0.250619,'G':0.405297,'BP':0.215750,'RP':0.292444,'W1':0.662642,'W2':1.042266,'W3':5.505523,
+                        'u':0.054097,'g':0.106468,'r':0.105551,'i':0.110257,'z':0.116401,'U':0.064040,'B':0.095920,'V':0.089310,'R':0.159100,'I':0.149510,
+                        'TESS':0.389865}
 
-        self.Kmag = tab_star['K'][0]
-        self.Kmagerr = tab_star['K'][1]
+        self.magwls = []
+        self.magwidths = []
+        self.magbands = []
+        self.magobs = []
+        self.magobserr = []
 
-        self.Gmag = tab_star['G'][0]
-        self.Gmagerr = tab_star['G'][1]
-        
-        self.Bpmag = tab_star['Bp'][0]
-        self.Bpmagerr = tab_star['Bp'][1]
+        for i in range(6, len(tab_star)):
 
-        self.Rpmag = tab_star['Rp'][0]
-        self.Rpmagerr = tab_star['Rp'][1]
+            band = tab_star['Parameter'][i]
+            self.magwls.append(bandwls[band])
+            self.magwidths.append(bandwidths[band])
+            self.magbands.append(band)
+            self.magobs.append(tab_star['Value'][i])
+            self.magobserr.append(tab_star['Error'][i])
 
-        self.W1mag = tab_star['W1'][0]
-        self.W1magerr = tab_star['W1'][1]
-
-        self.W2mag = tab_star['W2'][0]
-        self.W2magerr = tab_star['W2'][1]
-
-        self.W3mag = tab_star['W3'][0]
-        self.W3magerr = tab_star['W3'][1]
-
-        self.magwls = [1.24,1.66,2.16,0.584,0.502,0.759,3.35,4.6,11.6]
-        self.magobs = np.array([self.Jmag,self.Hmag,self.Kmag,self.Gmag,self.Bpmag,self.Rpmag,self.W1mag,self.W2mag,self.W3mag])
-        self.magobserr = np.array([self.Jmagerr,self.Hmagerr,self.Kmagerr,self.Gmagerr,self.Bpmagerr,self.Rpmagerr,self.W1magerr,self.W2magerr,self.W3magerr])
+        self.magwls = np.array(self.magwls)
+        self.magwidths = np.array(self.magwidths)
+        self.magbands = np.array(self.magbands)
+        self.magobs = np.array(self.magobs)
+        self.magobserr = np.array(self.magobserr)
 
 
         #limb darkening
@@ -1240,7 +1237,12 @@ class ExoSystem:
             rstar = np.random.normal(self.rs, self.rserr, n)
             mstar = np.random.normal(self.ms, self.mserr, n)
 
-        J = np.random.normal(self.Jmag, self.Jmagerr, n)
+        hasJ = False
+        if 'J' in self.magbands:
+            i = np.where(self.magbands == 'J')[0]
+            J = np.random.normal(self.magobs[i], self.magobserr[i], n)
+            hasJ = True
+
         einsol = 1*u.Lsun / (4 * np.pi * u.AU**2)
 
         for i in range(self.n):
@@ -1342,7 +1344,7 @@ class ExoSystem:
                     rhos = 0.018916375 * ars**3 / p**2
                     self.dres['rhos {0}'.format(i+1)] = rhos
 
-                if self.is_rv[i] and self.fit_rv:
+                if self.is_rv[i] and self.fit_rv and hasJ:
 
                     sf = np.full(n, 0.19)
                     j = np.where(rp > 1.5)[0]

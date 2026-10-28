@@ -207,8 +207,17 @@ class Init_star(InitFile):
     def __init__(self, direc, name = 'init_star.txt'):
 
         super().__init__(direc, name)
+        
+        self.header_rows = ['name']
 
-        self.header_rows = ['name', 'unit']
+        self.converters = {'Parameter':str,'Units':str,'Value':float,'Error':float}
+
+        blank_data = {'Parameter': ['Radius','Mass','Teff','log(g)','Fe/H','Parallax'],
+                        'Units': ['Rsun','Msun','K','cgs','dex','mas'],
+                        'Value': [np.nan]*6,
+                        'Error': [np.nan]*6}
+
+        self.table = Table(blank_data, dtype = [str, str, float, float])
 
 
     def create(self):
