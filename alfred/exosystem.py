@@ -108,19 +108,21 @@ class ExoSystem:
 
         self.tc = np.array(tab_planets['Tc'])
 
-        self.ror = np.array(tab_planets['Rp/Rs'])[self.is_transit]
+        self.ror = np.array(tab_planets['Rp/Rs'])
 
-        self.ar = np.array(tab_planets['a/Rs'])[self.is_transit]
+        self.ar = np.array(tab_planets['a/Rs'])
 
-        self.cosi = np.array(tab_planets['cos(i)'])[self.is_transit]
+        self.cosi = np.array(tab_planets['cos(i)'])
 
-        self.k = np.array(tab_planets['K'])[self.is_rv]
+        self.k = np.array(tab_planets['K'])
 
         self.secosw = np.array(tab_planets['sqrt(e)cos(w)'])
 
         self.sesinw = np.array(tab_planets['sqrt(e)sin(w)'])
 
         self.fp = np.array(tab_planets['fp'])
+
+        self.omega = np.array(tab_planets['omega'])
 
 
         self.transitsortorder = np.argsort(self.p[self.is_transit])
@@ -143,8 +145,8 @@ class ExoSystem:
         self.feh = tab_star['Value'][4]
         self.feherr = tab_star['Error'][4]
 
-        self.plax = tab_star['Value'][5]
-        self.plaxerr = tab_star['Error'][5]
+        self.plx = tab_star['Value'][5]
+        self.plxerr = tab_star['Error'][5]
 
         #photometry
 
@@ -372,7 +374,7 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_star: bool, nburn: int | float, nrun: int,
+    def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_gaia: bool, fit_star: bool, nburn: int | float, nrun: int,
             parallel: bool | int | Literal['auto'] = False, sampler_type: Literal['emcee','zeus'] = 'emcee', min_nrun: int = 500, ntau: int = 50,
             dtau: float = 0.01, nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
             sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, skip_state_check = False, conv_check_inter: int = 100) -> None:
@@ -400,6 +402,8 @@ class ExoSystem:
             fit_transit (bool): Whether or not to fit transits to the light curve data.
             
             fit_rv (bool): Whether or not to fit a model to the RV data.
+
+            fit_gaia (bool): Whether or not to fit a model to Gaia epoch astrometry.
             
             fit_star (bool): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
                 (with or without RV data as well). Cannot be fit with just RV data.
@@ -481,6 +485,7 @@ class ExoSystem:
         self.fit_ld = fit_ld
         self.fit_transit = fit_transit
         self.fit_rv = fit_rv
+        self.fit_gaia = fit_gaia
         self.fit_star = fit_star
         self.parallel = parallel
         self.sampler_type = sampler_type
@@ -489,7 +494,18 @@ class ExoSystem:
         self.conv_check_inter = conv_check_inter
 
 
-        self.delete_run(name)
+        if self.fit_transit and not np.any(self.is_transit):
+            self.fit_transit = False
+            print('No transiting planets found.')
+
+        if self.fit_rv and not np.any(self.is_rv):
+            self.fit_rv = False
+            print('No radial velocity planets found.')
+
+        if self.fit_gaia and not np.any(self.is_astro):
+            self.fit_gaia = False
+            print('No Gaia astrometric planets found.')
+
 
         if isinstance(self.nburn, float) and not 0 <= self.nburn < 1:
 
@@ -500,12 +516,12 @@ class ExoSystem:
             print('Invalid RV background polynomial order. Must be 0, 1, or 2.')
             return None
 
-        if not fit_transit and not fit_rv and not fit_star:
+        if not fit_transit and not fit_rv and not fit_star and not fit_gaia:
             print('You need to fit something!')
             return None
         
-        if not fit_transit and fit_rv and fit_star:
-            print('To fit stellar parameters simultaneously with planet parameters, please use transit data (set fit_transit to True).')
+        if not fit_transit and not fit_gaia and fit_rv and fit_star:
+            print('To fit stellar parameters simultaneously with planet parameters, please use transit data and/or Gaia epoch astrometry.')
             return None
         
         if not os.path.isdir(self.direc+'Plots/'+name):
@@ -515,6 +531,9 @@ class ExoSystem:
         if self.init_priors is None and use_priors:
             print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create(). Running with no priors.')
             self.use_priors = False
+
+
+        self.delete_run(name)
         
         
         if self.fit_transit:
@@ -527,7 +546,7 @@ class ExoSystem:
 
             self.misti = get_ichrone('mist', bands = list(self.magbands))
 
-            props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr)}
+            props = {'parallax': (self.plx, self.plxerr), 'Teff': (self.Ts, self.Tserr)}
 
             if not np.isnan(self.logg):
                 props['logg'] = (self.logg, self.loggerr)
@@ -561,11 +580,18 @@ class ExoSystem:
 
         if self.fit_planets:
 
+            if not self.fit_star and self.fit_gaia and np.any(self.is_astro):
+
+                self.x0['mstar'] = self.ms
+                self.x0['plx'] = self.plx
+
+                if self.fit_transit and np.any(self.is_transit & self.is_astro):
+
+                    self.x0['rhostar'] = (self.ms*u.Msun / (4/3*np.pi * (self.rs*u.Rsun)**3)).to(u.g/u.cm**3).value
+
             for i in range(self.n):
 
                 if self.is_transit[i] and self.fit_transit:
-
-                    j = np.sum(self.is_transit[:i])
 
                     if self.fit_ttv[i]:
 
@@ -578,25 +604,43 @@ class ExoSystem:
                         self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
                         self.x0['Tc {0}'.format(i+1)] = self.tc[i]
 
-                    self.x0['ror {0}'.format(i+1)] = self.ror[j]
-                    if not self.fit_star:
-                        self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[j])
+                    self.x0['ror {0}'.format(i+1)] = self.ror[i]
+
+                    if not self.fit_star and not (self.fit_gaia and self.is_astro[i]):
+
+                        self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[i])                    
+
                     self.x0['cos(i) {0}'.format(i+1)] = self.cosi[i]
 
                     if self.is_eclipse[i]:
 
                         self.x0['fp {0}'.format(i+1)] = self.fp[i]
 
+                    if self.is_astro[i] and self.fit_gaia:
+
+                        self.x0['comega {0}'.format(i+1)] = np.cos(self.omega[i])
+                        self.x0['somega {0}'.format(i+1)] = np.sin(self.omega[i])
+
+                elif self.is_astro[i] and self.fit_gaia:
+                
+                    self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
+                    self.x0['Tc {0}'.format(i+1)] = self.tc[i]
+
+                    self.x0['sico {0}'.format(i+1)] = np.sqrt((1-self.cosi[i])/2)*np.cos(self.omega[i])
+                    self.x0['siso {0}'.format(i+1)] = np.sqrt((1-self.cosi[i])/2)*np.sin(self.omega[i])
+
                 elif self.is_rv[i] and self.fit_rv:
 
                     self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
                     self.x0['Tc {0}'.format(i+1)] = self.tc[i]
 
-                if self.is_rv[i] and self.fit_rv:
+                if self.is_astro[i] and self.fit_gaia:
 
-                    j = np.sum(self.is_rv[:i])
+                    self.x0['Mp {0}'.format(i+1)] = self.mp[i]
 
-                    self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[j])
+                elif self.is_rv[i] and self.fit_rv:
+
+                    self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[i])
 
                 if self.fit_ecc[i]:
 
@@ -638,7 +682,7 @@ class ExoSystem:
                 self.x0['eep'] = x['eep']
                 self.x0['log10(age)'] = x['log10(age)']
                 self.x0['feh'] = x['feh']
-                self.x0['distance'] = x['distance']
+                self.x0['plx'] = x['plx']
                 self.x0['AV'] = x['AV']
 
         elif self.fit_star:
@@ -646,7 +690,7 @@ class ExoSystem:
             self.x0['eep'] = 355
             self.x0['log10(age)'] = 9.66
             self.x0['feh'] = 0
-            self.x0['distance'] = 1000/self.plax
+            self.x0['plx'] = self.plx
             self.x0['AV'] = 0.01
 
 
@@ -689,10 +733,29 @@ class ExoSystem:
         req_priors = Table(rows = [
             ['e x', 'U', 0, 0.9],
             ['w x', 'U', -np.pi, np.pi],
-            ['cos(i) x', 'U', 0, 1],
             ['u1 x', 'U', 0, 1],
-            ['u2 x', 'U', 0, 1]
+            ['u2 x', 'U', 0, 1],
         ], names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'])
+
+        if self.fit_transit and not self.fit_gaia:
+            req_priors.add_row(['cos(i) x', 'U', 0, 1])
+
+        elif not self.fit_transit and self.fit_gaia:
+            req_priors.add_row(['cos(i) x', 'U', -1, 1])
+
+        elif self.fit_transit and self.fit_gaia:
+
+            for i in range(self.n):
+
+                if self.is_astro[i]:
+                    req_priors.add_row(['cos(i) {0}'.format(i+1), 'U', -1, 1])
+
+                    if self.is_transit[i]:
+                        req_priors.add_row(['rsq_omega {0}'.format(i+1), 'UC', np.nan, np.nan])
+
+                elif self.is_transit[i]:
+                    req_priors.add_row(['cos(i) {0}'.format(i+1), 'U', 0, 1])
+
         
 
         if self.use_priors:
@@ -809,7 +872,7 @@ class ExoSystem:
         Do not run this by itself.
         """
 
-        x0 = {'eep': 355, 'log10(age)': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
+        x0 = {'eep': 355, 'log10(age)': 9.66, 'feh': 0, 'plx': self.plx, 'AV': 0.01}
         keys = list(x0.keys())
 
         if self.use_priors:
@@ -4624,8 +4687,8 @@ def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
     if par['AV'] < 0:
         return -np.inf
 
-    starlike = exs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
-    starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+    starlike = exs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
+    starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
     if exs.use_priors:
 

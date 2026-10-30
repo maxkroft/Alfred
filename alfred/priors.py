@@ -97,6 +97,23 @@ class Priors:
         self.prior_funcs.append(modified_jeffreys_prior)
 
 
+    def add_unit_circle_prior(self):
+        """Adds a unit circle prior to flatten out the prior space when sampling an angle with cos(angle) and sin(angle). This is automatically
+        applied when sampling omega or w this way. The assumed input on this prior is cos^2(angle) + sin^2(angle). This is generally hidden from
+        users and is not included in the init priors GUI.
+        """
+
+        def unit_circle_prior(x):
+
+            if np.isscalar(x):
+                return -0.5 * np.log(x) if x <= 1 else -np.inf
+
+            else:
+                return np.where(x <= 1, -0.5 * np.log(x), -np.inf)
+
+        self.prior_funcs.append(unit_circle_prior)
+
+
     def apply_priors(self, x: np.typing.ArrayLike) -> np.typing.ArrayLike:
         """Applies all priors in the list of functions to the given trial value, and returns the log likelihood value to be added during fitting.
 
@@ -299,6 +316,10 @@ class AllPriors:
 
             self.prior_dict[var].add_modified_jeffreys_prior(params[0], params[1])
 
+        elif prior_type == 'UC':
+
+            self.prior_dict[var].add_unit_circle_prior()
+
 
     def apply(self, par: dict) -> float:
         """Applies all priors to all fit parameters and returns the total log likelihood.
@@ -362,6 +383,29 @@ class AllPriors:
                 svar2 = ' '.join(['sesw']+split[1:])
 
                 x = np.arctan2(par[svar2], par[svar1])
+
+                log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'omega':
+
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
+
+                if svar1 not in par:
+
+                    svar1 = ' '.join(['comega']+split[1:])
+                    svar2 = ' '.join(['somega']+split[1:])
+
+                x = np.arctan2(par[svar2], par[svar1])
+
+                log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'rsq_omega':
+
+                svar1 = ' '.join(['comega']+split[1:])
+                svar2 = ' '.join(['somega']+split[1:])
+
+                x = par[svar1]**2 + par[svar2]**2
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
