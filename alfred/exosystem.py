@@ -4128,7 +4128,7 @@ def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: f
         """Generates a model transit light curve using batman.
 
         Args:
-            par (ndarray): Array of transit parameters. Parameters must be specifically in this order.
+            par (ndarray): Array of transit parameters. Parameters must be specifically in this order:
                 - Orbital period in same units as t.
                 - Time of conjunction in same units as t.
                 - Planet to star radius ratio.
@@ -4216,18 +4216,18 @@ def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.Arr
 def rvModel(par: np.typing.NDArray, t: np.typing.ArrayLike) -> np.typing.ArrayLike:
     """Generates model RVs using _rvModel. This is compiled with cython to run faster for large amounts of data.
 
-        Args:
-            par (Array): Array of RV parameters. Parameters must be specifically in this order.
-                - Orbital period in same units as t.
-                - Time of conjunction in same units as t.
-                - RV semi-amplitude. Returns model RV points in same units as this.
-                - Orbital eccentricity. Should not be over 0.9 or batman has issues.
-                - Argument of periastron in radians.
+    Args:
+        par (Array): Array of RV parameters. Parameters must be specifically in this order:
+            - Orbital period in same units as t.
+            - Time of conjunction in same units as t. This is defined as the time when the true anomaly is pi/2 - w.
+            - RV semi-amplitude. Returns model RV points in same units as this.
+            - Orbital eccentricity.
+            - Argument of periastron in radians.
 
-            t (ArrayLike): Times at which to calculate the RV model.
+        t (ArrayLike): Times at which to calculate the RV model.
 
-        Returns:
-            ArrayLike: The model RVs at each of the input times, centered at 0.
+    Returns:
+        ArrayLike: The model RVs at each of the input times, centered at 0.
     """
 
     par = np.array(par, dtype = float)
@@ -4236,6 +4236,38 @@ def rvModel(par: np.typing.NDArray, t: np.typing.ArrayLike) -> np.typing.ArrayLi
     rv = _rvModel(par, t)
 
     return rv
+
+
+def Gaia_AL_Model(par: np.typing.NDArray, t: np.typing.ArrayLike, psi: np.typing.ArrayLike) -> np.typing.ArrayLike:
+    """Generates model Gaia along scan offsets due to the orbit (not including proper motion). This is compiled with cython to run faster
+    for large amounts of data.
+
+    Args:
+        par (Array): Array of astrometric parameters. Parameters must be specifically in this order:
+            - Orbital period in same units as t.
+            - Time of conjunction in same units as t. This is defined as the time when the true anomaly is pi/2 - w.
+            - Orbital eccentricity.
+            - Argument of periastron in radians.
+            - Orbital inclination in radians.
+            - Longitude of the ascending node in radians. The angle is defined Eastward of North, or from postive Dec towards positive RA.
+            - The planet mass, in units of solar masses (for ease of calculation).
+            - The stellar mass, in units of solar masses.
+            - Parallax, in mas.
+
+        t (ArrayLike): Times at which to calculate the Gaia AL offset model.
+        psi (ArrayLike): Gaia scan angles, in radians, at each time in t.
+
+    Returns:
+        ArrayLike: The model along scan offsets, in mas, due to the orbit.
+    """
+
+    par = np.array(par, dtype = float)
+    t = np.array(t, dtype = float)
+    psi = np.array(psi, dtype = float)
+
+    eta = _astrometryModel(par, t, psi)[0]
+
+    return eta
 
 
 def get_transit_params(par: dict, i: int, ar: np.typing.ArrayLike = None) -> np.typing.NDArray:
