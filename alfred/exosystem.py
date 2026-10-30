@@ -29,7 +29,7 @@ import time
 from typing import Literal
 from contextlib import nullcontext
 
-from alfred._rv_func import _rvModel
+from alfred._orbit_funcs import _rvModel, _astrometryModel
 from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs
 from alfred.ld_grids import *
 from alfred.priors import *
