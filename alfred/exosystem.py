@@ -122,10 +122,10 @@ class ExoSystem:
 
         self.fp = np.array(tab_planets['fp'])
 
+        self.q = np.array(tab_planets['q'])
+
         self.omega = np.array(tab_planets['omega'])
 
-
-        self.transitsortorder = np.argsort(self.p[self.is_transit])
 
 
         #stellar params
@@ -580,14 +580,10 @@ class ExoSystem:
 
         if self.fit_planets:
 
-            if not self.fit_star and self.fit_gaia and np.any(self.is_astro):
+            if not self.fit_star and self.fit_gaia:
 
-                self.x0['mstar'] = self.ms
+                self.x0['rstar'] = self.rs
                 self.x0['plx'] = self.plx
-
-                if self.fit_transit and np.any(self.is_transit & self.is_astro):
-
-                    self.x0['rhostar'] = (self.ms*u.Msun / (4/3*np.pi * (self.rs*u.Rsun)**3)).to(u.g/u.cm**3).value
 
             for i in range(self.n):
 
@@ -606,7 +602,7 @@ class ExoSystem:
 
                     self.x0['ror {0}'.format(i+1)] = self.ror[i]
 
-                    if not self.fit_star and not (self.fit_gaia and self.is_astro[i]):
+                    if not self.fit_star:
 
                         self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[i])                    
 
@@ -636,7 +632,7 @@ class ExoSystem:
 
                 if self.is_astro[i] and self.fit_gaia:
 
-                    self.x0['Mp {0}'.format(i+1)] = self.mp[i]
+                    self.x0['q {0}'.format(i+1)] = self.q[i]
 
                 elif self.is_rv[i] and self.fit_rv:
 
@@ -940,11 +936,9 @@ class ExoSystem:
 
                 rstar, mstar, Tstar, loggstar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg'])
 
-                arlist = []
                 for j in range(self.n):
 
                     if not self.is_transit[j]:
-                        arlist.append(np.nan)
                         continue
 
                     if self.fit_ttv[j]:
@@ -969,7 +963,7 @@ class ExoSystem:
 
                     ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
 
-                    arlist.append(ar)
+                    y['log(a/rs) {0}'.format(i+1)] = np.log(ar)
 
             pars = []
             for j in range(self.n):
@@ -979,11 +973,11 @@ class ExoSystem:
 
                 if self.fit_ttv[j]:
 
-                    pars.append(get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = arlist[j] if self.fit_star else None))
+                    pars.append(get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)]))
 
                 else:
 
-                    pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None))
+                    pars.append(get_transit_params(y, j+1))
 
 
             lastclipped = [0]*len(self.tt)
@@ -2715,11 +2709,9 @@ class ExoSystem:
 
             rstar, mstar, Tstar, loggstar = self.misti.interp_value([y[x] for x in ['eep','log10(age)','feh']],['radius','mass','Teff','logg']).T
 
-            arlist = []
             for j in range(self.n):
 
                 if not self.is_transit[j]:
-                    arlist.append(np.nan)
                     continue
 
                 p = y['P {0}'.format(j+1)]
@@ -2738,7 +2730,7 @@ class ExoSystem:
 
                 ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
 
-                arlist.append(ar)
+                y['log(a/rs) {0}'.format(i+1)] = np.log(ar)
 
         pars = []
         tcs = []
@@ -2753,10 +2745,7 @@ class ExoSystem:
                 p = y['P {0}'.format(j+1)]
                 tc = y['Tc {0}'.format(j+1)]
                 ror = y['ror {0}'.format(j+1)]
-                if self.fit_star:
-                    ar = arlist[j]
-                else:
-                    ar = y['a/rs {0}'.format(j+1)]
+                ar = np.exp(y['log(a/rs) {0}'.format(j+1)])
                 inc = y['i {0}'.format(j+1)]
                 e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
                 w = y['w {0}'.format(j+1)]*180/np.pi if 'w {0}'.format(j+1) in y else np.full((n), 90)
@@ -2767,7 +2756,7 @@ class ExoSystem:
 
             else:
 
-                pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None).T)
+                pars.append(get_transit_params(y, j+1).T)
                 tcs.append(np.median(y['Tc {0}'.format(j+1)]))
 
 
@@ -4270,14 +4259,12 @@ def Gaia_AL_Model(par: np.typing.NDArray, t: np.typing.ArrayLike, psi: np.typing
     return eta
 
 
-def get_transit_params(par: dict, i: int, ar: np.typing.ArrayLike = None) -> np.typing.NDArray:
+def get_transit_params(par: dict, i: int) -> np.typing.NDArray:
     """Generates the specific list of transit parameters needed for the lightCurve function from the parameter dict used in fitting.
 
     Args:
         par (dict): Dictionary of fit parameters.
         i (int): Planet number.
-        ar (ArrayLike, optional): Direct input for the semi-major axis to stellar radius ratio if it is not being fit for (during stellar fitting).
-            Default is None, in which case the value is pulled from par.
     
     Returns:
         ndarray: Array of transit parameters that can be input directly into lightCurve.
@@ -4286,8 +4273,7 @@ def get_transit_params(par: dict, i: int, ar: np.typing.ArrayLike = None) -> np.
     p = np.exp(par['log(P) {0}'.format(i)])
     tc = par['Tc {0}'.format(i)]
     ror = par['ror {0}'.format(i)]
-    if ar is None:
-        ar = np.exp(par['log(a/rs) {0}'.format(i)])
+    ar = np.exp(par['log(a/rs) {0}'.format(i)])
     inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
 
     shape = np.shape(par['log(P) {0}'.format(i)])
@@ -4298,7 +4284,7 @@ def get_transit_params(par: dict, i: int, ar: np.typing.ArrayLike = None) -> np.
     return np.array([p, tc, ror, ar, inc, e, w])
 
 
-def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], ar: np.typing.ArrayLike = None) -> np.typing.NDArray:
+def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64]) -> np.typing.NDArray:
     """Generates the specific list of transit parameters needed for the lightCurve function from the parameter dict used in fitting, in the case
     when the planet is being fit for TTVs. Calculates the period and time of conjunction using linear regression on the transit times.
 
@@ -4307,16 +4293,13 @@ def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], ar: np.
         i (int): Planet number.
         ttvi (ndarray): Array of integers representing the number of periods that have occurred between the first observed transit and each
             observed transit that is being fit.
-        ar (ArrayLike, optional): Direct input for the semi-major axis to stellar radius ratio if it is not being fit for (during stellar fitting).
-            Default is None, in which case the value is pulled from par.
         
     Returns:
         ndarray: Array of transit parameters that can be input directly into lightCurve.
     """
 
     ror = par['ror {0}'.format(i)]
-    if ar is None:
-        ar = np.exp(par['log(a/rs) {0}'.format(i)])
+    ar = np.exp(par['log(a/rs) {0}'.format(i)])
     inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
 
     shape = np.shape(par['log(P) {0}'.format(i)])
@@ -4333,24 +4316,19 @@ def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], ar: np.
     return np.array([p, tc, ror, ar, inc, e, w])
 
 
-def get_rv_params(par: dict, i: int, p: np.typing.ArrayLike = None, tc: np.typing.ArrayLike = None) -> np.typing.NDArray:
+def get_rv_params(par: dict, i: int) -> np.typing.NDArray:
     """Generates the specific list of RV parameters needed for the rvModel function from the parameter dict used in fitting.
 
     Args:
         par (dict): Dictionary of fit parameters.
         i (int): Planet number.
-        p (ArrayLike, optional): Direct input for the orbital period if it is not being fit for (if the planet is being fit for ttvs).
-            Default is None, in which case the value is pulled from par.
-        tc (ArrayLike, optional): Direct input for the time of conjunction if it is not being fit for (if the planet is being fit for ttvs).
-            Default is None, in which case the value is pulled from par.
     
     Returns:
         ndarray: Array of RV parameters that can be input directly into rvModel.
     """
 
-    if p is None:
-        p = np.exp(par['log(P) {0}'.format(i)])
-        tc = par['Tc {0}'.format(i)]
+    p = np.exp(par['log(P) {0}'.format(i)])
+    tc = par['Tc {0}'.format(i)]
 
     shape = np.shape(par['log(K) {0}'.format(i)])
 
@@ -4360,6 +4338,23 @@ def get_rv_params(par: dict, i: int, p: np.typing.ArrayLike = None, tc: np.typin
     k = np.exp(par['log(K) {0}'.format(i)])
 
     return np.array([p, tc, k, e, w])
+
+
+def get_Gaia_params(par: dict, i: int, shape = (1)):
+    """Generates the specific list of gaia astrometric parameters needed for the Gaia_AL_Model function from the parameter dict used in fitting.
+
+    Args:
+        par (dict): Dictionary of fit parameters.
+        i (int): Planet number.
+    
+    Returns:
+        ndarray: Array of Gaia astrometric parameters that can be input directly into Gaia_AL_Model.
+    """
+
+    p = np.exp(par['log(P) {0}'.format(i)])
+    tc = par['Tc {0}'.format(i)]
+
+
 
 
 def set_gp_params(rho: float, sigma: float, t: np.typing.ArrayLike, ferr: np.typing.ArrayLike, gp: GaussianProcess) -> GaussianProcess:
@@ -4500,11 +4495,9 @@ def log_like(par_in: dict) -> float:
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
                 return -np.inf
 
-            arlist = []
             for i in range(miniexs.n):
 
                 if not miniexs.is_transit[i]:
-                    arlist.append(np.nan)
                     continue
 
                 if miniexs.fit_ttv[i]:
@@ -4529,7 +4522,7 @@ def log_like(par_in: dict) -> float:
 
                 ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
 
-                arlist.append(ar)
+                par['log(a/rs) {0}'.format(i+1)] = np.log(ar)
         
 
             
@@ -4538,8 +4531,6 @@ def log_like(par_in: dict) -> float:
     ps = []
     tcs = []
     
-    priorpar = par.copy()
-
     if miniexs.fit_planets:
 
         for i in range(miniexs.n):
@@ -4548,21 +4539,21 @@ def log_like(par_in: dict) -> float:
 
                 if miniexs.fit_ttv[i]:
 
-                    pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)], ar = arlist[i] if miniexs.fit_star else None)
+                    pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])
                     ps.append(pars[0])
                     tcs.append(pars[1])
                     tpars.append(pars)
 
-                    priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
-                    priorpar['Tc {0}'.format(i+1)] = pars[1]
+                    par['log(P) {0}'.format(i+1)] = np.log(pars[0])
+                    par['Tc {0}'.format(i+1)] = pars[1]
 
                     if miniexs.is_rv[i] and miniexs.fit_rv:
 
-                        rpars.append(get_rv_params(par, i+1, pars[0], pars[1]))
+                        rpars.append(get_rv_params(par, i+1))
 
                 else:
 
-                    tpars.append(get_transit_params(par, i+1, ar = arlist[i] if miniexs.fit_star else None))
+                    tpars.append(get_transit_params(par, i+1))
 
                     if miniexs.is_rv[i] and miniexs.fit_rv:
 
@@ -4575,7 +4566,7 @@ def log_like(par_in: dict) -> float:
 
     
 
-    priorlike = miniexs.allpriors.apply(priorpar)
+    priorlike = miniexs.allpriors.apply(par)
 
     if np.isinf(priorlike):
         return -np.inf
