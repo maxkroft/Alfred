@@ -1217,33 +1217,42 @@ class ExoSystem:
                     ub = min(ub, ub2)
                 pos.append(truncnorm.rvs((lb-self.x[k])/1, (ub-self.x[k])/1, loc = self.x[k], scale = 1, size = self.nwalk))
 
-            if 'F0' in k:
+            if 'log(rhostar)' in k:
                 if self.use_priors:
                     lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.1, (np.exp(ub)-np.exp(self.x[k]))/0.1, loc = np.exp(self.x[k]), scale = 0.1, size = self.nwalk)))
                 else:
-                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
+                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.1, self.nwalk)))
 
-            if k == 'gamma':
+            if 'rstar' in k or 'mstar' in k:
                 if self.use_priors:
                     lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.1, (ub-self.x[k])/0.1, loc = self.x[k], scale = 0.1, size = self.nwalk))
+                    pos.append(truncnorm.rvs((lb-self.x[k])/(0.1*self.x[k]), (ub-self.x[k])/(0.1*self.x[k]), loc = self.x[k], scale = 0.1*self.x[k], size = self.nwalk))
                 else:
-                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
+                    pos.append(np.random.normal(self.x[k], 0.1*self.x[k], self.nwalk))
 
-            if k == 'gamma_dot':
+            if 'comega' in k or 'somega' in k:
+                lb, ub = -1, 1
                 if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.01, self.nwalk))
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
 
-            if k == 'gamma_ddot':
+            if 'sico' in k or 'siso' in k:
+                lb, ub = -1, 1
+                if self.use_priors:
+                    lb2, ub2 = self.allpriors.get_bounds(k)
+                    lb = max(lb, lb2)
+                    ub = min(ub, ub2)
+                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+
+            if 'log(q)' in k:
                 if self.use_priors:
                     lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.01, (np.exp(ub)-np.exp(self.x[k]))/0.01, loc = np.exp(self.x[k]), scale = 0.01, size = self.nwalk)))
                 else:
-                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
+                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01, self.nwalk)))
 
             if '_gp' in k:
                 if self.use_priors:
@@ -1251,13 +1260,6 @@ class ExoSystem:
                     pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/(0.01*np.exp(self.x[k])), (np.exp(ub)-np.exp(self.x[k]))/(0.01*np.exp(self.x[k])), loc = np.exp(self.x[k]), scale = 0.01*np.exp(self.x[k]), size = self.nwalk)))
                 else:
                     pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), self.nwalk)))
-
-            if 'rv_offset' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.1, (ub-self.x[k])/0.1, loc = self.x[k], scale = 0.1, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
 
             if k in ['u1','u2']:
                 lb, ub = 0, 1
@@ -1281,8 +1283,8 @@ class ExoSystem:
                 lb, ub = -0.5, 0.5
                 pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
 
-            if k == 'distance':
-                pos.append(np.random.normal(self.x[k], 1, self.nwalk))
+            if k == 'plx':
+                pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
 
             if k == 'AV':
                 lb, ub = 0, np.inf
