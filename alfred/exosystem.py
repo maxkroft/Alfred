@@ -4442,6 +4442,15 @@ def lnNorm(data: np.typing.ArrayLike, model: np.typing.ArrayLike, err: np.typing
 
 
 def log_like_zeus(par: np.typing.NDArray, keys: np.typing.NDArray) -> float:
+    """Wrapper function on log_like used for zeus sampler. Needed to turn the parameter array back into a dict.
+
+    Args:
+        par (ndarray): The fit parameter array.
+        keys (ndarray): The names of each parameter, used to turn the array back into a dict.
+
+    Returns:
+        float: The log likelihood value from the log_like function.
+    """
 
     pardict = dict(zip(keys, par))
 
@@ -4449,6 +4458,24 @@ def log_like_zeus(par: np.typing.NDArray, keys: np.typing.NDArray) -> float:
 
 
 def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, burnin: int, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
+    """Checks whether or not the chains have converged, for the emcee sampler. The condition is that the length of the chain (with burn-in removed)
+    must be greater than or equal to the maximum integrated autocorrelation time of the chains times ntau. Additionally, the fractional change in
+    the maximum autocorrelation time from the last check must be less than deltatau.
+
+    Args:
+        sampler (emcee.EnsembleSampler): The emcee EnsembleSampler object.
+        it (int): The current step number.
+        last_tau (float): The previous maximum integrated autocorrelation time of the chains, from the last check.
+        burnin (int): Number of burn-in steps to remove.
+        ntau (int, optional): For convergence, the chain length must reach ntau times the maximum integrated autocorrelation time of the chains.
+            Default is 50.
+        deltatau (float, optional): For convergence, the rate of change of the maximum integrated autocorrelation time of the chains must drop below
+            deltatau. Default is 0.01.
+
+    Returns:
+        tuple[bool, float]: Returns whether or not the chains have converged, as well as the maximum integrated autocorrelation time of the chains (to
+            be passed into the next check as last_tau).
+    """
 
     cleanlen = it-burnin
 
@@ -4471,6 +4498,24 @@ def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, b
 
 
 def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, burnin: int, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
+    """Checks whether or not the chains have converged, for the zeus sampler. The condition is that the length of the chain (with burn-in removed)
+    must be greater than or equal to the maximum integrated autocorrelation time of the chains times ntau. Additionally, the fractional change in
+    the maximum autocorrelation time from the last check must be less than deltatau.
+
+    Args:
+        sampler (zeus.EnsembleSampler): The zeus EnsembleSampler object.
+        it (int): The current step number.
+        last_tau (float): The previous maximum integrated autocorrelation time of the chains, from the last check.
+        burnin (int): Number of burn-in steps to remove.
+        ntau (int, optional): For convergence, the chain length must reach ntau times the maximum integrated autocorrelation time of the chains.
+            Default is 50.
+        deltatau (float, optional): For convergence, the rate of change of the maximum integrated autocorrelation time of the chains must drop below
+            deltatau. Default is 0.01.
+
+    Returns:
+        tuple[bool, float]: Returns whether or not the chains have converged, as well as the maximum integrated autocorrelation time of the chains (to
+            be passed into the next check as last_tau).
+    """
 
     cleanlen = it-burnin
 
@@ -4502,10 +4547,8 @@ def log_like(par_in: dict) -> float:
         par_in (dict): Dictionary of fit parameters.
 
     Returns:
-        float | tuple: Generally, just the log likelihood value is returned. If any parameter is out of bounds or any portion of the log likelihood
-            is nan, returns negative infinity. If fitting for TTVs, an array of periods and an array of conjunction times of any planets that are
-            being fit for TTVs are also returned. They are used to track the period and time of conjunction that are computed from linear regression
-            at each step, rather than redoing it later.
+        float: The log likelihood value is returned. If any parameter is out of bounds or any portion of the log likelihood
+            is nan, returns negative infinity.
     """
 
     par = par_in | miniexs.fixed
