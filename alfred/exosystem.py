@@ -665,7 +665,7 @@ class ExoSystem:
                     self.x0['eep'] = np.median(self.res['eep'])
                     self.x0['log10(age)'] = np.median(self.res['log10(age)'])
                     self.x0['feh'] = np.median(self.res['feh'])
-                    self.x0['distance'] = np.median(self.res['distance'])
+                    self.x0['plx'] = np.median(self.res['plx'])
                     self.x0['AV'] = np.median(self.res['AV'])
 
                 except:
@@ -704,8 +704,6 @@ class ExoSystem:
             
             for i in range(len(self.tt)):
 
-                self.x0['F0 {0}'.format(self.lcnames[i])] = 1.0
-
                 if self.detrend[i]:
 
                     self.x0['log(rho_gp) {0}'.format(self.lcnames[i])] = 1
@@ -721,17 +719,6 @@ class ExoSystem:
 
                     self.x0['u1 {0}'.format(filt)] = self.ld[filt][0]
                     self.x0['u2 {0}'.format(filt)] = self.ld[filt][1]
-
-        if self.fit_rv:
-            
-            self.x0['gamma'] = np.mean(self.rv[self.which_rv == 0])
-            if self.rv_bkg_order > 0:
-                self.x0['gamma_dot'] = 0
-            if self.rv_bkg_order > 1:
-                self.x0['gamma_ddot'] = 0
-
-            for i in np.unique(self.which_rv)[1:]:
-                self.x0['rv_offset {0}'.format(self.rvnames[i])] = np.mean(self.rv[self.which_rv == i]) - self.x0['gamma']
 
 
         req_priors = Table(rows = [
@@ -1680,8 +1667,8 @@ class ExoSystem:
         if self.fit_star:
 
             self.starmod._derived_samples = self.misti(*[self.res[x] if x in self.res else [self.fixed[x]]*n for x in ['eep','log10(age)','feh','distance','AV']])
-            self.starmod._derived_samples["parallax"] = 1000.0 / self.res['distance']
-            self.starmod._derived_samples["distance"] = self.res['distance']
+            self.starmod._derived_samples["parallax"] = self.res['plx']
+            self.starmod._derived_samples["distance"] = 1000/self.res['plx']
             self.starmod._derived_samples["AV"] = self.res['AV']
 
             self.dres['rstar'] = self.starmod._derived_samples['radius']
@@ -3680,7 +3667,7 @@ class ExoSystem:
             
             y = y | self.fixed
 
-        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],y['distance'],y['AV']], list(self.magbands))[3]
+        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],1000/y['plx'],y['AV']], list(self.magbands))[3]
         self.magfit = np.median(mags, axis = 0)
         self.magfiterr = np.diff(np.percentile(mags, [16,50,84], axis = 0), axis = 0)
 
@@ -4235,9 +4222,9 @@ def rvModel(par: np.typing.NDArray, t: np.typing.ArrayLike) -> np.typing.ArrayLi
     return rv
 
 
-def Gaia_AL_Model(par: np.typing.NDArray, t: np.typing.ArrayLike, psi: np.typing.ArrayLike) -> np.typing.ArrayLike:
-    """Generates model Gaia along scan offsets due to the orbit (not including proper motion). This is compiled with cython to run faster
-    for large amounts of data.
+def Gaia_AL_Model(par: np.typing.NDArray, t: np.typing.ArrayLike, psi: np.typing.ArrayLike) -> tuple[np.typing.ArrayLike,np.typing.ArrayLike,np.typing.ArrayLike]:
+    """Generates model Gaia astrometry due to an orbit (not including proper motion), given the times and Gaia scan angles. This returns the
+    ra*cos(dec) offsets, the dec offsets, and the along scan offsets. This is compiled with cython to run faster for large amounts of data.
 
     Args:
         par (Array): Array of astrometric parameters. Parameters must be specifically in this order:
@@ -4255,16 +4242,17 @@ def Gaia_AL_Model(par: np.typing.NDArray, t: np.typing.ArrayLike, psi: np.typing
         psi (ArrayLike): Gaia scan angles, in radians, at each time in t.
 
     Returns:
-        ArrayLike: The model along scan offsets, in mas, due to the orbit.
+        tuple[ArrayLike, ArrayLike, ArrayLike]: The model astrometric offsets, in mas, due to the orbit. The first item is the ra*cos(dec) offsets,
+            the second is the dec offsets, and the third is the Gaia along scan offsets.
     """
 
     par = np.array(par, dtype = float)
     t = np.array(t, dtype = float)
     psi = np.array(psi, dtype = float)
 
-    eta = _astrometryModel(par, t, psi)[0]
+    x, y, eta = _astrometryModel(par, t, psi)
 
-    return eta
+    return x, y, eta
 
 
 def get_transit_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
@@ -4541,8 +4529,8 @@ def log_like(par_in: dict) -> float:
         if par['AV'] < 0:
             return -np.inf
 
-        starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
-        starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+        starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
+        starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
         if np.isnan(starlike):
             return -np.inf
@@ -4552,6 +4540,9 @@ def log_like(par_in: dict) -> float:
         if miniexs.fit_planets:
 
             rstar, mstar, Tstar, loggstar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
+
+            par['mstar'] = mstar
+            par['rstar'] = rstar
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
                 return -np.inf
@@ -4569,19 +4560,24 @@ def log_like(par_in: dict) -> float:
 
                     p = np.exp(par['log(P) {0}'.format(i+1)])
 
-                if miniexs.is_rv[i] and miniexs.fit_rv:
+                if miniexs.is_astro[i] and miniexs.fit_gaia:
+
+                    q = np.exp(par['log(q) {0}'.format(i+1)])
+                    mp = q * mstar
+
+                elif miniexs.is_rv[i] and miniexs.fit_rv:
 
                     e = 0
                     if miniexs.fit_ecc[i]:
                         e = par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2
 
-                    mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)
+                    mp = (calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)*u.earthMass).to(u.Msun).value
 
                 else:
 
                     mp = 0
 
-                ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+                ar = (((mstar + mp) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
 
                 par['log(a/rs) {0}'.format(i+1)] = np.log(ar)
         
@@ -4589,8 +4585,7 @@ def log_like(par_in: dict) -> float:
             
     tpars = []
     rpars = []
-    ps = []
-    tcs = []
+    gpars = []
     
     if miniexs.fit_planets:
 
@@ -4601,28 +4596,22 @@ def log_like(par_in: dict) -> float:
                 if miniexs.fit_ttv[i]:
 
                     pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])
-                    ps.append(pars[0])
-                    tcs.append(pars[1])
                     tpars.append(pars)
 
                     par['log(P) {0}'.format(i+1)] = np.log(pars[0])
                     par['Tc {0}'.format(i+1)] = pars[1]
 
-                    if miniexs.is_rv[i] and miniexs.fit_rv:
-
-                        rpars.append(get_rv_params(par, i+1))
-
                 else:
 
                     tpars.append(get_transit_params(par, i+1))
 
-                    if miniexs.is_rv[i] and miniexs.fit_rv:
-
-                        rpars.append(get_rv_params(par, i+1))
-
-            elif miniexs.is_rv[i] and miniexs.fit_rv:
+            if miniexs.is_rv[i] and miniexs.fit_rv:
 
                 rpars.append(get_rv_params(par, i+1))
+
+            if miniexs.is_astro[i] and miniexs.fit_gaia:
+
+                gpars.append(get_Gaia_params(par, i+1))
             
 
     
@@ -4640,7 +4629,7 @@ def log_like(par_in: dict) -> float:
 
         for i in range(len(miniexs.tt)):
 
-            fm = par['F0 {0}'.format(miniexs.lcnames[i])]
+            fm = 0
 
             ld = miniexs.ld[miniexs.filters[i]]
 
@@ -4684,18 +4673,23 @@ def log_like(par_in: dict) -> float:
 
                     if miniexs.is_eclipse[j]:
 
-                        mp = 0
-                        ms = mstar if miniexs.fit_star else miniexs.ms
+                        ms = par['mstar'] if 'mstar' in par else miniexs.ms
+                        rs = par['rstar'] if 'rstar' in par else miniexs.rs
+                        q = 0
 
-                        if miniexs.is_rv[j] and miniexs.fit_rv:
+                        if miniexs.is_astro[j] and miniexs.fit_gaia:
+
+                            q = np.exp(par['log(q) {0}'.format(i+1)])
+
+                        elif miniexs.is_rv[j] and miniexs.fit_rv:
 
                             kr = np.sum(miniexs.is_rv[:j])
                             
-                            mp = calc_m_from_k(p, rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)
+                            mp = (calc_m_from_k(p, rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)*u.earthMass).to(u.Msun).value
 
-                        q = mp/ms
+                            q = mp/ms
 
-                        fm += lightCurve(tpars[k], miniexs.tt[i], ld, miniexs.exptimes[i], miniexs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rstar if miniexs.fit_star else miniexs.rs, q = q)
+                        fm += lightCurve(tpars[k], miniexs.tt[i], ld, miniexs.exptimes[i], miniexs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rs, q = q)
 
                     else:
 
@@ -4708,27 +4702,52 @@ def log_like(par_in: dict) -> float:
                 ii = np.sum(miniexs.detrend[:i])
 
                 try:
-
                     gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(miniexs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(miniexs.lcnames[i])]), miniexs.tt[i], miniexs.ferr[i], miniexs.gps[ii])
 
                 except:
                     return -np.inf
 
+                M = np.ones((len(miniexs.tt[i]), 1))
+
+                invKM = gp.apply_inverse(M)
+                invKr = gp.apply_inverse(resid)
+
+                MTinvKM = M.T @ invKM
+                MTinvKr = M.T @ invKr
+
+                f0 = np.linalg.solve(MTinvKM, MTinvKr)
+                resid -= M @ f0
+
                 like += gp.log_likelihood(resid)
+
+                _, logdet = np.linalg.slogdet(MTinvKM)
+                like += -0.5 * logdet
 
             else:
 
-                like += np.sum(lnNorm(miniexs.f[i], fm, miniexs.ferr[i]))
+                resid = miniexs.f[i] - fm
+
+                M = np.ones((len(miniexs.tt[i]), 1))
+
+                W = 1/miniexs.ferr[i]**2
+                Mw = M * np.sqrt(W)[:, None]
+                Yw = resid * np.sqrt(W)
+
+                X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+    
+                if len(chi2) > 0:
+                    chi2min = chi2[0]
+                else:
+                    chi2min = np.sum((Yw - Mw @ X)**2)
+
+                _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+                like += -0.5 * (chi2min + logdet)
+
 
     if miniexs.fit_rv:
 
-        rvm = np.array([par['gamma']]*len(miniexs.tr)) + (par['gamma_dot'] * (miniexs.tr - miniexs.tr_ref) if miniexs.rv_bkg_order > 0 else 0) + (par['gamma_ddot'] * (miniexs.tr - miniexs.tr_ref)**2 if miniexs.rv_bkg_order > 1 else 0)
-
-        for i in np.unique(miniexs.which_rv)[1:]:
-
-            j = np.where(miniexs.which_rv == i)[0]
-
-            rvm[j] += par['rv_offset {0}'.format(miniexs.rvnames[i])]
+        rvm = 0
 
         for i in range(miniexs.n):
 
@@ -4739,8 +4758,73 @@ def log_like(par_in: dict) -> float:
 
             rvm += rvModel(rpars[j], miniexs.tr)
 
+        rvclean = miniexs.rv - rvm
 
-        like += np.sum(lnNorm(miniexs.rv, rvm, miniexs.rverr))
+        M = [np.ones((len(miniexs.tr)))]
+
+        if miniexs.rv_bkg_order > 0:
+            M.append(miniexs.tr - miniexs.tr_ref)
+
+        if miniexs.rv_bkg_order > 1:
+            M.append((miniexs.tr - miniexs.tr_ref)**2)
+
+        for i in np.unique(miniexs.which_rv)[1:]:
+            M.append((miniexs.which_rv == i).astype(float))
+
+        M = np.column_stack(M)
+
+        W = 1/miniexs.rverr**2
+        Mw = M * np.sqrt(W)[:, None]
+        Yw = rvclean * np.sqrt(W)
+
+        X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+
+        if len(chi2) > 0:
+            chi2min = chi2[0]
+        else:
+            chi2min = np.sum((Yw - Mw @ X)**2)
+
+        _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+        like += -0.5 * (chi2min + logdet)
+
+
+    if miniexs.fit_gaia:
+
+        galm = miniexs.plxf * par['plx']
+
+        for i in range(miniexs.n):
+
+            if not miniexs.is_astro[i]:
+                continue
+
+            j = np.sum(miniexs.is_astro[:i])
+
+            galm += Gaia_AL_Model(gpars[j], miniexs.tg, miniexs.psi)[2]
+
+        gclean = miniexs.gal - galm
+        tgyr = (miniexs.tg - miniexs.tgref)/365.25
+
+        M = np.zeros((len(miniexs.tg),4))
+        M[:,0] = np.sin(miniexs.psi)
+        M[:,1] = np.cos(miniexs.psi)
+        M[:,2] = tgyr*np.sin(miniexs.psi)
+        M[:,3] = tgyr*np.cos(miniexs.psi)
+    
+        W = 1/miniexs.galerr**2
+        Mw = M * np.sqrt(W)[:, None]
+        Yw = gclean * np.sqrt(W)
+    
+        X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+    
+        if len(chi2) > 0:
+            chi2min = chi2[0]
+        else:
+            chi2min = np.sum((Yw - Mw @ X)**2)
+
+        _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+        like += -0.5 * (chi2min + logdet)
 
 
     return like if not np.isnan(like) else -np.inf
