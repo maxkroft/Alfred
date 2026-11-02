@@ -790,6 +790,38 @@ class ExoSystem:
             print(self.fixed)
 
 
+        self.lin_names = []
+
+        if self.fit_transit:
+
+            for i in range(self.n):
+                if self.is_transit[i] and self.fit_ttv[i]:
+                    self.lin_names.append('P {0}'.format(i+1))
+                    self.lin_names.append('Tc {0}'.format(i+1))
+
+            for i in range(len(self.lcnames)):
+                self.lin_names.append('F0 {0}'.format(self.lcnames[i]))
+
+        if self.fit_rv:
+
+            self.lin_names.append('gamma')
+            if self.rv_bkg_order > 0:
+                self.lin_names.append('gamma_dot')
+            if self.rv_bkb_order > 1:
+                self.lin_names.append('gamma_ddot')
+
+            for i in range(1,len(self.rvnames)):
+                self.lin_names.append('rv_offset {0}'.format(self.rvnames[i]))
+
+        if self.fit_gaia:
+
+            self.lin_names.append('ra*_offset')
+            self.lin_names.append('dec_offset')
+            self.lin_names.append('pmra*')
+            self.lin_names.append('pmdec')
+
+
+
         if self.nwalk < len(self.keys) * 2:
             self.nwalk = len(self.keys) * 2
 
@@ -1306,8 +1338,11 @@ class ExoSystem:
                 with emcee sampler.
         """
 
+        blobs_dtype = [(name, float) for name in self.lin_names]
+
         sampler_kwargs = {'nwalkers': self.nwalk,
                           'ndim': len(self.x),
+                          'blobs_dtype': blobs_dtype,
                           }
 
         if self.sampler_type == 'emcee':
@@ -1397,6 +1432,8 @@ class ExoSystem:
             self.samples = self.sampler.get_chain(discard = int(burnfrac*it))
 
             self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
+
+            self.lin_par = self.sampler.get_blobs(flat = True)
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
@@ -1658,11 +1695,23 @@ class ExoSystem:
 
             self.res[k] = self.flat_samples[:,v]
 
+        for i in range(len(self.lin_names)):
+
+            self.res[self.lin_names[i]] = self.lin_par[self.lin_names[i]]
+
         self.res['log_like'] = self.flat_log_likes
 
         pickle.dump(self.res, open(self.direc+'Output/'+name+'_res.p', 'wb'))
 
         self.dres = {}
+
+        if self.use_priors:
+        
+            y = self.res | self.fixed
+
+        else:
+        
+            y = self.res.copy()
 
         n = len(self.res['log_like'])
 
@@ -1681,6 +1730,11 @@ class ExoSystem:
             self.dres['loggstar'] = self.starmod._derived_samples['logg']
             self.dres['Lstar'] = 10**self.starmod._derived_samples['logL']
             self.dres['Mbolstar'] = self.starmod._derived_samples['Mbol']
+            self.dres['distance'] = self.starmod._derived_samples['distance']
+
+            rstar = self.dres['rstar']
+            mstar = self.dres['mstar']
+            T = self.dres['Tstar']
 
             interp_input = np.array([self.dres['Tstar'], self.dres['loggstar'], self.res['feh']]).T
 
@@ -1692,8 +1746,24 @@ class ExoSystem:
         else:
 
             T = np.random.normal(self.Ts, self.Tserr, n)
-            rstar = np.random.normal(self.rs, self.rserr, n)
-            mstar = np.random.normal(self.ms, self.mserr, n)
+
+            if 'rstar' in y:
+                rstar = y['rstar']
+            else:
+                rstar = np.random.normal(self.rs, self.rserr, n)
+
+            if 'mstar' in y:
+                mstar = y['mstar']
+
+            elif 'log(rhostar)' in y:
+                rhostar = np.exp(y['log(rhostar)'])
+                self.dres['rhostar'] = rhostar
+
+                mstar = (rhostar*u.g/u.cm**3 * 4/3*np.pi * (rstar*u.Rsun)**3).to(u.Msun).value
+                self.dres['mstar'] = mstar
+
+            else:
+                mstar = np.random.normal(self.ms, self.mserr, n)
 
         hasJ = False
         if 'J' in self.magbands:
@@ -1707,18 +1777,12 @@ class ExoSystem:
 
             if self.use_priors:
 
-                y = self.res | self.fixed
-
                 for i in range(self.n):
 
                     if 'e {0}'.format(i+1) in y:
 
                         y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
                         y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
-
-            else:
-
-                y = self.res.copy()
 
             for i in range(self.n):
 
@@ -1744,7 +1808,7 @@ class ExoSystem:
                     rp = y['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
                     self.dres['Rp {0}'.format(i+1)] = rp
 
-                    if not self.fit_star:
+                    if not self.fit_star and not self.fit_gaia:
 
                         ars = np.exp(y['log(a/rs) {0}'.format(i+1)])
                         self.dres['a/rs {0}'.format(i+1)] = ars
@@ -1783,25 +1847,52 @@ class ExoSystem:
 
                 mp = 0
 
-                if self.is_rv[i] and self.fit_rv:
+                if self.is_astro[i] and self.fit_gaia:
+
+                    q = np.exp(y['log(q) {0}'.format(i+1)])
+                    self.dres['q {0}'.format(i+1)] = q
+
+                    mp = (q * mstar*u.Msun).to(u.earthMass).value
+                    self.dres['Mp {0}'.format(i+1)] = mp
+
+                    if self.is_transit[i] and self.fit_transit:
+
+                        rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+                        self.dres['rhop {0}'.format(i+1)] = rhop
+
+                        omega = np.arctan2(y['somega {0}'.format(i+1)], y['comega {0}'.format(i+1)])
+                        self.dres['omega {0}'.format(i+1)] = omega
+
+                    else:
+
+                        inc = np.arccos(1-2*(y['sico {0}'.format(i+1)]**2 + y['siso {0}'.format(i+1)]**2))*180/np.pi
+                        self.dres['i {0}'.format(i+1)] = inc
+
+                        omega = np.arctan2(y['siso {0}'.format(i+1)], y['sico {0}'.format(i+1)])
+                        self.dres['omega {0}'.format(i+1)] = omega
+
+
+                elif self.is_rv[i] and self.fit_rv:
 
                     k = np.exp(y['log(K) {0}'.format(i+1)])
                     self.dres['K {0}'.format(i+1)] = k
 
-                    if self.is_transit[i] and self.fit_transit:
+                    if (self.is_transit[i] and self.fit_transit) or (self.is_astro[i] and self.fit_gaia):
 
                         mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, inc*np.pi/180, mstar)
                         self.dres['Mp {0}'.format(i+1)] = mp
 
-                        rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
-                        self.dres['rhop {0}'.format(i+1)] = rhop
+                        if self.is_transit[i] and self.fit_transit:
+
+                            rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+                            self.dres['rhop {0}'.format(i+1)] = rhop
 
                     else:
 
                         mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
                         self.dres['Mpsini {0}'.format(i+1)] = mp
 
-                if self.fit_star or (not (self.fit_transit and self.is_transit[i]) and (self.is_rv[i] and self.fit_rv)):
+                if self.fit_star or (not (self.fit_transit and self.is_transit[i]) and ((self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia))):
 
                     a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
                     self.dres['a {0}'.format(i+1)] = a
@@ -1809,7 +1900,7 @@ class ExoSystem:
                     ars = (a*u.AU).to(u.Rsun).value / rstar
                     self.dres['a/rs {0}'.format(i+1)] = ars
 
-                if (self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]):
+                if (self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]) or (self.fit_gaia and self.is_astro[i]):
 
                     teq = (1/4)**(1/4) * T * ars**(-1/2)
                     self.dres['teq {0}'.format(i+1)] = teq
@@ -1833,7 +1924,7 @@ class ExoSystem:
                         rhos = 0.018916375 * ars**3 / p**2
                         self.dres['rhos {0}'.format(i+1)] = rhos
 
-                    if self.is_rv[i] and self.fit_rv and hasJ:
+                    if ((self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia)) and hasJ:
 
                         sf = np.full(n, 0.19)
                         j = np.where(rp > 1.5)[0]
@@ -1856,13 +1947,14 @@ class ExoSystem:
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
 
-        par_units = {'log(P)': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'secw': '', 'sesw': '',
-                     'fp': '', 'TT': 'BJD-2450000', 'F0': '', 'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day',
-                     'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex', 'distance': 'pc',
-                     'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2',
-                     'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad',
-                     'K': 'm/s', 'Mp': 'Mearth', 'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr',
-                     'rhos': 'g/cm^3', 'TSM': ''}
+        par_units = {'log(P)': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'log(q)': '', 'sico': '',
+                     'siso': '', 'comega': '', 'somega': '', 'secw': '', 'sesw': '', 'fp': '', 'TT': 'BJD-2450000', 'F0': '', 'log(rho_gp)': 'days',
+                     'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'ra*_offset': 'mas',
+                     'dec_offset': 'mas', 'pmra*': 'mas/yr', 'pmdec': 'mas/yr', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex',
+                     'plx': 'mas', 'distance': 'pc', 'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'log(rhostar)': 'g/cm^3', 'rhostar': 'g/cm^3',
+                     'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2', 'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth',
+                     'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad', 'K': 'm/s', 'q': '', 'omega': 'rad', 'Mp': 'Mearth', 'rhop': 'g/cm^3',
+                     'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr', 'rhos': 'g/cm^3', 'TSM': ''}
 
 
         out = []
@@ -4075,8 +4167,9 @@ class MiniExoSystem:
         """
 
         attrs = ('use_priors','fixed','n','fit_planets','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
-                 'is_rv','fit_rv','ttvi','allpriors','tt','lcnames','ld','filters','ldgrids','ttvsectors','exptimes','supersamples','is_eclipse','ms',
-                 'rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames','rv','rverr')
+                 'is_rv','fit_rv','is_astro','fit_gaia','ttvi','allpriors','lin_names','tt','lcnames','ld','filters','ldgrids','ttvsectors',
+                 'exptimes','supersamples','is_eclipse','ms','rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames',
+                 'rv','rverr','tg','tg_ref','gal','galerr','psi','plxf')
 
         for att in attrs:
             val = getattr(exs, att, None)
@@ -4539,18 +4632,18 @@ def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, bur
     return conv, tau
 
 
-def log_like(par_in: dict) -> float:
+def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
     """The log likelihood function for fitting.
 
-    Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood and for stellar
+    Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood for stellar
     fitting using the isochrones MIST star model. Generates transit and RV models, then calculates log likelihood relative to data using lnNorm.
 
     Args:
         par_in (dict): Dictionary of fit parameters.
 
     Returns:
-        float: The log likelihood value is returned. If any parameter is out of bounds or any portion of the log likelihood
-            is nan, returns negative infinity.
+        float, ndrray: The log likelihood value is returned. If any parameter is out of bounds or any portion of the log likelihood
+            is nan, returns negative infinity. Additionally, an array of the linear parameters (solved for using least squares) is returned.
     """
 
     par = par_in | miniexs.fixed
@@ -4562,23 +4655,23 @@ def log_like(par_in: dict) -> float:
             par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
             par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
  
-
+    nlin = len(miniexs.lin_names)
 
     like = 0
 
     if miniexs.fit_star:
 
         if not -0.5 <= par['feh'] <= 0.5:
-            return -np.inf
+            return -np.inf, np.zeros((nlin))
         
         if par['AV'] < 0:
-            return -np.inf
+            return -np.inf, np.zeros((nlin))
 
         starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
         starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
         if np.isnan(starlike):
-            return -np.inf
+            return -np.inf, np.zeros((nlin))
         
         like += starlike
 
@@ -4590,7 +4683,7 @@ def log_like(par_in: dict) -> float:
             par['rstar'] = rstar
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
-                return -np.inf
+                return -np.inf, np.zeros((nlin))
 
             for i in range(miniexs.n):
 
@@ -4625,8 +4718,9 @@ def log_like(par_in: dict) -> float:
                 ar = (((mstar + mp) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
 
                 par['log(a/rs) {0}'.format(i+1)] = np.log(ar)
-        
 
+        
+    lin_par = np.empty(0)
             
     tpars = []
     rpars = []
@@ -4642,6 +4736,8 @@ def log_like(par_in: dict) -> float:
 
                     pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])
                     tpars.append(pars)
+
+                    lin_par = np.append(lin_par, pars[:2])
 
                     par['log(P) {0}'.format(i+1)] = np.log(pars[0])
                     par['Tc {0}'.format(i+1)] = pars[1]
@@ -4664,7 +4760,7 @@ def log_like(par_in: dict) -> float:
     priorlike = miniexs.allpriors.apply(par)
 
     if np.isinf(priorlike):
-        return -np.inf
+        return -np.inf, np.zeros((nlin))
     
     else:
         like += priorlike
@@ -4750,7 +4846,7 @@ def log_like(par_in: dict) -> float:
                     gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(miniexs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(miniexs.lcnames[i])]), miniexs.tt[i], miniexs.ferr[i], miniexs.gps[ii])
 
                 except:
-                    return -np.inf
+                    return -np.inf, np.zeros((nlin))
 
                 M = np.ones((len(miniexs.tt[i]), 1))
 
@@ -4760,13 +4856,15 @@ def log_like(par_in: dict) -> float:
                 MTinvKM = M.T @ invKM
                 MTinvKr = M.T @ invKr
 
-                f0 = np.linalg.solve(MTinvKM, MTinvKr)
-                resid -= M @ f0
+                X = np.linalg.solve(MTinvKM, MTinvKr)
+                resid -= M @ X
 
                 like += gp.log_likelihood(resid)
 
                 _, logdet = np.linalg.slogdet(MTinvKM)
                 like += -0.5 * logdet
+
+                lin_par = np.append(lin_par, X)
 
             else:
 
@@ -4788,6 +4886,8 @@ def log_like(par_in: dict) -> float:
                 _, logdet = np.linalg.slogdet(Mw.T @ Mw)
 
                 like += -0.5 * (chi2min + logdet)
+
+                lin_par = np.append(lin_par, X)
 
 
     if miniexs.fit_rv:
@@ -4833,6 +4933,8 @@ def log_like(par_in: dict) -> float:
 
         like += -0.5 * (chi2min + logdet)
 
+        lin_par = np.append(lin_par, X)
+
 
     if miniexs.fit_gaia:
 
@@ -4871,8 +4973,10 @@ def log_like(par_in: dict) -> float:
 
         like += -0.5 * (chi2min + logdet)
 
+        lin_par = np.append(lin_par, X)
 
-    return like if not np.isnan(like) else -np.inf
+
+    return (like, lin_par) if not np.isnan(like) else (-np.inf, np.zeros((nlin)))
 
 
 def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
