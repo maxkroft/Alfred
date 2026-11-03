@@ -1212,9 +1212,8 @@ class PriorFrame(ctk.CTkFrame):
         variable = self.variable_anchor.cget('text')
         priortype = self.priortype.get()
 
-        pos_def_vars = ['log(P)', 'P', 'log(a/rs)', 'a/rs', 'rhos', 'log(K)', 'K',
-                    'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp',
-                    'eep', 'log10(age)', 'age', 'distance', 'mstar', 'rstar', 'rhostar']
+        pos_def_vars = ['P', 'a/rs', 'rhos', 'K', 'rho_gp', 'sigma_gp', 'eep', 'log10(age)', 'age', 'distance',
+                        'mstar', 'rstar', 'rhostar']
 
         if priortype in ["Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
             self.par1.min_val = 0
