@@ -15,6 +15,8 @@ from astropy.io import fits
 from astropy import units as u
 from astropy import constants
 from astropy.timeseries import LombScargle
+from astropy.time import Time
+from astropy.coordinates import get_body_barycentric
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.ERROR)
@@ -3117,7 +3119,7 @@ class ExoSystem:
     def lc_mod(self):
         """Stores the best fit model light curves.
 
-        fm is a dict, with a key for the phase folded models as well as for each light curve data set using their nicknames.
+        lc_mod is a dict, with a key for the phase folded models as well as for each light curve data set using their nicknames.
 
         The 'phase' key contains a dict with 'ttphase', a 1d numpy array of phase-folded time points used for plotting the models. Also within 'phase'
         is a key for each filter/bandpass used (e.g. TESS or Kepler). These are their own dicts with the following:
@@ -3557,7 +3559,7 @@ class ExoSystem:
     def rv_mod(self):
         """Stores the best fit radial velocity models.
 
-        rvm is a dict,  with the following keys:
+        rv_mod is a dict,  with the following keys:
 
         - rvm: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
           at the times of the RV data.
@@ -3745,6 +3747,165 @@ class ExoSystem:
 
         else:
             plt.close()
+
+
+    def gen_Gaia_astrometry(self, name: str):
+        """Generates Gaia astrometry models from the best fit parameters. Saves these to the pickle file Output/name_gaiam.p. These astrometry models
+        are accessible through ExoSystem.gaia_mod. See the documentation on ExoSystem.gaia_mod for details on the formatting of the object.
+
+        Args:
+            name (str): Name of the run. Sets the name of the output pickle file to name_gaiam.p.
+        """
+
+        print('\nGenerating Gaia astrometry models for plots.')
+
+        y = self.res | self.dres
+
+        n = len(y['log_like'])
+
+        if self.use_priors:
+
+            f = self.fixed.copy()
+
+            for ff in f:
+
+                f[ff] = np.full((n), f[ff])
+
+            y = y | f
+
+            for i in range(self.n):
+
+                if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
+
+                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
+                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+
+        pars = []
+
+        for i in range(self.n):
+
+            if not self.is_rv[i]:
+                continue
+
+            pars.append(get_Gaia_params(y, i+1, shape = (n)).T)
+
+        plx = np.median(y['plx'])
+
+        gm = 0
+        gmra = 0
+        gmdec = 0
+        gmplotra = 0
+        gmplotdec = 0
+
+        tgplot = np.linspace(np.min(self.tg), np.max(self.tg), 1000)
+
+        for j in range(self.n):
+
+            if not self.is_astro[j]:
+                continue
+
+            k = np.sum(self.is_astro[:j])
+
+            gm0 = Gaia_AL_Model(np.median(pars[k], axis = 0), self.tg, self.psi)
+            gm += gm0[2]
+            gmra += gm0[0]
+            gmdec += gm0[1]
+
+            gmplot = Gaia_AL_Model(np.median(pars[k], axis = 0), tgplot, np.zeros(tgplot.shape))
+            gmplotra += gmplot[0]
+            gmplotdec += gmplot[1]
+
+        gclean = self.gal - gm - self.plxf * plx
+        tgyr = (self.tg - self.tgref)/365.25
+
+        M = np.zeros((len(self.tg),4))
+        M[:,0] = np.sin(self.psi)
+        M[:,1] = np.cos(self.psi)
+        M[:,2] = tgyr*np.sin(self.psi)
+        M[:,3] = tgyr*np.cos(self.psi)
+    
+        W = 1/self.galerr**2
+        Mw = M * np.sqrt(W)[:, None]
+        Yw = gclean * np.sqrt(W)
+    
+        X, _, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+
+        bkg = M @ X + self.plxf * plx
+
+        ra, dec = self.ra*np.pi/180, self.dec*np.pi/180
+        pvec = np.array([-np.sin(ra), np.cos(ra), 0])
+        qvec = np.array([-np.sin(dec)*np.cos(ra), -np.sin(dec)*np.sin(ra), np.cos(dec)])
+
+        tplx = Time(self.tg, format = 'jd', scale = 'tdb')
+        earth = get_body_barycentric('earth', tplx)
+        Rxyz = -np.array([earth.x.value, earth.y.value, earth.z.value]).T
+        fra = Rxyz @ pvec
+        fdec = Rxyz @ qvec
+        raplx = plx * fra
+        decplx = plx * fdec
+
+        bkgra = X[0] + X[2] * tgyr + raplx
+        bkgdec = X[1] + X[3] * tgyr + decplx
+
+        tplxplot = Time(tgplot, format = 'jd', scale = 'tdb')
+        earthplot = get_body_barycentric('earth', tplxplot)
+        Rxyzplot = -np.array([earthplot.x.value, earthplot.y.value, earthplot.z.value]).T
+        fraplot = Rxyzplot @ pvec
+        fdecplot = Rxyzplot @ qvec
+        raplxplot = plx * fraplot
+        decplxplot = plx * fdecplot
+
+        bkgplotra = X[0] + X[2] * (tgplot - self.tgref)/365.25 + raplxplot
+        bkgplotdec = X[1] + X[3] * (tgplot - self.tgref)/365.25 + decplxplot
+
+        gm_err = []
+
+        for i in tqdm(range(0,n,20)):
+
+            gm0 = self.plxf * y['plx'][i] + (y['ra*_offset'][i] + y['pmra*'][i]*tgyr)*np.sin(self.psi) + (y['dec_offset'][i] + y['pmdec'][i]*tgyr)*np.cos(self.psi)
+
+            for j in range(self.n):
+
+                if not self.is_astro[j]:
+                    continue
+
+                k = np.sum(self.is_astro[:j])
+
+                gm0 += Gaia_AL_Model(pars[k][i], self.tg, self.psi)
+
+            gm_err.append(gm0)
+
+
+        gm_err = np.percentile(gm_err, [16,84], axis = 0)
+
+        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_err': np.array(gm_err), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(gmdec), 'tgplot': tgplot, 'gmplotra': np.array(gmplotra), 'gmplotdec': np.array(gmplotdec), 'bkgplotra': np.array(bkgplotra), 'bkgplotdec': np.array(bkgplotdec)}
+
+        pickle.dump(self._gaiam, open(self.direc+'Output/'+name+'_gaiam.p', 'wb'))
+
+
+    @property
+    def gaia_mod(self):
+        """Stores the best fit Gaia astrometry models.
+
+        gaia_mod is a dict,  with the following keys:
+
+        - gm: A 1d numpy array of the best fit Gaia along scan offsets, only including the orbital motion, at the observation times. Must be
+            combined with bkg to match the data.
+        - bkg: A 1d numpy array of the values of the along scan offsets due to the proper motion, position offsets, and parallax motion, at the
+            observation times.
+        - gm_err: A 2d numpy array of the 1 sigma uncertainties on the full gm + bkg model at the observation times. In the 0th axis, the 0 index
+            corresponds to a 1d array of the lower 1 sigma error and the 1 index corresponds to a 1d array of the upper 1 sigma error.
+        - gmra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the observation times.
+        - gmdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the observation times.
+        - bkgra: A 1d numpy array of the ra* proper motion, ra* offset, and ra* component of the parallax motion, at the observation times.
+        - bkgdec: A 1d numpy array of the dec proper motion, dec offset, and dec component of the parallax motion, at the observation times.
+        - tgplot: A 1d numpy array of more finely sampled times to make the plotted on-sky models look smooth.
+        - gmplotra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgplot.
+        - gmplotdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the times of tgplot.
+        - bkgplotra: A 1d numpy array of the ra* proper motion, ra* offset, and ra* component of the parallax motion, at the times of tgplot.
+        - bkgplotdec: A 1d numpy array of the dec proper motion, dec offset, and dec component of the parallax motion, at the times of tgplot.
+        """
+        return self._gaiam
 
 
     def gen_magfit(self, name: str):
