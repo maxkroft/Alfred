@@ -3781,23 +3781,32 @@ class ExoSystem:
                     y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
 
         pars = []
+        maxp = 0
+        maxtc = 0
 
         for i in range(self.n):
 
-            if not self.is_rv[i]:
+            if not self.is_astro[i]:
                 continue
 
             pars.append(get_Gaia_params(y, i+1, shape = (n)).T)
+
+            if np.median(y['P {0}'.format(i+1)]) > maxp:
+                maxp = np.median(y['P {0}'.format(i+1)])
+                maxtc = np.mediayn(y['Tc {0}'.format(i+1)])
 
         plx = np.median(y['plx'])
 
         gm = 0
         gmra = 0
         gmdec = 0
-        gmplotra = 0
-        gmplotdec = 0
+        gmskyra = 0
+        gmskydec = 0
+        gmorbra = 0
+        gmorbdec = 0
 
-        tgplot = np.linspace(np.min(self.tg), np.max(self.tg), 1000)
+        tgsky = np.linspace(np.min(self.tg)-50, np.max(self.tg)+50, 1000)
+        tgorb = np.linspace(maxtc, maxtc+maxp, 1000)
 
         for j in range(self.n):
 
@@ -3811,9 +3820,13 @@ class ExoSystem:
             gmra += gm0[0]
             gmdec += gm0[1]
 
-            gmplot = Gaia_AL_Model(np.median(pars[k], axis = 0), tgplot, np.zeros(tgplot.shape))
-            gmplotra += gmplot[0]
-            gmplotdec += gmplot[1]
+            gmsky = Gaia_AL_Model(np.median(pars[k], axis = 0), tgsky, np.zeros(tgsky.shape))
+            gmskyra += gmsky[0]
+            gmskydec += gmsky[1]
+
+            gmorb = Gaia_AL_Model(np.median(pars[k], axis = 0), tgorb, np.zeros(tgorb.shape))
+            gmorbra += gmorb[0]
+            gmorbdec += gmorb[1]
 
         gclean = self.gal - gm - self.plxf * plx
         tgyr = (self.tg - self.tgref)/365.25
@@ -3847,16 +3860,16 @@ class ExoSystem:
         bkgra = X[0] + X[2] * tgyr + raplx
         bkgdec = X[1] + X[3] * tgyr + decplx
 
-        tplxplot = Time(tgplot, format = 'jd', scale = 'tdb')
-        earthplot = get_body_barycentric('earth', tplxplot)
-        Rxyzplot = -np.array([earthplot.x.value, earthplot.y.value, earthplot.z.value]).T
-        fraplot = Rxyzplot @ pvec
-        fdecplot = Rxyzplot @ qvec
-        raplxplot = plx * fraplot
-        decplxplot = plx * fdecplot
+        tplxsky = Time(tgsky, format = 'jd', scale = 'tdb')
+        earthsky = get_body_barycentric('earth', tplxsky)
+        Rxyzsky = -np.array([earthsky.x.value, earthsky.y.value, earthsky.z.value]).T
+        frasky = Rxyzsky @ pvec
+        fdecsky = Rxyzsky @ qvec
+        raplxsky = plx * frasky
+        decplxsky = plx * fdecsky
 
-        bkgplotra = X[0] + X[2] * (tgplot - self.tgref)/365.25 + raplxplot
-        bkgplotdec = X[1] + X[3] * (tgplot - self.tgref)/365.25 + decplxplot
+        bkgskyra = X[0] + X[2] * (tgsky - self.tgref)/365.25 + raplxsky
+        bkgskydec = X[1] + X[3] * (tgsky - self.tgref)/365.25 + decplxsky
 
         gm_err = []
 
@@ -3876,9 +3889,43 @@ class ExoSystem:
             gm_err.append(gm0)
 
 
+        gmskyra_draws = []
+        gmskydec_draws = []
+        gmorbra_draws = []
+        gmorbdec_draws = []
+
+        idxs = np.random.choice(n, 100, replace = False)
+        for i in idxs:
+
+            gmskyra0 = 0
+            gmskydec0 = 0
+            gmorbra0 = 0
+            gmorbdec0 = 0
+
+            for j in range(self.n):
+
+                if not self.is_astro[j]:
+                    continue
+
+                k = np.sum(self.is_astro[:j])
+
+                gmsky = Gaia_AL_Model(np.median(pars[k], axis = 0), tgsky, np.zeros(tgsky.shape))
+                gmskyra0 += gmsky[0]
+                gmskydec0 += gmsky[1]
+
+                gmorb = Gaia_AL_Model(np.median(pars[k], axis = 0), tgorb, np.zeros(tgorb.shape))
+                gmorbra0 += gmorb[0]
+                gmorbdec0 += gmorb[1]
+
+            gmskyra_draws.append(gmskyra0)
+            gmskydec_draws.append(gmskydec0)
+            gmorbra_draws.append(gmorbra0)
+            gmorbdec_draws.append(gmorbdec0)
+
+
         gm_err = np.percentile(gm_err, [16,84], axis = 0)
 
-        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_err': np.array(gm_err), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(gmdec), 'tgplot': tgplot, 'gmplotra': np.array(gmplotra), 'gmplotdec': np.array(gmplotdec), 'bkgplotra': np.array(bkgplotra), 'bkgplotdec': np.array(bkgplotdec)}
+        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_err': np.array(gm_err), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(bkgdec), 'tgsky': tgsky, 'gmskyra': np.array(gmskyra), 'gmskydec': np.array(gmskydec), 'gmskyra_draws': np.array(gmskyra_draws), 'gmskydec_draws': np.array(gmskydec_draws), 'bkgskyra': np.array(bkgskyra), 'bkgskydec': np.array(bkgskydec), 'tgorb': tgorb, 'gmorbra': np.array(gmorbra), 'gmorbdec': np.array(gmorbdec), 'gmorbra_draws': np.array(gmorbra_draws), 'gmorbdec_draws': np.array(gmorbdec_draws)}
 
         pickle.dump(self._gaiam, open(self.direc+'Output/'+name+'_gaiam.p', 'wb'))
 
@@ -3899,13 +3946,83 @@ class ExoSystem:
         - gmdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the observation times.
         - bkgra: A 1d numpy array of the ra* proper motion, ra* offset, and ra* component of the parallax motion, at the observation times.
         - bkgdec: A 1d numpy array of the dec proper motion, dec offset, and dec component of the parallax motion, at the observation times.
-        - tgplot: A 1d numpy array of more finely sampled times to make the plotted on-sky models look smooth.
-        - gmplotra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgplot.
-        - gmplotdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the times of tgplot.
-        - bkgplotra: A 1d numpy array of the ra* proper motion, ra* offset, and ra* component of the parallax motion, at the times of tgplot.
-        - bkgplotdec: A 1d numpy array of the dec proper motion, dec offset, and dec component of the parallax motion, at the times of tgplot.
+        - tgsky: A 1d numpy array of more finely sampled times to make the plotted on-sky models look smooth, spanning the range of the observation
+            times.
+        - gmskyra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgsky.
+        - gmskydec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the times of tgsky.
+        - gmskyra_draws: A 2d numpy array of 100 orbit models in the ra* direction randomly drawn from the chains, at the times of tgsky. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmskyra.
+        - gmskydec_draws: A 2d numpy array of 100 orbit models in the dec direction randomly drawn from the chains, at the times of tgsky. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmskydec.
+        - bkgskyra: A 1d numpy array of the ra* proper motion, ra* offset, and ra* component of the parallax motion, at the times of tgsky.
+        - bkgskydec: A 1d numpy array of the dec proper motion, dec offset, and dec component of the parallax motion, at the times of tgsky.
+        - tgorb: A 1d numpy array of more finely sampled times to make the plotted 2d orbit models look smooth, spanning a full period of the
+            longest period astrometric planet.
+        - gmorbra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgorb.
+        - gmorbdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the times of tgorb.
+        - gmorbra_draws: A 2d numpy array of 100 orbit models in the ra* direction randomly drawn from the chains, at the times of tgorb. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmorbra.
+        - gmorbdec_draws: A 2d numpy array of 100 orbit models in the dec direction randomly drawn from the chains, at the times of tgorb. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmorbdec.
         """
         return self._gaiam
+
+
+    def plot_Gaia_AL(self, name: str, show_plot = True):
+        """Plots the best Gaia along scan model to the data. Saves to the folder in Plots set by name. The plot is named gaia_al.png. Shows the plot
+        if show_plot is True.
+
+        The top panel shows the full Gaia along scan offset time series, with the best fit model in green. The residuals are plotted below it.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
+
+        fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14,8), layout = 'constrained', sharex = True)
+
+        gm = self._gaiam['gm']
+        bkg = self._gaiam['bkg']
+        gmerr = self._gaiam['gm_err']
+
+        ax['a'].errorbar(self.tg, self.gal, yerr = self.galerr, fmt = '.k', markersize = 10, elinewidth = 2, zorder = 2)
+        ax['a'].plot(self.tg, gm+bkg, color = 'mediumseagreen', linewidth = 2, zorder = 1)
+        ax['a'].fill_between(self.tg, gmerr[0], gmerr[1], color = 'mediumseagreen', zorder = 0, alpha = 0.5, edgecolor = 'none')
+
+        ax['a'].tick_params(axis = 'both', labelsize = 15)
+        ax['a'].set_ylabel('Gaia AL Offset [mas]', fontsize = 20)
+
+        ax['b'].errorbar(self.tg, self.gal-gm-bkg, yerr = self.galerr, fmt = '.k', markersize = 10, elinewidth = 2, zorder = 2)
+        ax['b'].axhline(0, c = 'red', lw = 1, zorder = 1)
+
+        ax['b'].tick_params(axis = 'both', labelsize = 15)
+        ax['b'].set_xlabel('Time [BJD-2450000]', fontsize = 20)
+        ax['b'].set_ylabel('Resid. [mas]', fontsize = 20)
+
+        fig.savefig(self.direc+'Plots/'+name+'/gaia_al.png')
+
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
+
+    
+    def plot_Gaia_onsky(self):
+        
+        fig, ax = plt.subplots(1, 2, layout = 'constrained')
+
+        gmtot = self._gaiam['gm'] + self._gaiam['bkg']
+        gmra, gmdec = self._gaiam['gmra'], self._gaiam['gmdec']
+        bkgra, bkgdec = self._gaiam['bkgra'], self._gaiam['bkgdec']
+
+        tgsky = self._gaiam['tgsky']
+        gmskyra, gmskydec = self._gaiam['gmskyra'], self._gaiam['gmskydec']
+        bkgskyra, bkgskydec = self._gaiam['bkgskyra'], self._gaiam['bkgskydec']
+        gmskyra_draws, gmskydec_draws = self._gaiam['gmskyra_draws'], self._gaiam['gmskydec_draws']
+
+        ax[0]
 
 
     def gen_magfit(self, name: str):
