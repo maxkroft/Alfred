@@ -3793,7 +3793,7 @@ class ExoSystem:
 
             if np.median(y['P {0}'.format(i+1)]) > maxp:
                 maxp = np.median(y['P {0}'.format(i+1)])
-                maxtc = np.mediayn(y['Tc {0}'.format(i+1)])
+                maxtc = np.median(y['Tc {0}'.format(i+1)])
 
         plx = np.median(y['plx'])
 
@@ -3808,6 +3808,12 @@ class ExoSystem:
         tgsky = np.linspace(np.min(self.tg)-50, np.max(self.tg)+50, 1000)
         tgorb = np.linspace(maxtc, maxtc+maxp, 1000)
 
+        gmorbra_pl = []
+        gmorbdec_pl = []
+
+        xpts = []
+        ypts = []
+
         for j in range(self.n):
 
             if not self.is_astro[j]:
@@ -3815,18 +3821,41 @@ class ExoSystem:
 
             k = np.sum(self.is_astro[:j])
 
-            gm0 = Gaia_AL_Model(np.median(pars[k], axis = 0), self.tg, self.psi)
+            medpars = np.median(pars[k], axis = 0)
+
+            gm0 = Gaia_AL_Model(medpars, self.tg, self.psi)
             gm += gm0[2]
             gmra += gm0[0]
             gmdec += gm0[1]
 
-            gmsky = Gaia_AL_Model(np.median(pars[k], axis = 0), tgsky, np.zeros(tgsky.shape))
+            gmsky = Gaia_AL_Model(medpars, tgsky, np.zeros(tgsky.shape))
             gmskyra += gmsky[0]
             gmskydec += gmsky[1]
 
-            gmorb = Gaia_AL_Model(np.median(pars[k], axis = 0), tgorb, np.zeros(tgorb.shape))
+            gmorb = Gaia_AL_Model(medpars, tgorb, np.zeros(tgorb.shape))
             gmorbra += gmorb[0]
             gmorbdec += gmorb[1]
+
+            if np.sum(self.is_astro) > 1:
+                
+                gmorbra_pl.append(gmorbra)
+                gmorbdec_pl.append(gmorbdec)
+
+            p = medpars[0]
+            tp = np.median(y['Tp {0}'.format(j+1)])
+            e = medpars[2]
+            w = medpars[3]
+            fasc = -w
+            Easc = np.arctan2(np.sqrt(1-e**2) * np.sin(fasc), e + np.cos(fasc))
+            tasc = p/(2*np.pi) * (Easc - e * np.sin(Easc)) + tp
+            fdesc = -w + np.pi
+            Edesc = np.arctan2(np.sqrt(1-e**2) * np.sin(fdesc), e + np.cos(fdesc))
+            tdesc = p/(2*np.pi) * (Edesc - e * np.sin(Edesc)) + tp
+            ts = np.array([tp, tp+p/2, tasc, tdesc])
+
+            _, xts, yts = Gaia_AL_Model(medpars, ts, np.zeros(ts.shape))
+            xpts.append(xts)
+            ypts.append(yts)
 
         gclean = self.gal - gm - self.plxf * plx
         tgyr = (self.tg - self.tgref)/365.25
@@ -3857,8 +3886,8 @@ class ExoSystem:
         raplx = plx * fra
         decplx = plx * fdec
 
-        bkgra = X[0] + X[2] * tgyr + raplx
-        bkgdec = X[1] + X[3] * tgyr + decplx
+        bkgra = X[2] * tgyr + raplx
+        bkgdec = X[3] * tgyr + decplx
 
         tplxsky = Time(tgsky, format = 'jd', scale = 'tdb')
         earthsky = get_body_barycentric('earth', tplxsky)
@@ -3868,8 +3897,8 @@ class ExoSystem:
         raplxsky = plx * frasky
         decplxsky = plx * fdecsky
 
-        bkgskyra = X[0] + X[2] * (tgsky - self.tgref)/365.25 + raplxsky
-        bkgskydec = X[1] + X[3] * (tgsky - self.tgref)/365.25 + decplxsky
+        bkgskyra = X[2] * (tgsky - self.tgref)/365.25 + raplxsky
+        bkgskydec = X[3] * (tgsky - self.tgref)/365.25 + decplxsky
 
         gm_err = []
 
@@ -3925,7 +3954,7 @@ class ExoSystem:
 
         gm_err = np.percentile(gm_err, [16,84], axis = 0)
 
-        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_err': np.array(gm_err), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(bkgdec), 'tgsky': tgsky, 'gmskyra': np.array(gmskyra), 'gmskydec': np.array(gmskydec), 'gmskyra_draws': np.array(gmskyra_draws), 'gmskydec_draws': np.array(gmskydec_draws), 'bkgskyra': np.array(bkgskyra), 'bkgskydec': np.array(bkgskydec), 'tgorb': tgorb, 'gmorbra': np.array(gmorbra), 'gmorbdec': np.array(gmorbdec), 'gmorbra_draws': np.array(gmorbra_draws), 'gmorbdec_draws': np.array(gmorbdec_draws)}
+        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_err': np.array(gm_err), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(bkgdec), 'tgsky': tgsky, 'gmskyra': np.array(gmskyra), 'gmskydec': np.array(gmskydec), 'gmskyra_draws': np.array(gmskyra_draws), 'gmskydec_draws': np.array(gmskydec_draws), 'bkgskyra': np.array(bkgskyra), 'bkgskydec': np.array(bkgskydec), 'tgorb': tgorb, 'gmorbra': np.array(gmorbra), 'gmorbdec': np.array(gmorbdec), 'gmorbra_draws': np.array(gmorbra_draws), 'gmorbdec_draws': np.array(gmorbdec_draws), 'gmorbra_pl': np.array(gmorbra_pl), 'gmorbdec_pl': np.array(gmorbdec_pl), 'xpts': np.array(xpts), 'ypts': np.array(ypts)}
 
         pickle.dump(self._gaiam, open(self.direc+'Output/'+name+'_gaiam.p', 'wb'))
 
@@ -3944,8 +3973,8 @@ class ExoSystem:
             corresponds to a 1d array of the lower 1 sigma error and the 1 index corresponds to a 1d array of the upper 1 sigma error.
         - gmra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the observation times.
         - gmdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the observation times.
-        - bkgra: A 1d numpy array of the ra* proper motion, ra* offset, and ra* component of the parallax motion, at the observation times.
-        - bkgdec: A 1d numpy array of the dec proper motion, dec offset, and dec component of the parallax motion, at the observation times.
+        - bkgra: A 1d numpy array of the ra* proper motion and ra* component of the parallax motion, at the observation times.
+        - bkgdec: A 1d numpy array of the dec proper motion and dec component of the parallax motion, at the observation times.
         - tgsky: A 1d numpy array of more finely sampled times to make the plotted on-sky models look smooth, spanning the range of the observation
             times.
         - gmskyra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgsky.
@@ -3954,8 +3983,8 @@ class ExoSystem:
             axis corresponds to each different model, where each of these is a 1d array similar to gmskyra.
         - gmskydec_draws: A 2d numpy array of 100 orbit models in the dec direction randomly drawn from the chains, at the times of tgsky. The 0th
             axis corresponds to each different model, where each of these is a 1d array similar to gmskydec.
-        - bkgskyra: A 1d numpy array of the ra* proper motion, ra* offset, and ra* component of the parallax motion, at the times of tgsky.
-        - bkgskydec: A 1d numpy array of the dec proper motion, dec offset, and dec component of the parallax motion, at the times of tgsky.
+        - bkgskyra: A 1d numpy array of the ra* proper motion and ra* component of the parallax motion, at the times of tgsky.
+        - bkgskydec: A 1d numpy array of the dec proper motion and dec component of the parallax motion, at the times of tgsky.
         - tgorb: A 1d numpy array of more finely sampled times to make the plotted 2d orbit models look smooth, spanning a full period of the
             longest period astrometric planet.
         - gmorbra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgorb.
@@ -3964,13 +3993,23 @@ class ExoSystem:
             axis corresponds to each different model, where each of these is a 1d array similar to gmorbra.
         - gmorbdec_draws: A 2d numpy array of 100 orbit models in the dec direction randomly drawn from the chains, at the times of tgorb. The 0th
             axis corresponds to each different model, where each of these is a 1d array similar to gmorbdec.
+        - gmorbra_pl: A 2d numpy array of the best fit Gaia model for each individual astrometric planet in the ra* direction, only including the
+            orbital motion, at the times of tgorb. The 0th axis corresponds to each astrometric planet, where each of these is a 1d array similar to
+            gmorbra. If there is only 1 astrometric planet, this is empty as gmorbra would be an identical model.
+        - gmorbdec_pl: A 2d numpy array of the best fit Gaia model for each individual astrometric planet in the dec direction, only including the
+            orbital motion, at the times of tgorb. The 0th axis corresponds to each astrometric planet, where each of these is a 1d array similar to
+            gmorbdec. If there is only 1 astrometric planet, this is empty as gmorbdec would be an identical model.
+        - xpts: A 2d numpy array of the relative ra* positions on the orbit of the periastron, apastron, ascending node, and descending node for each
+            planet. The 0th axis corresponds to each planet.
+        - ypts: A 2d numpy array of the relative dec positions on the orbit of the periastron, apastron, ascending node, and descending node for each
+            planet. The 0th axis corresponds to each planet.
         """
         return self._gaiam
 
 
     def plot_Gaia_AL(self, name: str, show_plot = True):
-        """Plots the best Gaia along scan model to the data. Saves to the folder in Plots set by name. The plot is named gaia_al.png. Shows the plot
-        if show_plot is True.
+        """Plots the best fit Gaia along scan model to the data. Saves to the folder in Plots set by name. The plot is named gaia_al.png. Shows the
+        plot if show_plot is True.
 
         The top panel shows the full Gaia along scan offset time series, with the best fit model in green. The residuals are plotted below it.
 
@@ -4009,20 +4048,142 @@ class ExoSystem:
             plt.close()
 
     
-    def plot_Gaia_onsky(self):
+    def plot_Gaia_onsky(self, name: str, show_plot = True):
+        """Plots the best fit Gaia astrometic model to the data. Saves to the folder in Plots set by name. The plot is named gaia_onsky.png. Shows
+        the plot if show_plot is True.
+
+        The left panel shows the total motion on the sky, including the orbit, proper motion, and parallax motion. The right panel shows just the
+        orbital motion.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
         
         fig, ax = plt.subplots(1, 2, layout = 'constrained')
+
+        y = self.res | self.dres
+        
+        if self.use_priors:
+
+            y = y | self.fixed
 
         gmtot = self._gaiam['gm'] + self._gaiam['bkg']
         gmra, gmdec = self._gaiam['gmra'], self._gaiam['gmdec']
         bkgra, bkgdec = self._gaiam['bkgra'], self._gaiam['bkgdec']
 
-        tgsky = self._gaiam['tgsky']
         gmskyra, gmskydec = self._gaiam['gmskyra'], self._gaiam['gmskydec']
         bkgskyra, bkgskydec = self._gaiam['bkgskyra'], self._gaiam['bkgskydec']
         gmskyra_draws, gmskydec_draws = self._gaiam['gmskyra_draws'], self._gaiam['gmskydec_draws']
 
-        ax[0]
+        pmra, pmdec = np.median(y['pmra*']), np.median(y['pmdec'])
+
+        ax[0].scatter((self.gal-gmtot)*np.sin(self.psi) + gmra + bkgra, (self.gal-gmtot)*np.cos(self.psi) + gmdec + bkgdec, marker = '.', c = 'black', s = 100, zorder = 4)
+
+        gmerrorbars = np.array([self.gal-gmtot-self.galerr, self.gal-gmtot+self.galerr])
+        for i in range(len(self.tg)):
+            ax[0].plot(gmerrorbars[i]*np.sin(self.psi[i]) + gmra[i] + bkgra[i], gmerrorbars[i]*np.cos(self.psi[i]) + gmdec[i] + bkgdec[i], c = 'black', linewidth = 2, zorder = 3)
+
+        ax[0].plot(gmskyra + bkgskyra, gmskydec + bkgskydec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
+        for i in range(len(gmskyra_draws)):
+            ax[0].plot(gmskyra_draws[i] + bkgskyra, gmskydec_draws[i] + bkgskydec, color = 'darkseagreen', linewidth = 1, zorder = 1)
+        
+        ax[0].plot(bkgskyra, bkgskydec, color = 'darkred', linewidth = 2, zorder = 0, linestyle = '--', label = 'On-Sky Motion')
+
+        xl, yl = ax[0].get_xlim(), ax[0].get_ylim()
+        ax[0].set_xlim(xl)
+        ax[0].set_ylim(yl)
+
+        xrange, yrange = (xl[1]-xl[0]), (yl[1]-yl[0])
+        xlen = xrange/10*pmra/np.sqrt(pmra**2+pmdec**2)
+        ylen = yrange/10*pmdec/np.sqrt(pmra**2+pmdec**2)
+        ya = yrange/8+xl[0]
+        if pmra/pmdec >= 0:
+            xa = xrange/8+xl[0]
+        else:
+            xa = xl[1]-xrange/8
+        ax[0].annotate('', xytext = (xa-xlen, ya-ylen), xy = (xa+xlen, ya+ylen), arrowprops = dict(arrowstyle='->',color='black',linewidth=1))
+
+        ax[0].set_box_aspect(1)
+        ax[0].invert_xaxis()
+
+        ax[0].legend(fontsize = 15)
+        ax[0].tick_params(axis = 'both', labelsize = 15)
+        ax[0].set_title('On-Sky Motion')
+        ax[0].set_xlabel('$\Delta \alpha \mathrm{cos}(\delta)$ [mas]', fontsize = 20)
+        ax[0].set_ylabel('$\Delta \delta$ [mas]')
+
+        gmorbra, gmorbdec = self._gaiam['gmorbra'], self._gaiam['gmorbdec']
+        gmorbra_draws, gmorbdec_draws = self._gaiam['gmorbra_draws'], self._gaiam['gmorbdec_draws']
+        gmorbra_pl, gmorbdec_pl = self._gaiam['gmorbra_pl'], self._gaiam['gmorbdec_pl']
+        xpts, ypts = self._gaiam['xpts'], self._gaiam['ypts']
+
+        ax[1].scatter((self.gal-gmtot)*np.sin(self.psi) + gmra, (self.gal-gmtot)*np.cos(self.psi) + gmdec, marker = '.', c = 'black', s = 100, zorder = 4)
+
+        for i in range(len(self.tg)):
+            ax[1].plot(gmerrorbars[i]*np.sin(self.psi[i]) + gmra[i], gmerrorbars[i]*np.cos(self.psi[i]) + gmdec[i], c = 'black', linewidth = 2, zorder = 3)
+
+        ax[1].plot(gmorbra, gmorbdec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
+        for i in range(len(gmorbra_draws)):
+            ax[1].plot(gmorbra_draws[i], gmorbdec_draws[i], color = 'darkseagreen', linewidth = 1, zorder = 1)
+
+        ax[1].scatter(0, 0, c = 'black', marker = '*', s = 100, zorder = 3)
+
+        for i in range(self.n):
+
+            if not self.is_astro[i]:
+                continue
+
+            j = np.sum(self.is_astro[:i])
+
+            if np.sum(self.is_astro) > 1:
+
+                color = ['black','red','darkorange','green','blue','darkorchid'][j]
+
+                ax[1].plot(gmorbra_pl[j], gmorbdec_pl[j], linewidth = 2, zorder = 2, label = 'Planet {0}'.format(i+1), color = color)
+
+                ii = np.argmin(np.sqrt((gmorbra_pl[j]-xpts[j][1])**2 + (gmorbdec_pl[j]-ypts[j][1])**2))
+                dx = gmorbra_pl[j][ii] - gmorbra_pl[j][ii-1]
+                dy = gmorbdec_pl[j][ii] - gmorbdec_pl[j][ii-1]
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = color, lw = 0, mutation_scale = 15))
+
+            else:
+                ii = np.argmin(np.sqrt((gmorbra-xpts[j][1])**2 + (gmorbdec-ypts[j][1])**2))
+                dx = gmorbra[ii] - gmorbra[ii-1]
+                dy = gmorbdec[ii] - gmorbdec[ii-1]
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 0, mutation_scale = 15))
+
+            ax[1].scatter(xpts[j][0], ypts[j][0], c = 'black', marker = '+', s = 100, zorder = 3, label = '$\omega$' if j == 0 else None)
+            ax[1].scatter(xpts[j][2], ypts[j][2], c = 'black', marker = 's', s = 100, zorder = 3, label = '\u260A' if j == 0 else None)
+            ax[1].plot(xpts[j][2:], ypts[j][2:], c = 'gray', linestyle = '--', linewidth = 1, zorder = 2, label = 'Line of Nodes' if j == 0 else None)
+
+
+        xl, yl = ax[1].get_xlim(), ax[1].get_ylim()
+        limrange = max(xl[1]-xl[0], yl[1]-yl[0])
+        xlm = (xl[1]+xl[0])/2
+        ylm = (yl[1]+yl[0])/2
+        ax[1].set_xlim(xlm-limrange/2, xlm+limrange/2)
+        ax[1].set_ylim(ylm-limrange/2, ylm+limrange/2)
+        ax[1].invert_xaxis()
+        ax[1].set_aspect('equal')
+
+        ax[1].legend(fontsize = 15, ncols = 2)
+        ax[1].tick_params(axis = 'both', labelsize = 15)
+        ax[1].set_title('Astrometric Orbit')
+        ax[1].set_xlabel('$\Delta \alpha \mathrm{cos}(\delta)$ [mas]', fontsize = 20)
+        ax[1].set_ylabel('$\Delta \delta$ [mas]')
+
+        fig.savefig(self.direc+'Plots/'+name+'/gaia_onsky.png')
+
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
+
+
+
 
 
     def gen_magfit(self, name: str):
