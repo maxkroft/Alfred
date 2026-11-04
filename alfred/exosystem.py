@@ -32,7 +32,7 @@ from typing import Literal
 from contextlib import nullcontext
 
 from alfred._orbit_funcs import _rvModel, _astrometryModel
-from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs
+from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs, Init_gaia
 from alfred.ld_grids import *
 from alfred.priors import *
 from alfred import is_notebook
@@ -48,7 +48,8 @@ class ExoSystem:
     """
 
     def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt',
-                 init_rv = 'init_rv.txt', init_ld = 'init_ld.txt', init_priors = 'init_priors.txt', init_ttvs = 'init_ttvs.txt'):
+                 init_rv = 'init_rv.txt', init_gaia = 'init_gaia.txt', init_ld = 'init_ld.txt', init_priors = 'init_priors.txt',
+                 init_ttvs = 'init_ttvs.txt'):
         """Initialize an ExoSystem object with a directory and init files. The init files must all be created using alfred.
 
         Args:
@@ -57,6 +58,7 @@ class ExoSystem:
             init_star (str, optional): Name of the star parameter init file. Default is init_star.txt.
             init_lcs (str, optional): Name of the light curve data init file. Default is init_lcs.txt.
             init_rv (str, optional): Name of the RV data init file. Default is init_rv.txt.
+            init_gaia (str, optional): Name of the Gaia data init file. Default is init_gaia.txt.
             init_ld (str, optional): Name of the limb darkening parameter init file. Default is init_ld.txt.
             init_priors (str, optional): Name of the priors init file. Default is init_priors.txt.
             init_ttvs (str, optional): Name of the TTV init file. Default is init_ttvs.txt.
@@ -70,6 +72,7 @@ class ExoSystem:
         self.init_star = Init_star(self.direc, init_star).from_file()
         self.init_lcs = Init_lcs(self.direc, init_lcs).from_file()
         self.init_rv = Init_rv(self.direc, init_rv).from_file()
+        self.init_gaia = Init_gaia(self.direc, init_gaia).from_file()
         self.init_ld = Init_ld(self.direc, init_ld).from_file()
 
         if os.path.exists(self.direc+'/'+init_priors):
@@ -83,6 +86,7 @@ class ExoSystem:
         tab_star = self.init_star.table
         tab_lcs = self.init_lcs.table
         tab_rv = self.init_rv.table
+        tab_gaia = self.init_gaia.table
         tab_ld = self.init_ld.table
 
 
@@ -96,6 +100,8 @@ class ExoSystem:
 
         self.is_rv = np.array(tab_planets['RV Signal'])
         self.nr = int(np.sum(self.is_rv))
+
+        self.is_astro = np.array(tab_planets['Gaia Signal'])
 
         self.fit_ttv = np.array(tab_planets['Fit TTVs'])
         self.nttv = int(np.sum(self.fit_ttv))
@@ -374,6 +380,53 @@ class ExoSystem:
             self.tr_ref = np.min(self.tr)
             self.tr_plot = np.linspace(np.min(self.tr)-5, np.max(self.tr+5), 1000)
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
+
+
+        #Gaia file
+
+        gdata = Table.read(self.direc+tab_gaia['File'][0])
+
+        if tab_gaia['File Type'][0] == 'DR4':
+
+            self.tgref = 2457936.875-2450000
+            
+            i = np.where(gdata['source_id'] == tab_gaia['Source ID'][0])[0]
+            gdata = gdata[i]
+
+            self.ra = gdata['ra0'][0]
+            self.dec = gdata['dec0'][0]
+
+            self.tg = []
+            self.gal = []
+            self.galerr = []
+            self.psi = []
+            self.plxf = []
+
+            for i in range(len(gdata)):
+
+                j = ~gdata['centroid_pos_al'][i].mask & (gdata['ccd_proc_flags'][i] == 0)
+
+                self.tg.append(gdata['obs_time_tcb'][i][j] + gdata['obs_time_bary_corr'][i])
+                self.gal.append(gdata['centroid_pos_al'][i][j])
+                self.galerr.append(gdata['centroid_pos_error_al'][i][j])
+                self.psi.append(gdata['scan_pos_angle'][i][j]*np.pi/180)
+                self.plxf.append(gdata['parallax_factor_al'][i][j])
+
+            self.tg = np.concatenate(self.tg)
+            self.gal = np.concatenate(self.gal)
+            self.galerr = np.concatenate(self.galerr)
+            self.psi = np.concatenate(self.psi)
+            self.plxf = np.concatenate(self.plxf)
+
+            i = np.argsort(self.tg)
+            self.tg = self.tg[i]
+            self.gal = self.gal[i]
+            self.galerr = self.galerr[i]
+            self.psi = self.psi[i]
+            self.plxf = self.plxf[i]
+
+            time = Time(2455197.5+(self.tg*u.ns).to(u.d).value, format = 'jd', scale = 'tcb')
+            self.tg = time.tdb.value-2450000
 
 
     def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_gaia: bool, fit_star: bool, nburn: int | float, nrun: int,
@@ -4173,6 +4226,11 @@ class ExoSystem:
         ax[1].set_title('Astrometric Orbit')
         ax[1].set_xlabel('$\Delta \alpha \mathrm{cos}(\delta)$ [mas]', fontsize = 20)
         ax[1].set_ylabel('$\Delta \delta$ [mas]')
+
+        width, height = fig.get_size_inches()
+        twidth = 14
+        fig.set_figwidth(twidth)
+        fig.set_figheight(twidth * height/width)
 
         fig.savefig(self.direc+'Plots/'+name+'/gaia_onsky.png')
 
