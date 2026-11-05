@@ -384,50 +384,79 @@ class ExoSystem:
 
         #Gaia file
 
-        gdata = Table.read(self.direc+tab_gaia['File'][0])
+        self.gaia_err_scale = np.array(tab_gaia['Err Scale'][0])
 
-        if tab_gaia['File Type'][0] == 'DR4':
+        fname = tab_gaia['File'][0]
 
-            self.tgref = 2457936.875-2450000
-            
-            i = np.where(gdata['source_id'] == tab_gaia['Source ID'][0])[0]
-            gdata = gdata[i]
+        if not os.path.isfile(self.direc+'/'+fname) and fname != '':
+            print('Gaia file {0} not found.'.format(fname))
 
-            self.ra = gdata['ra0'][0]
-            self.dec = gdata['dec0'][0]
+        elif fname != '':
 
-            self.tg = []
-            self.gal = []
-            self.galerr = []
-            self.psi = []
-            self.plxf = []
+            if tab_gaia['Format'][0] == 'DR4':
 
-            for i in range(len(gdata)):
+                gdata = Table.read(self.direc+fname)
 
-                j = ~gdata['centroid_pos_al'][i].mask & (gdata['ccd_proc_flags'][i] == 0)
+                self.tgref = 2457936.875-2450000
+                
+                i = np.where(gdata['source_id'] == tab_gaia['Source ID'][0])[0]
+                gdata = gdata[i]
 
-                self.tg.append(gdata['obs_time_tcb'][i][j] + gdata['obs_time_bary_corr'][i])
-                self.gal.append(gdata['centroid_pos_al'][i][j])
-                self.galerr.append(gdata['centroid_pos_error_al'][i][j])
-                self.psi.append(gdata['scan_pos_angle'][i][j]*np.pi/180)
-                self.plxf.append(gdata['parallax_factor_al'][i][j])
+                self.ra = gdata['ra0'][0]
+                self.dec = gdata['dec0'][0]
 
-            self.tg = np.concatenate(self.tg)
-            self.gal = np.concatenate(self.gal)
-            self.galerr = np.concatenate(self.galerr)
-            self.psi = np.concatenate(self.psi)
-            self.plxf = np.concatenate(self.plxf)
+                self.tg = []
+                self.gal = []
+                self.galerr = []
+                self.psi = []
+                self.plxf = []
 
-            i = np.argsort(self.tg)
-            self.tg = self.tg[i]
-            self.gal = self.gal[i]
-            self.galerr = self.galerr[i]
-            self.psi = self.psi[i]
-            self.plxf = self.plxf[i]
+                for i in range(len(gdata)):
 
-            time = Time(2455197.5+(self.tg*u.ns).to(u.d).value, format = 'jd', scale = 'tcb')
-            self.tg = time.tdb.value-2450000
+                    j = ~gdata['centroid_pos_al'][i].mask & (gdata['ccd_proc_flags'][i] == 0)
 
+                    self.tg.append(gdata['obs_time_tcb'][i][j] + gdata['obs_time_bary_corr'][i])
+                    self.gal.append(gdata['centroid_pos_al'][i][j])
+                    self.galerr.append(gdata['centroid_pos_error_al'][i][j])
+                    self.psi.append(gdata['scan_pos_angle'][i][j]*np.pi/180)
+                    self.plxf.append(gdata['parallax_factor_al'][i][j])
+
+                self.tg = np.concatenate(self.tg)
+                self.gal = np.concatenate(self.gal)
+                self.galerr = np.concatenate(self.galerr) * self.gaia_err_scale
+                self.psi = np.concatenate(self.psi)
+                self.plxf = np.concatenate(self.plxf)
+
+                i = np.argsort(self.tg)
+                self.tg = self.tg[i]
+                self.gal = self.gal[i]
+                self.galerr = self.galerr[i]
+                self.psi = self.psi[i]
+                self.plxf = self.plxf[i]
+
+                time = Time(2455197.5+(self.tg*u.ns).to(u.d).value, format = 'jd', scale = 'tcb')
+                self.tg = time.tdb.value-2450000
+
+            else:
+
+                try:
+                    gdata = Table.read(self.direc + fname)
+                except:
+                    rvdata = Table.read(self.direc + fname, format = 'ascii')
+
+                gdata.sort(tab_gaia['Time Col'][0])
+
+                self.tg = gdata[tab_gaia['Time Col'][0]] - 2450000
+                self.gal = gdata[tab_gaia['AL Col'][0]]
+                self.galerr = gdata[tab_gaia['Err Col'][0]]
+                self.psi = gdata[tab_gaia['Psi Col'][0]]
+                self.plxf = gdata[tab_gaia['Plx Fac Col'][0]]
+
+                self.ra = tab_gaia['RA'][0]
+                self.dec = tab_gaia['Dec'][0]
+                self.tgref = tab_gaia['Ref Time'][0]
+
+                
 
     def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_gaia: bool, fit_star: bool, nburn: int | float, nrun: int,
             parallel: bool | int | Literal['auto'] = False, sampler_type: Literal['emcee','zeus'] = 'emcee', min_nrun: int = 500, ntau: int = 50,
