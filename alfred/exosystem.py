@@ -755,7 +755,7 @@ class ExoSystem:
         else:
 
             self.setup_miniexs()
-            res = minimize(lambda x, *args: -1 * (log_like({k:v for k,v in zip(self.keys, x)}, *args)[0] if np.any(self.fit_ttv) else log_like({k:v for k,v in zip(self.keys, x)}, *args)), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
+            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             self.x = {k:v for k,v in zip(self.keys, res.x)}
 
 
