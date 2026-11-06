@@ -37,7 +37,7 @@ class InitFile:
         """
 
         self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
-                                header_rows = self.header_rows, converters = self.converters, fill_values = [('', '0', '*'),('', 'NaN', '*'),('', '', '*')])
+                                header_rows = self.header_rows, converters = self.converters)
         return self
 
     def save(self):
@@ -314,12 +314,12 @@ class Init_planets(InitFile):
 
         self.header_rows = ['name', 'unit']
 
-        self.converters = {'Transiting':bool, 'RV Signal':bool,  'Fit Ecc':bool, 'Fit TTVs':bool, 'Fit Eclipse':bool, 'Period':float, 'Tc':float, 'Rp/Rs':float, 'a/Rs':float, 'cos(i)':float, 'K':float, 'sqrt(e)cos(w)':float, 'sqrt(e)sin(w)':float, 'fp':float}
+        self.converters = {'Transiting':bool, 'RV Signal':bool, 'Fit Gaia': bool, 'Fit Ecc':bool, 'Fit TTVs':bool, 'Fit Eclipse':bool, 'Period':float, 'Tc':float, 'Rp/Rs':float, 'a/Rs':float, 'cos(i)':float, 'K':float, 'sqrt(e)cos(w)':float, 'sqrt(e)sin(w)':float, 'Mp/Ms':float, 'Omega':float, 'fp':float}
 
-        self.table = Table(rows = [[False]*5 + [np.nan]*9],
-            names = ['Transiting', 'RV Signal',  'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
-            units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
-            dtype = [bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float])
+        self.table = Table(rows = [[False]*6 + [np.nan]*11],
+            names = ['Transiting', 'RV Signal', 'Fit Gaia', 'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'Mp/Ms', 'Omega', 'fp'],
+            units = [None, None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None, 'rad', None],
+            dtype = [bool, bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float, float, float])
 
 
     def __call__(self):
@@ -521,6 +521,10 @@ def create_folder(direc: str):
     initrv = Init_rv(direc)
     initrv()
     initrv.save()
+
+    initgaia = Init_gaia(direc)
+    initgaia()
+    initgaia.save()
 
     initstar = Init_star(direc)
     initstar()
