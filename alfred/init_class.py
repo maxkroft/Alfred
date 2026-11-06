@@ -8,7 +8,7 @@ from astropy.io.ascii import InconsistentTableError
 from typing import Self
 
 from alfred.ld_grids import calc_ld, ld_grid_list
-from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI, InitPriorsGUI, InitStarGUI, InitLDGUI, InitTTVsGUI
+from alfred.init_gui import InitPlanetsGUI, InitLcsGUI, InitRVGUI, InitPriorsGUI, InitStarGUI, InitLDGUI, InitTTVsGUI, InitGaiaGUI
 
 
 class InitFile:
@@ -106,113 +106,6 @@ class Init_lcs(InitFile):
         app.mainloop()
 
 
-    # def create(self, empty: bool = False) -> Self:
-    #     """Creates an Init_lcs table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-    #     and file.
-
-    #     Args:
-    #         empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
-    #             using Init_lcs.add_lc_file, or manually with either astropy Table methods or in the txt file. Default is False.
-
-    #     Returns:
-    #         Init_lcs: The whole Init_lcs object after creating the table.
-    #     """
-
-    #     self.table = Table(names = ['File','Nickname','Time Col','Flux Col','Err Col','Quality Col','Time Offset','Err Scale','Exp Time','Filter','Detrend'], 
-    #                        units = [None,None,None,None,None,None,'BJD',None,'s',None,None],
-    #                        dtype = [str,str,str,str,str,str,int,float,float,str,bool])
-
-    #     if not empty:
-
-    #         x = input('Creating light curve initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
-
-    #         if x == 'stop':
-    #             return
-
-    #         while True:
-
-    #             self.add_lc_file()
-
-    #             x = input('More files? y/n ')
-                
-    #             if x.lower() != 'y':
-    #                 break
-        
-    #     else:
-
-    #         self.table.add_row(['None','None','None','None','None','None',0,np.nan,np.nan,'None',False])
-
-    #     self.save()
-
-    #     return self
-
-
-    # def add_lc_file(self):
-    #     """Adds a new row to the Init_lcs table for a new light curve file. Prompts the user to fill it in. Easier than adding rows manually.
-    #     """
-
-    #     row = []
-
-    #     found = False
-    #     while not found:
-
-    #         fpath = input('Absolute path to light curve file to move here, or type "skip" if you dont want to move a file now: ')
-
-    #         if fpath.lower() == 'skip':
-    #             fname = input('Name of light curve file for later: ')
-    #             found = True
-
-    #         else:
-                
-    #             fname = fpath[fpath.rfind('/')+1:]
-
-    #             try:
-    #                 shutil.copyfile(fpath, self.direc+'/'+fname)
-    #                 found = True
-
-    #             except shutil.SameFileError:
-    #                 print('File already there.')
-
-    #             except FileNotFoundError:
-    #                 print('File not found. Try again.')
-
-    #     row.append(fname)
-
-    #     nickname = input('Nickname for the data set (e.g. "TESS S57"): ')
-    #     row.append(nickname)
-
-    #     timecol = input('Column header for the time data: ')
-    #     row.append(timecol)
-
-    #     fcol = input('Column header for the flux data: ')
-    #     row.append(fcol)
-
-    #     ferrcol = input('Column header for the flux error data: ')
-    #     row.append(ferrcol)
-
-    #     qcol = input('Column header for the quality flag data (or None): ')
-    #     row.append(qcol)
-
-    #     toffset = input('Time offset from BJD (in days), for example 2457000 is common for TESS: ')
-    #     row.append(toffset)
-
-    #     row.append(1.0)
-
-    #     exptime = input('Exposure time for this data set (aka its cadence) in seconds: ')
-    #     row.append(exptime)
-
-    #     filter = input('Filter or bandpass for this data (e.g. TESS, Kepler, V): ')
-    #     row.append(filter)
-
-    #     detrend = input('Detrend this lightcurve? True or False ').lower() == 'true'
-    #     row.append(detrend)
-
-    #     self.table.add_row(row)
-
-    #     self.save()
-
-
-
 class Init_rv(InitFile):
     """Class for creating, loading, and editing RV data initialization files. Inherits from InitFile. Contains information for loading RV data.
     Currently supports data in .csv files or ascii tables with headers. Each data set is given a nickname by the user for differentiating them during
@@ -247,103 +140,37 @@ class Init_rv(InitFile):
         app.mainloop()
 
 
-    # def create(self, empty: bool = False) -> Self:
-    #     """Creates an Init_rv table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-    #     and file.
+class Init_gaia(InitFile):
+    """Class for creating, loading, and editing Gaia data initialization files. Inherits from InitFile. Contains information for loading Gaia astrometric
+    data. Currently supports data in the default Gaia DR4 epoch astrometry format, or custom formatted .csv files or ascii tables with headers.
+    """
 
-    #     Args:
-    #         empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
-    #             using Init_rv.add_rv_file, or manually with either astropy Table methods or in the txt file. Default is False.
+    def __init__(self, direc: str, name: str = 'init_gaia.txt'):
+        """Initializes an Init_gaia object with a directory and a name.
 
-    #     Returns:
-    #         Init_rv: The whole Init_rv object after creating the table.
-    #     """
+        Args:
+            direc (str): A directory for alfred fitting in which to store the init file.
+            name (str, optional): The name of the init file. If it does not end in .txt, this is appended to the name. The default is 'init_gaia.txt'.
+        """
 
-    #     self.table = Table(names = ['File','Nickname','Time Col','RV Col','Err Col','Time Offset','Err Scale','m/s or km/s'],
-    #                        units = [None, None, None, None, None, 'BJD', None, None],
-    #                        dtype = [str,str,str,str,str,float,float,str])
+        super().__init__(direc, name)
 
-    #     if not empty:
+        self.header_rows = ['name', 'unit']
 
-    #         x = input('Creating rv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
+        self.converters = {'File':str,'Format':str,'Source ID':int,'Time Col':str,'AL Col':str,'Err Col':str,'Psi Col':str,'Plx Fac Col':str,'Err Scale':float,'RA':float,'Dec':float,'Ref Time':float}
 
-    #         if x == 'stop':
-    #             return
-
-    #         while True:
-
-    #             self.add_rv_file()
-
-    #             x = input('More files? y/n ')
-                
-    #             if x.lower() != 'y':
-    #                 break
-
-    #     else:
-
-    #         self.table.add_row(['None','None','None','None','None',np.nan,np.nan,'None'])
-        
-    #     self.save()
-
-    #     return self
+        self.table = Table(rows = [['']*2 + [0] + ['']*5 + [1] + [np.nan]*3],
+                           names = ['File','Format','Source ID','Time Col','AL Col','Err Col','Psi Col','Plx Fac Col','Err Scale','RA','Dec','Ref Time'],
+                           units = [None, None, None, None, None, None, None, None, None, 'deg', 'deg', 'BJD'],
+                           dtype = [str,str,int,str,str,str,str,str,float,float,float,float])
 
 
-    # def add_rv_file(self):
-    #     """Adds a new row to the Init_rv table for a new RV data file. Prompts the user to fill it in. Easier than adding rows manually.
-    #     """
+    def __call__(self):
+        """Starts the InitGaiaGUI.
+        """
 
-    #     row = []
-
-    #     found = False
-    #     while not found:
-
-    #         fpath = input('Absolute path to RV file to move here, or type "skip" if you dont want to move a file now: ')
-
-    #         if fpath.lower() == 'skip':
-    #             fname = input('Name of RV file for later: ')
-    #             found = True
-
-    #         else:
-
-    #             fname = fpath[fpath.rfind('/')+1:]
-
-    #             try:
-    #                 shutil.copyfile(fpath, self.direc+'/'+fname)
-    #                 found = True
-
-    #             except shutil.SameFileError:
-    #                 print('File already there.')
-
-    #             except FileNotFoundError:
-    #                 print('File not found. Try again.')
-
-    #     row.append(fname)
-
-    #     nickname = input('Nickname for the data set (e.g. "NEID"): ')
-    #     row.append(nickname)
-
-    #     timecol = input('Column header for the time data: ')
-    #     row.append(timecol)
-
-    #     rvcol = input('Column header for the RV data: ')
-    #     row.append(rvcol)
-
-    #     rverrcol = input('Column header for the RV error data: ')
-    #     row.append(rverrcol)
-
-    #     toffset = input('Time offset from BJD (in days), for example 2457000 is common for TESS: ')
-    #     row.append(toffset)
-
-    #     row.append(1.0)
-
-    #     mskms = input('Are the RV and RV error data in "m/s" or "km/s": ')
-    #     while mskms not in ['m/s','km/s']:
-    #         mskms = input('Please type "m/s" or "km/s" exactly: ')
-    #     row.append(mskms)
-
-    #     self.table.add_row(row)
-
-    #     self.save()
+        app = InitGaiaGUI(self)
+        app.mainloop()
 
 
 class Init_star(InitFile):
@@ -437,154 +264,6 @@ class Init_star(InitFile):
 
         return self
 
-
-    # def create(self) -> Self:
-    #     """Creates an Init_star table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-    #     and file. There is a prompt option to get some parameters automatically with astroquery, assuming vizier isn't down.
-
-    #     Returns:
-    #         Init_star: The whole Init_star object after creating the table.
-    #     """
-
-    #     x = input('Creating star initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
-
-    #     if x == 'stop':
-    #         return
-
-    #     rows = [['Value'],['Error']]
-
-    #     r = input('Stellar radius and error (in Rsun), separated by a space: ').split()
-    #     rows[0].append(r[0])
-    #     rows[1].append(r[1])
-
-    #     m = input('Stellar mass and err (in Msun), separated by a space: ').split()
-    #     rows[0].append(m[0])
-    #     rows[1].append(m[1])
-
-    #     T = input('Stellar temperature and err (in K), separated by a space: ').split()
-    #     rows[0].append(T[0])
-    #     rows[1].append(T[1])
-
-    #     logg = input('Stellar log(g) and err (in cgs), separated by a space (or "nan nan" if unavailable): ').split()
-    #     rows[0].append(logg[0])
-    #     rows[1].append(logg[1])
-
-    #     feh = input('Stellar Fe/H and err, separated by a space (or "nan nan" if unavailable): ').split()
-    #     rows[0].append(feh[0])
-    #     rows[1].append(feh[1])
-
-    #     auto = input('Get parallax and magnitudes using astroquery? y/n').lower()
-
-    #     if auto == 'y':
-
-    #         try:
-
-    #             cid = input('Catalog ID (TIC, Gaia, HIP, etc): ')
-
-    #             vizier = Vizier(columns = ['**','+_r'])
-
-    #             gaia = vizier.query_object(object_name = cid, catalog = 'I/355/gaiadr3', radius = 1*u.arcmin)[0][0]
-
-    #             twomass = vizier.query_object(object_name = cid, catalog = 'II/246/out', radius = 1*u.arcmin)[0][0]
-
-    #             wise = vizier.query_object(object_name = cid, catalog = 'II/328/allwise', radius = 1*u.arcmin)[0][0]
-
-    #         except:
-
-    #             auto == 'n'
-    #             print('Issue accessing astroquery, switching back to manual input.')
-
-    #     if auto == 'y':
-
-    #         rows[0].append(gaia['Plx'])
-    #         rows[1].append(gaia['e_Plx'])
-
-    #         rows[0].append(twomass['Jmag'])
-    #         rows[1].append(twomass['e_Jmag'])
-
-    #         rows[0].append(twomass['Hmag'])
-    #         rows[1].append(twomass['e_Hmag'])
-
-    #         rows[0].append(twomass['Kmag'])
-    #         rows[1].append(twomass['e_Kmag'])
-
-    #         rows[0].append(gaia['Gmag'])
-    #         rows[1].append(gaia['e_Gmag'])
-
-    #         rows[0].append(gaia['BPmag'])
-    #         rows[1].append(gaia['e_BPmag'])
-
-    #         rows[0].append(gaia['RPmag'])
-    #         rows[1].append(gaia['e_RPmag'])
-
-    #         rows[0].append(wise['W1mag'])
-    #         rows[1].append(wise['e_W1mag'])
-
-    #         rows[0].append(wise['W2mag'])
-    #         rows[1].append(wise['e_W2mag'])
-
-    #         rows[0].append(wise['W3mag'])
-    #         rows[1].append(wise['e_W3mag'])
-
-    #     else:
-
-    #         P = input('Gaia parallax and error (in mas), separated by a space: ').split()
-    #         rows[0].append(P[0])
-    #         rows[1].append(P[1])
-
-    #         J = input('2MASS J band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(J[0])
-    #         rows[1].append(J[1])
-
-    #         H = input('2MASS H band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(H[0])
-    #         rows[1].append(H[1])
-
-    #         K = input('2MASS K band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(K[0])
-    #         rows[1].append(K[1])
-
-    #         G = input('Gaia G band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(G[0])
-    #         rows[1].append(G[1])
-
-    #         Bp = input('Gaia Bp band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(Bp[0])
-    #         rows[1].append(Bp[1])
-
-    #         Rp = input('Gaia Rp band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(Rp[0])
-    #         rows[1].append(Rp[1])
-
-    #         W1 = input('WISE W1 band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(W1[0])
-    #         rows[1].append(W1[1])
-
-    #         W2 = input('WISE W2 band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(W2[0])
-    #         rows[1].append(W2[1])
-
-    #         W3 = input('WISE W3 band magnitude and err, separated by a space: ').split()
-    #         rows[0].append(W3[0])
-    #         rows[1].append(W3[1])
-
-
-    #     self.table = Table(rows = rows,
-    #             names = ['Val/Err','Radius','Mass','Teff','log(g)','Fe/H','Parallax','J','H','K','G','Bp','Rp','W1','W2','W3'],
-    #             units = [None,'Rsun','Msun','K','cgs','dex','mas','mag','mag','mag','mag','mag','mag','mag','mag','mag'],
-    #             dtype = [str,float,float,float,float,float,float,float,float,float,float,float,float,float,float,float])
-        
-    #     if auto == 'y':
-
-    #         tabformat = {'Parallax': '%.4f','J': '%.3f','H': '%.3f','K': '%.3f','G': '%.6f','Bp': '%.6f','Rp': '%.6f','W1': '%.3f','W2': '%.3f','W3': '%.3f'}
-
-    #         for x in tabformat:
-    #             self.table[x].format = tabformat[x]
-        
-    #     self.save()
-
-    #     return self
-
     
 class Init_ld(InitFile):
     """Class for creating, loading, and editing limb darkening initialization files. Inherits from InitFile. Currently only supports quadratic limb
@@ -615,106 +294,6 @@ class Init_ld(InitFile):
 
         app = InitLDGUI(self)
         app.mainloop()
-
-
-    # def create(self, empty: bool = False) -> Self:
-    #     """Creates an Init_ld table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-    #     and file.
-
-    #     Args:
-    #         empty (bool, optional): If true, creates the table with correct columns and one empty row filled with None and nans. Can be filled in later
-    #             using Init_ld.add_ld_params, or manually with either astropy Table methods or in the txt file. Default is False.
-
-    #     Returns:
-    #         Init_ld: The whole Init_ld object after creating the table.
-    #     """
-
-    #     self.table = Table(names = ['Filter','u1','u2'], dtype = [str,float,float])
-
-    #     if not empty:
-
-    #         x = input('Creating limb darkening initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
-
-    #         if x == 'stop':
-    #             return
-
-    #         while True:
-
-    #             self.add_ld_params()
-
-    #             x = input('More filters? y/n ')
-                
-    #             if x.lower() != 'y':
-    #                 break
-
-    #     else:
-
-    #         self.table.add_row([np.nan,np.nan,'None'])
-        
-    #     self.save()
-
-    #     return self
-
-
-    # def add_ld_params(self):
-    #     """Adds a set of limb darkening parameters to the Init_ld table for a new filter. Prompts the user to fill it in. Easier than adding rows
-    #     manually. There is a prompt to automatically generate the parameters from existing grids given the stellar parameters. By default, the only
-    #     grids included are for the TESS filter and the Kepler filter, but more grids can be generated with alfred.generate_ld_grid if the user has
-    #     exoctk installed.
-    #     """
-
-    #     autogen = input('Auto-generate quadratic limb darkening parameters from existing grids? y/n').lower()
-
-    #     if autogen == 'y':
-
-    #         while True:
-
-    #             filt = input('Filter to generate the limb darkening parameter for? Type "help" to see available filters. Type "stop" to exit.')
-
-    #             if filt.lower() == 'help':
-
-    #                 print(ld_grid_list)
-
-    #             elif filt.lower() == 'stop':
-    #                 return
-
-    #             elif filt not in ld_grid_list:
-
-    #                 z = input('Filter is not recognized. If you have exoctk installed, you can make a grid for this filter using alfred.generate_ld_grid. Enter to try again. Type "stop" to exit.')
-    #                 if z.lower() == 'stop':
-    #                     return
-
-    #             else:
-                    
-    #                 break
-
-    #         T = float(input('Stellar temperature in K:'))
-    #         logg = float(input('Stellar log g in cgs units:'))
-    #         feh = float(input('Stellar [Fe/H]:'))
-
-    #         u1, u2 = calc_ld(filt, T, logg, feh)
-
-    #         row = [u1, u2, filt]
-
-    #         self.table.add_row(row)
-
-    #     else:
-
-    #         row = []
-
-    #         filt = input('Filter to define limb darkening parameters for (e.g. TESS, Kepler, V): ')
-
-    #         u1 = input('First quadratic limb darkening parameter for {0} (linear term): '.format(filt))
-    #         row.append(u1)
-
-    #         u2 = input('Second quadratic limb darkening parameter for {0} (non-linear term): '.format(filt))
-    #         row.append(u2)
-
-    #         row.append(filt)
-
-    #         self.table.add_row(row)
-
-    #     self.save()
 
 
 class Init_planets(InitFile):
@@ -749,124 +328,6 @@ class Init_planets(InitFile):
 
         app = InitPlanetsGUI(self)
         app.mainloop()
-
-
-    # def create(self) -> Self:
-    #     """Creates an Init_planets table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
-    #     directory and file.
-
-    #     Returns:
-    #         Init_planets: The whole Init_planets object after creating the table.
-    #     """
-
-    #     self.table = Table(names = ['Transiting', 'RV Signal', 'Fit TTVs', 'Fit Eclipse', 'Fit Ecc', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'fp'],
-    #         units = [None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None],
-    #         dtype = [bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float])
-
-    #     x = input('Creating planet initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
-
-    #     if x == 'stop':
-    #         return
-
-    #     while True:
-
-    #         self.add_planet()
-
-    #         x = input('More planets? y/n ')
-                
-    #         if x.lower() != 'y':
-    #             break
-
-    #     self.save()
-
-    #     return self
-
-
-    # def add_planet(self):
-    #     """Adds a new row to the Init_planets table for a new planet. Prompts the user to fill it in. Easier than adding rows manually.
-    #     """
-
-    #     row = []
-
-    #     transit = input('Is the planet transiting? True or False ').lower() == 'true'
-    #     row.append(transit)
-
-    #     rv = input('Does the planet have an RV signal? True or False ').lower() == 'true'
-    #     row.append(rv)
-
-    #     if transit:
-
-    #         ttv = input('Fit the planet for ttvs? True or False ').lower() == 'true'
-    #         row.append(ttv)
-
-    #         ecl = input('Fit the planet for a secondary eclipse? True or False ').lower() == 'true'
-    #         row.append(ecl)
-
-    #     else:
-
-    #         row.append(False)
-
-    #     ecc = input('Fit the planet for eccentricity? True or False ').lower() == 'true'
-    #     row.append(ecc)
-
-    #     p = input('Planet period initial guess (in days): ')
-    #     row.append(p)
-
-    #     tc = input('Planet tc initial guess (in BJD - 2450000): ')
-    #     row.append(tc)
-
-    #     if transit:
-
-    #         rp = input('Planet to star radius ratio initial guess: ')
-    #         row.append(rp)
-
-    #         a = input('Planet semimajor axis to stellar radius ratio initial guess: ')
-    #         row.append(a)
-
-    #         cosi = input('Planet cos(inclination) initial guess: ')
-    #         row.append(cosi)
-
-    #     else:
-
-    #         row.append(None)
-    #         row.append(None)
-    #         row.append(None)
-
-    #     if rv:
-
-    #         k = input('Planet rv semi-amplitude initial guess (in m/s): ')
-    #         row.append(k)
-
-    #     else:
-
-    #         row.append(None)
-
-    #     if rv and ecc:
-
-    #         secw = input('Planet sqrt(e)cos(w) initial guess: ')
-    #         row.append(secw)
-
-    #         sesw = input('Planet sqrt(e)sin(w) initial guess: ')
-    #         row.append(sesw)
-
-    #     else:
-
-    #         row.append(0.01)
-    #         row.append(0.01)
-
-    #     if ecl:
-
-    #         fp = input('Planet to star flux ratio initial guess: ')
-    #         row.append(fp)
-
-    #     else:
-
-    #         row.append(None)
-
-    #     self.table.add_row(row)
-
-    #     self.save()
-
 
 
 class Init_ttvs(InitFile):
@@ -924,68 +385,6 @@ class Init_ttvs(InitFile):
             self.save()
 
         return self
-
-
-    # def create(self) -> Self:
-    #     """Creates an Init_ttvs table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output
-    #     directory and file.
-
-    #     Returns:
-    #         Init_ttvs: The whole Init_ttvs object after creating the table.
-    #     """
-
-    #     self.table = Table()
-
-    #     x = input('Creating ttv initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
-
-    #     if x == 'stop':
-    #         return
-
-    #     while True:
-
-    #         self.add_transit_times()
-
-    #         x = input('More TTV planets? y/n ')
-            
-    #         if x.lower() != 'y':
-    #             break
-        
-    #     self.save()
-        
-    #     return self
-
-
-    # def add_transit_times(self):
-    #     """Adds a new column to the Init_ttvs table for a new planet's TTVs. Prompts the user to fill it in. Recommended to only use this function
-    #     rather than adding columns manually, because any existing columns must all be adjusted to the same length.
-    #     """
-
-    #     col = []
-
-    #     num = input('Planet number: ')
-
-    #     n = int(input('Number of transit times to input for planet {0}: '.format(num)))
-
-    #     for i in range(1, n+1):
-
-    #         tt = input('Transit time {0} for planet {1} (BJD-2450000): '.format(i, num))
-    #         col.append(tt)
-
-    #     if len(self.table.columns) > 0:
-
-    #         if n > len(self.table):
-                
-    #             for i in range(n-len(self.table)):
-    #                 self.table.add_row([np.nan]*len(self.table.columns))
-
-    #         elif n < len(self.table):
-
-    #             col += [np.nan]*(len(self.table)-n)
-
-    #     col = Column(col, dtype = float)
-    #     self.table.add_column(col, name = num)
-
-    #     self.save()
 
 
 class Init_priors(InitFile):
@@ -1077,162 +476,6 @@ class Init_priors(InitFile):
         for i in range(len(self.var_descriptions)):
 
             print(self.allowed_vars[i], '-', self.var_descriptions[i])
-
-    
-    # def create(self) -> Self:
-    #     """Creates an Init_priors table with correct formatting and columns. Prompts the user to help fill it in. Saves the table to the output directory
-    #     and file.
-
-    #     Returns:
-    #         Init_priors: The whole Init_priors object after creating the table.
-    #     """
-
-    #     self.table = Table(names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'],
-    #         dtype = [str, str, float, float])
-
-    #     x = input('Creating prior initialization file {0} in {1}. If this was a mistake, type "stop". Otherwise, enter to continue.'.format(self.name, self.direc)).lower()
-
-    #     if x == 'stop':
-    #         return
-
-    #     while True:
-
-    #         self.add_prior()
-
-    #         x = input('More priors? y/n ')
-                
-    #         if x.lower() != 'y':
-    #             break
-
-    #     self.save()
-
-    #     return self
-    
-
-    # def add_prior(self):
-    #     """Adds a new row to the Init_priors table for a new prior. Prompts the user to fill it in. Easier than adding rows manually. Currently
-    #     supported priors are Gaussian priors, uniform priors (essentially just hard upper and lower boundaries), fixed priors (fixing a parameter at
-    #     a specific value so it is not fit), Jeffrey's priors (uninformative prior independent of scale), and modified Jeffrey's priors (becomes
-    #     log uniform below the knee value). Priors can be set for a specific parameter (e.g. P 1, the period of planet 1) or for all instances of a
-    #     type of parameter in the fit (e.g. P x, the periods of all planets).
-    #     """
-
-    #     row = []
-
-    #     while True:
-
-    #         var = input('Variable name. Type "help" to see a list of variables. Type "stop" to exit.')
-
-    #         if var.lower() == 'help':
-
-    #             self.var_help()
-
-    #         elif var.lower() == 'stop':
-    #             return
-
-    #         elif var not in self.allowed_vars:
-
-    #             z = input('Variable is not recognized. Enter to try again. Type "stop" to exit.')
-    #             if z.lower() == 'stop':
-    #                 return
-
-    #         else:
-                
-    #             break
-
-    #     origvar = var
-        
-    #     if var in self.planet_vars:
-
-    #         num = input('Planet number to apply to apply this prior to (planets are 1-indexed starting at top of init_planets file).' + ('' if var == 'TT' else ' Enter x to apply this prior to all planets.'))
-
-    #         if var == 'TT':
-
-    #             tnum = input('Transit number of planet {0} to apply this prior to (1-indexed in time order).'.format(num))
-
-    #             num += ' '
-    #             num += tnum
-
-    #         var += ' '
-    #         var += num
-
-    #     elif var in self.lc_vars:
-
-    #         lc = input('Light curve nickname to apply this prior to. Enter x to apply this prior to all light curves.')
-
-    #         var += ' '
-    #         var += lc
-
-    #     elif var in self.ld_vars:
-
-    #         filt = input('Filter to apply this prior to. Enter x to apply this prior to all filters.')
-
-    #         var += ' '
-    #         var += filt
-
-    #     elif var == 'rv_offset':
-
-    #         rv = input('RV dataset nickname to apply this prior to. Enter x to apply this prior to all RV datasets.')
-
-    #         var += ' '
-    #         var += rv
-
-    #     row.append(var)
-
-    #     while True:
-            
-    #         priortype = input("Prior type to use for {0}. U for uniform, G for Gaussian, F for fixed, J for Jeffrey's, or MJ for modified Jeffrey's.".format(var)).upper()
-
-    #         if priortype not in ['U', 'G', 'F', 'J', 'MJ']:
-
-    #             z = input('Prior type is not recognized. Enter to try again. Type "stop" to exit.')
-    #             if z.lower() == 'stop':
-    #                 return
-                
-    #         elif priortype == 'F' and origvar in ['rhos','u1','u2','mstar','rstar','rhostar']:
-
-    #             z = input('Cannot set {0} to fixed. Enter to try again. Type "stop" to exit.'.format(origvar))
-    #             if z.lower() == 'stop':
-    #                 return
-
-    #         else:
-
-    #             break
-
-    #     row.append(priortype)
-
-    #     if priortype == 'U':
-
-    #         p1 = input('Lower bound of uniform prior for {0}.'.format(var))
-    #         p2 = input('Upper bound of uniform prior for {0}.'.format(var))
-
-    #     elif priortype == 'G':
-
-    #         p1 = input('Mean of Gaussian prior for {0}.'.format(var))
-    #         p2 = input('Standard deviation of Gaussian prior for {0}.'.format(var))
-
-    #     elif priortype == 'F':
-
-    #         p1 = input('Value at which to fix {0}.'.format(var))
-    #         p2 = 0
-
-    #     elif priortype == 'J':
-
-    #         p1 = input("Lower bound of Jeffrey's prior for {0}.".format(var))
-    #         p2 = input("Upper bound of Jeffrey's prior for {0}.".format(var))
-
-    #     elif priortype == 'MJ':
-
-    #         p1 = input("Upper bound of modified Jeffrey's prior for {0}.".format(var))
-    #         p2 = input("Knee value of modified Jeffrey's prior for {0}.".format(var))
-
-    #     row.append(p1)
-    #     row.append(p2)
-
-    #     self.table.add_row(row)
-
-    #     self.save()
-
 
 
 

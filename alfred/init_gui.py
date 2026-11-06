@@ -304,6 +304,74 @@ class FloatEntry(ctk.CTkEntry):
         except ValueError:
             return np.nan
 
+
+class IntEntry(ctk.CTkEntry):
+    def __init__(self, master, min_val = None, max_val = None, **kwargs):
+        super().__init__(master, **kwargs)
+
+        self.min_val = min_val
+        self.max_val = max_val
+
+        validate_int_cmd = self.register(self.validate_int_input)
+
+        self.configure(validate = 'key', validatecommand = (validate_int_cmd, '%P'))
+
+        self.bind("<FocusOut>", self._on_focus_out)
+        
+
+    def validate_int_input(self, proposed_text):
+
+        if proposed_text == "":
+            return True
+        
+        text = proposed_text.strip()
+
+        if text.startswith("-") and self.min_val is not None and float(self.min_val) >= 0:
+            return False
+
+        try:
+            val = int(proposed_text)
+            return True
+        
+        except ValueError:
+            return False
+
+
+    def _on_focus_out(self, event):
+        try:
+            raw_text = self.get().strip()
+            if not raw_text:
+                return
+                
+            val = int(raw_text)
+            
+            if self.min_val is not None and val < self.min_val:
+                self.delete(0, "end")
+                self.insert(0, str(self.min_val))
+                self.configure(text_color = "#CB2626")
+
+            elif self.max_val is not None and val > self.max_val:
+                self.delete(0, "end")
+                self.insert(0, str(self.max_val))
+                self.configure(text_color = "#CB2626")
+
+            else:
+                self.configure(text_color = '#FFFFFF')
+
+        except ValueError:
+            self.delete(0, "end")
+
+    def return_int(self):
+        try:
+            x = int(self.get().strip())
+            if self.min_val is not None and x < self.min_val:
+                return 0
+            if self.max_val is not None and x > self.max_val:
+                return 0
+            return x
+        except ValueError:
+            return 0
+
     
 class ToggleCheckbox(ctk.CTkCheckBox):
     def __init__(self, master, label, startval=0, toggles=[]):
@@ -2307,5 +2375,188 @@ class InitTTVsGUI(InitGUI):
             if np.all(np.isnan(list(self.table[i]))):
 
                 self.table.remove_row(i)
+
+        super().save_cmd()
+
+
+###################
+#####Init Gaia#####
+###################
+
+class InitGaiaGUI(InitGUI):
+    def __init__(self, initfile: InitFile):
+        super().__init__(initfile)
+
+        self.geometry('1000x700')
+
+        self.frame_title = ctk.CTkLabel(self, text = 'Gaia Epoch Astrometry File', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)
+
+        self.add.destroy()
+
+        self.setup_items_frame()
+
+    
+    def setup_items_frame(self):
+
+        self.data = self.table[0]
+
+        self.items_frame = ctk.CTkScrollableFrame(self)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid_rowconfigure([0,1,2,3], weight = 1)
+        self.items_frame.grid_columnconfigure([0,1,2], weight = 1)
+
+        self.format_frame = ctk.CTkFrame(self.items_frame)
+        self.format_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.format_frame.grid_rowconfigure([0,1], weight = 1)
+        self.format_label = ctk.CTkLabel(self.format_frame, text = 'File Format', font = (font, 18, 'bold'))
+        self.format_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.format = ctk.CTkOptionMenu(self.format_frame, values = ['DR4','Other'], font = (font, 18), variable = ctk.StringVar(value = 'DR4' if self.data['Format'] == '' else self.data['Format']), command = self.format_cmd)
+        self.format.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+        self.format._dropdown_menu.configure(font = (font, 18))
+
+        self.file_frame = ctk.CTkFrame(self.items_frame)
+        self.file_frame.grid(row = 0, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.file_frame.grid_rowconfigure([0,1], weight = 1)
+        self.file_label = ctk.CTkLabel(self.file_frame, text = 'File Name', font = (font, 18, 'bold'))
+        self.file_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.filename = ctk.CTkEntry(self.file_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['File']))
+        self.filename.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.sourceid_frame = ctk.CTkFrame(self.items_frame)
+        self.sourceid_frame.grid_rowconfigure([0,1,2], weight = 1)
+        self.sourceid_label = ctk.CTkLabel(self.sourceid_frame, text = 'Gaia ID', font = (font, 18, 'bold'))
+        self.sourceid_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.sourceid_desc = ctk.CTkLabel(self.sourceid_frame, text = 'Number Only', font = (font, 18))
+        self.sourceid_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.sourceid_var = ctk.StringVar(value = self.data['Source ID'])
+        self.sourceid = IntEntry(self.sourceid_frame, min_val = 0, textvariable = self.sourceid_var, font = (font, 18), justify = 'center')
+        self.sourceid.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.errscale_frame = ctk.CTkFrame(self.items_frame)
+        self.errscale_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.errscale_frame.grid_rowconfigure([0,1], weight = 1)
+        self.errscale_label = ctk.CTkLabel(self.errscale_frame, text = 'Error Scale', font = (font, 18, 'bold'))
+        self.errscale_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.errscale = FloatEntry(self.errscale_frame, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Err Scale']) else self.data['Err Scale']), font = (font, 18), justify = 'center')
+        self.errscale.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.timecol_frame = ctk.CTkFrame(self.items_frame)
+        self.timecol_frame.grid_rowconfigure([0,1], weight = 1)
+        self.timecol_label = ctk.CTkLabel(self.timecol_frame, text = 'Time Column', font = (font, 18, 'bold'))
+        self.timecol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.timecol = ctk.CTkEntry(self.timecol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Time Col']))
+        self.timecol.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.alcol_frame = ctk.CTkFrame(self.items_frame)
+        self.alcol_frame.grid_rowconfigure([0,1], weight = 1)
+        self.alcol_label = ctk.CTkLabel(self.alcol_frame, text = 'AL Column', font = (font, 18, 'bold'))
+        self.alcol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.alcol = ctk.CTkEntry(self.alcol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['AL Col']))
+        self.alcol.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.errcol_frame = ctk.CTkFrame(self.items_frame)
+        self.errcol_frame.grid_rowconfigure([0,1], weight = 1)
+        self.errcol_label = ctk.CTkLabel(self.errcol_frame, text = 'Error Column', font = (font, 18, 'bold'))
+        self.errcol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.errcol = ctk.CTkEntry(self.errcol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Err Col']))
+        self.errcol.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.psicol_frame = ctk.CTkFrame(self.items_frame)
+        self.psicol_frame.grid_rowconfigure([0,1,2], weight = 1)
+        self.psicol_label = ctk.CTkLabel(self.psicol_frame, text = 'Psi Column', font = (font, 18, 'bold'))
+        self.psicol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.psicol_desc = ctk.CTkLabel(self.psicol_frame, text = 'Scan Angle (deg)', font = (font, 18))
+        self.psicol_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.psicol = ctk.CTkEntry(self.psicol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Psi Col']))
+        self.psicol.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.plxfcol_frame = ctk.CTkFrame(self.items_frame)
+        self.plxfcol_frame.grid_rowconfigure([0,1,2], weight = 1)
+        self.plxfcol_label = ctk.CTkLabel(self.plxfcol_frame, text = 'Plx Factor Column', font = (font, 18, 'bold'))
+        self.plxfcol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.plxfcol_desc = ctk.CTkLabel(self.plxfcol_frame, text = 'AL Component', font = (font, 18))
+        self.plxfcol_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.plxfcol = ctk.CTkEntry(self.plxfcol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Plx Fac Col']))
+        self.plxfcol.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.ra_frame = ctk.CTkFrame(self.items_frame)
+        self.ra_frame.grid_rowconfigure([0,1], weight = 1)
+        self.ra_label = ctk.CTkLabel(self.ra_frame, text = 'RA (deg)', font = (font, 18, 'bold'))
+        self.ra_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.ra = FloatEntry(self.ra_frame, min_val = 0, max_val = 360, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['RA']) else self.data['RA']), font = (font, 18), justify = 'center')
+        self.ra.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.dec_frame = ctk.CTkFrame(self.items_frame)
+        self.dec_frame.grid_rowconfigure([0,1], weight = 1)
+        self.dec_label = ctk.CTkLabel(self.dec_frame, text = 'Dec (deg)', font = (font, 18, 'bold'))
+        self.dec_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.dec = FloatEntry(self.dec_frame, min_val = -90, max_val = 90, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Dec']) else self.data['Dec']), font = (font, 18), justify = 'center')
+        self.dec.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.tref_frame = ctk.CTkFrame(self.items_frame)
+        self.tref_frame.grid_rowconfigure([0,1], weight = 1)
+        self.tref_label = ctk.CTkLabel(self.tref_frame, text = 'Reference Time (BJD)', font = (font, 18, 'bold'))
+        self.tref_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.tref_desc = ctk.CTkLabel(self.tref_frame, text = 'For RA and Dec', font = (font, 18))
+        self.tref_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.tref = FloatEntry(self.tref_frame, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Ref Time']) else self.data['Ref Time']), font = (font, 18), justify = 'center')
+        self.tref.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.format_cmd(self.format.get())
+
+
+    def format_cmd(self, choice):
+
+        if choice == 'DR4':
+            self.dr4_format()
+
+        elif choice == 'Other':
+            self.other_format()
+
+
+    def dr4_format(self):
+
+        self.timecol_frame.grid_forget()
+        self.alcol_frame.grid_forget()
+        self.errcol_frame.grid_forget()
+        self.psicol_frame.grid_forget()
+        self.plxfcol_frame.grid_forget()
+        self.ra_frame.grid_forget()
+        self.dec_frame.grid_forget()
+        self.tref_frame.grid_forget()
+
+        self.sourceid_frame.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+
+    def other_format(self):
+        
+        self.sourceid_frame.grid_forget()
+
+        self.timecol_frame.grid(row = 1, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.alcol_frame.grid(row = 1, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.errcol_frame.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.psicol_frame.grid(row = 2, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.plxfcol_frame.grid(row = 2, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.ra_frame.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.dec_frame.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.tref_frame.grid(row = 3, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+
+
+    def save_cmd(self):
+
+        self.table['File'] = update_string_col(self.table['File'], self.filename.get().strip(), 0)
+        self.table['Format'] = update_string_col(self.table['Format'], self.format.get().strip(), 0)
+        self.table['Source ID'] = self.sourceid.return_int()
+        self.table['Time Col'] = update_string_col(self.table['Time Col'], self.timecol.get().strip(), 0)
+        self.table['AL Col'] = update_string_col(self.table['AL Col'], self.alcol.get().strip(), 0)
+        self.table['Err Col'] = update_string_col(self.table['Err Col'], self.errcol.get().strip(), 0)
+        self.table['Psi Col'] = update_string_col(self.table['Psi Col'], self.psicol.get().strip(), 0)
+        self.table['Plx Fac Col'] = update_string_col(self.table['Plx Fac Col'], self.plxfcol.get().strip(), 0)
+        self.table['Err Scale'] = self.errscale.return_float()
+        self.table['RA'] = self.ra.return_float()
+        self.table['Dec'] = self.dec.return_float()
+        self.table['Ref Time'] = self.tref.return_float()
+
+        self.initfile.table = self.table
 
         super().save_cmd()
