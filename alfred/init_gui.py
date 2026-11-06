@@ -2413,7 +2413,7 @@ class InitGaiaGUI(InitGUI):
     def __init__(self, initfile: InitFile):
         super().__init__(initfile)
 
-        self.geometry('1000x700')
+        self.geometry('800x600')
 
         self.frame_title = ctk.CTkLabel(self, text = 'Gaia Epoch Astrometry File', font = (font, 18, 'bold'))
         self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)

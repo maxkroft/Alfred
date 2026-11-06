@@ -1929,6 +1929,12 @@ class ExoSystem:
                     e = 0
                     w = np.pi/2
 
+                fc = np.pi/2 - w
+                Ec = np.arctan2(np.sqrt(1-e**2) * np.sin(fc), e + np.cos(fc))
+                tc = y['Tc {0}'.format(i+1)] if 'Tc {0}'.format(i+1) in y else self.dres['Tc {0}'.format(i+1)]
+                tp = tc - p/(2*np.pi) * (Ec - e * np.sin(Ec))
+                self.dres['Tp {0}'.format(i+1)]
+
                 mp = 0
 
                 if self.is_astro[i] and self.fit_gaia:
@@ -1954,6 +1960,9 @@ class ExoSystem:
 
                         omega = np.arctan2(y['siso {0}'.format(i+1)], y['sico {0}'.format(i+1)])
                         self.dres['omega {0}'.format(i+1)] = omega
+
+                    k = 29785.326 * np.sin(inc*np.pi/180) / np.sqrt(1-e**2) * (p*u.day).to(u.yr).value**(-1/3) * q/(1+q)**(2/3) * ms**(1/3)
+                    self.dres['K {0}'.format(i+1)] = k
 
 
                 elif self.is_rv[i] and self.fit_rv:
