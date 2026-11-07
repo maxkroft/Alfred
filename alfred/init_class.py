@@ -317,7 +317,7 @@ class Init_planets(InitFile):
         self.converters = {'Transiting':bool, 'RV Signal':bool, 'Fit Gaia': bool, 'Fit Ecc':bool, 'Fit TTVs':bool, 'Fit Eclipse':bool, 'Period':float, 'Tc':float, 'Rp/Rs':float, 'a/Rs':float, 'cos(i)':float, 'K':float, 'sqrt(e)cos(w)':float, 'sqrt(e)sin(w)':float, 'Mp/Ms':float, 'Omega':float, 'fp':float}
 
         self.table = Table(rows = [[False]*6 + [np.nan]*11],
-            names = ['Transiting', 'RV Signal', 'Fit Gaia', 'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'Mp/Ms', 'Omega', 'fp'],
+            names = ['Transiting', 'RV Signal', 'Fit Gaia', 'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'Mp/Ms', 'omega', 'fp'],
             units = [None, None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None, 'rad', None],
             dtype = [bool, bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float, float, float])
 

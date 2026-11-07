@@ -587,7 +587,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.q_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Mp/Ms']) else self.data['Mp/Ms']))
 
         self.omega_entry = FloatEntryFrame(self, 'Omega (rad)', 5, 1, min_val = -np.pi, max_val = np.pi)
-        self.omega_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Omega']) else self.data['Omega']))
+        self.omega_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['omega']) else self.data['omega']))
 
         self.f_entry = FloatEntryFrame(self, "Fp/Fstar", 6, 0, min_val = 0)
         self.f_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['fp']) else self.data['fp']))
@@ -648,7 +648,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.data['sqrt(e)cos(w)'] = self.secw_entry.entry.return_float()
         self.data['sqrt(e)sin(w)'] = self.sesw_entry.entry.return_float()
         self.data['Mp/Ms'] = self.q_entry.entry.return_float()
-        self.data['Omega'] = self.omega_entry.entry.return_float()
+        self.data['omega'] = self.omega_entry.entry.return_float()
         self.data['fp'] = self.f_entry.entry.return_float()
 
         self.close_cmd()

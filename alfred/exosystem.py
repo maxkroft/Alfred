@@ -130,7 +130,7 @@ class ExoSystem:
 
         self.fp = np.array(tab_planets['fp'])
 
-        self.q = np.array(tab_planets['q'])
+        self.q = np.array(tab_planets['Mp/Ms'])
 
         self.omega = np.array(tab_planets['omega'])
 
@@ -804,6 +804,40 @@ class ExoSystem:
                     self.x0['u1 {0}'.format(filt)] = self.ld[filt][0]
                     self.x0['u2 {0}'.format(filt)] = self.ld[filt][1]
 
+        
+        self.allpriors = AllPriors()
+
+        if self.use_priors:
+
+            self.allpriors.init_fixed(self.init_priors.table, self.x0)
+
+            self.fixed = self.allpriors.fixed.copy()
+
+            for i in range(self.n):
+
+                if 'e {0}'.format(i+1) in self.fixed or 'w {0}'.format(i+1) in self.fixed:
+
+                    self.x0.pop('secw {0}'.format(i+1))
+                    self.x0.pop('sesw {0}'.format(i+1))
+
+                    self.x0['e {0}'.format(i+1)] = self.secosw[i]**2 + self.sesinw[i]**2
+                    self.x0['w {0}'.format(i+1)] = np.arctan2(self.sesinw[i], self.secosw[i])
+
+                if ('cos(i) {0}'.format(i+1) in self.fixed or 'comega {0}' in self.fixed or 'somega {0}'.format(i+1) in self.fixed) and 'sico {0}'.format(i+1) in self.x0:
+
+                    self.x0.pop('sico {0}'.format(i+1))
+                    self.x0.pop('siso {0}'.format(i+1))
+
+                    self.x0['cos(i) {0}'.format(i+1)] = self.cosi[i]
+                    self.x0['comega {0}'.format(i+1)] = np.cos(self.omega)
+                    self.x0['somega {0}'.format(i+1)] = np.sin(self.omega)
+
+            for f in self.fixed:
+
+                if f in self.x0:
+
+                    self.x0.pop(f)
+
 
         req_priors = Table(rows = [
             ['e x', 'U', 0, 0.9],
@@ -837,29 +871,13 @@ class ExoSystem:
 
             prior_tab = vstack([self.init_priors.table, req_priors])
 
-            self.allpriors = AllPriors(prior_tab, self.x0, self.fit_ttv)
-            
-            self.fixed = self.allpriors.fixed.copy()
-
-            for i in range(self.n):
-
-                if 'e {0}'.format(i+1) in self.fixed or 'w {0}'.format(i+1) in self.fixed:
-
-                    self.x0.pop('secw {0}'.format(i+1))
-                    self.x0.pop('sesw {0}'.format(i+1))
-
-                    self.x0['e {0}'.format(i+1)] = 0.01
-                    self.x0['w {0}'.format(i+1)] = np.pi/2
-
-            for f in self.fixed:
-
-                if f in self.x0:
-
-                    self.x0.pop(f)
+            self.allpriors.init_priors(prior_tab, self.x0, self.fit_ttv)            
 
         else:
 
-            self.allpriors = AllPriors(req_priors, self.x0, self.fit_ttv)
+            self.allpriors = AllPriors()
+
+            self.allpriors.init_priors(req_priors, self.x0, self.fit_ttv)
 
             self.fixed = {}
 
@@ -1933,7 +1951,7 @@ class ExoSystem:
                 Ec = np.arctan2(np.sqrt(1-e**2) * np.sin(fc), e + np.cos(fc))
                 tc = y['Tc {0}'.format(i+1)] if 'Tc {0}'.format(i+1) in y else self.dres['Tc {0}'.format(i+1)]
                 tp = tc - p/(2*np.pi) * (Ec - e * np.sin(Ec))
-                self.dres['Tp {0}'.format(i+1)]
+                self.dres['Tp {0}'.format(i+1)] = tp
 
                 mp = 0
 
@@ -1961,7 +1979,7 @@ class ExoSystem:
                         omega = np.arctan2(y['siso {0}'.format(i+1)], y['sico {0}'.format(i+1)])
                         self.dres['omega {0}'.format(i+1)] = omega
 
-                    k = 29785.326 * np.sin(inc*np.pi/180) / np.sqrt(1-e**2) * (p*u.day).to(u.yr).value**(-1/3) * q/(1+q)**(2/3) * ms**(1/3)
+                    k = 29785.326 * np.sin(inc*np.pi/180) / np.sqrt(1-e**2) * (p*u.day).to(u.yr).value**(-1/3) * q/(1+q)**(2/3) * mstar**(1/3)
                     self.dres['K {0}'.format(i+1)] = k
 
 
@@ -2047,7 +2065,8 @@ class ExoSystem:
                      'plx': 'mas', 'distance': 'pc', 'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'log(rhostar)': 'g/cm^3', 'rhostar': 'g/cm^3',
                      'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2', 'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth',
                      'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad', 'K': 'm/s', 'q': '', 'omega': 'rad', 'Mp': 'Mearth', 'rhop': 'g/cm^3',
-                     'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr', 'rhos': 'g/cm^3', 'TSM': ''}
+                     'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr', 'rhos': 'g/cm^3', 'TSM': '',
+                     'Tp': 'BJD-2450000',}
 
 
         out = []

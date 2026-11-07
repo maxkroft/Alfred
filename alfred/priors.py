@@ -181,91 +181,66 @@ class AllPriors:
     parameter and a dict of all fixed parameters.
     """
 
-    def __init__(self, tab: Table, x0: dict, fit_ttv: np.typing.NDArray):
-        """Initializes an AllPriors object from an Init_priors table and a list of fit parameters. Parses the table into actual priors for any relevant
-        parameters. Sets up a dict of fixed parameters and their values.
-
-        Args:
-            tab (Table): The table from an Init_priors object with a list of priors to set up.
-            x0 (dict): A dict with initial values for all fit parameters from an ExoSystem fit, used to determine which variables are being fit for and
-                require priors to be set up.
-            fit_ttv (ndarray): An array of bools for each planet. They represent whether or not each planet is being fit for TTVs. Priors can be placed
-            on P and Tc for a planet even if they are fit for TTVs and don't directly have those in the fit parameters.
-        """
+    def __init__(self):
 
         self.prior_dict = {}
         self.fixed = {}
 
-        searchvars = {'P': 'log(P)', 'a/rs': 'log(a/rs)', 'rhos': 'log(a/rs)', 'i': 'cos(i)', 'K': 'log(K)', 'e': 'secw', 'w': 'secw',
-                      'rho_gp': 'log(rho_gp)', 'sigma_gp': 'log(sigma_gp)', 'age': 'log10(age)'}
-        
-        star_vars = ['eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
+        self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)'], 'rhostar': ['log(a/rs)','log(rhostar)'], 'i': ['cos(i)','sico'], 'K': ['log(K)'],
+                      'e': ['secw'], 'w': ['secw'], 'rho_gp': ['log(rho_gp)'], 'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'],
+                      'omega': ['sico','comega'], 'rsq_omega': ['comega','sico'], 'cos(i)': ['cos(i)','sico'], 'comega': ['comega','sico'],
+                      'somega': ['somega','sico']}
+
+        star_vars = ['eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']  #DEAL WITH THIS
+
+
+    def init_fixed(dict, tab: Table, self, x0):
+        """Sets up a dict of fixed parameters and their values.
+
+        Args:
+            tab (Table): The table from an Init_priors object with a list of priors to set up.
+            x0 (dict): A dict with initial values for all fit parameters from an ExoSystem fit, used to determine which variables are being fit for and
+                can be set to fixed.
+        """
 
         for i in range(len(tab)):
 
-            var = tab['Variable'][i]
-
-            if var in star_vars:
-
-                if var in star_vars[:5] and tab['Prior Type'][i] == 'F':
-                    
-                    self.fixed[var] = tab['Param 1'][i]
-
+            if tab['Prior Type'][i] != 'F':
                 continue
+
+            var = tab['Variable'][i]
 
             split = var.split()
 
             svar = split[0]
-            if svar in searchvars:
-                svar = searchvars[svar]
+            if svar in self.searchvars:
+                svar = self.searchvars[svar]
+            else:
+                svar = [svar]
 
-            fvar = ' '.join([svar]+split[1:])
+            fvar = [' '.join([sv]+split[1:]) for sv in svar]
 
-            if svar in ['log(P)','Tc'] and np.any(fit_ttv):
+            if np.any(np.isin(fvar, x0)):
 
-                if tab['Prior Type'][i] == 'F':
-
-                    continue
-
-                if split[-1] == 'x':
-
-                    for j in range(len(fit_ttv)):
-
-                        if fit_ttv[j] and 'ror {0}'.format(j+1) in x0:
-
-                            self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
-
-                elif fit_ttv[int(split[-1])-1] and 'ror {0}'.format(split[-1]) in x0:
-
-                    self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
-
-
-            if fvar in x0:
-
-                self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+                self.fixed[var] = tab['Param 1'][i]
 
             elif split[-1] == 'x':
 
                 for y in x0:
 
-                    if y.split()[0] == svar:
+                    if np.any(np.isin(y.split()[0], svar)):
 
                         yvar = ' '.join([split[0]]+y.split()[1:])
 
-                        self.set_up_prior(yvar, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
-
+                        self.fixed[yvar] = tab['Param 1'][i]
 
 
         keys = list(self.fixed.keys())
         for f in keys:
 
-            if f in self.prior_dict:
-
-                self.prior_dict.pop(f)
-
             split = f.split()
 
-            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp']:
+            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp', 'q', 'rhostar']:
 
                 sf = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
@@ -280,6 +255,100 @@ class AllPriors:
                 sf = ' '.join(['cos(i)']+split[1:])
 
                 self.fixed[sf] = np.cos(self.fixed.pop(f))
+
+            elif split[0] == 'omega':
+
+                sf = ' '.join(['comega']+split[1:])
+                sf2 = ' '.join(['somega']+split[1:])
+
+                self.fixed[sf] = np.cos(self.fixed[f])
+                self.fixed[sf2] = np.sin(self.fixed.pop(f))
+
+            if split[0] in ['i','cos(i)','omega','comega','somega']:
+
+                sf = ' '.join(['sico']+split[1:])
+                sf2 = ' '.join(['siso']+split[1:])
+
+                if sf in self.fixed:
+                    self.fixed.pop(sf)
+                if sf2 in self.fixed:
+                    self.fixed.pop(sf2)
+
+            if split[0] in ['e','w']:
+
+                sf = ' '.join(['secw']+split[1:])
+                sf2 = ' '.join(['sesw']+split[1:])
+
+                if sf in self.fixed:
+                    self.fixed.pop(sf)
+                if sf2 in self.fixed:
+                    self.fixed.pop(sf2)
+
+
+    def init_priors(self, tab: Table, x0: dict, fit_ttv: np.typing.NDArray):
+        """Parses the Init_priors table into actual priors for any relevant parameters that are being fit.
+
+        Args:
+            tab (Table): The table from an Init_priors object with a list of priors to set up.
+            x0 (dict): A dict with initial values for all fit parameters from an ExoSystem fit, used to determine which variables are being fit for and
+                can be set to fixed.
+            fit_ttv (ndarray): An array of bools for each planet. They represent whether or not each planet is being fit for TTVs. Priors can be placed
+                on P and Tc for a planet even if they are fit for TTVs and don't directly have those in the fit parameters.
+        """
+        
+        for i in range(len(tab)):
+
+            if tab['Prior Type'][i] == 'F':
+                continue
+
+            var = tab['Variable'][i]
+
+            # if var in star_vars:
+
+            #     if var in star_vars[:5] and tab['Prior Type'][i] == 'F':
+                    
+            #         self.fixed[var] = tab['Param 1'][i]
+
+            #     continue
+
+            split = var.split()
+
+            svar = split[0]
+            if svar in self.searchvars:
+                svar = self.searchvars[svar]
+            else:
+                svar = [svar]
+
+            fvar = [' '.join([sv]+split[1:]) for sv in svar]
+
+            if np.any(np.isin(svar, ['log(P)','Tc'])) and np.any(fit_ttv):
+
+                if split[-1] == 'x':
+
+                    for j in range(len(fit_ttv)):
+
+                        if fit_ttv[j] and 'ror {0}'.format(j+1) in x0:
+
+                            self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+                elif fit_ttv[int(split[-1])-1] and 'ror {0}'.format(split[-1]) in x0:
+
+                    self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+
+            if np.any(np.isin(fvar, x0)):
+
+                self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+            elif split[-1] == 'x':
+
+                for y in x0:
+
+                    if np.any(np.isin(y.split()[0], svar)):
+
+                        yvar = ' '.join([split[0]]+y.split()[1:])
+
+                        self.set_up_prior(yvar, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
 
 
@@ -303,10 +372,6 @@ class AllPriors:
         elif prior_type == 'G':
 
             self.prior_dict[var].add_gaussian_prior(params[0], params[1])
-
-        elif prior_type == 'F':
-
-            self.fixed[var] = params[0]
 
         elif prior_type == 'LU':
 
@@ -337,7 +402,7 @@ class AllPriors:
 
             split = var.split()
 
-            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp']:
+            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp', 'rhostar', 'q']:
 
                 svar = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
@@ -363,8 +428,16 @@ class AllPriors:
             elif split[0] == 'i':
 
                 svar = ' '.join(['cos(i)']+split[1:])
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
 
-                x = np.arccos(par[svar])
+                if svar in par:
+
+                    x = np.arccos(par[svar])
+
+                else:
+
+                    x = np.arccos(1-2*(par[svar1]**2 + par[svar2]**2))
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
@@ -409,6 +482,22 @@ class AllPriors:
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
+            elif split[0] in ['comega', 'somega'] and var not in par:
+                
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
+                r = np.sqrt(par[svar1]**2 + par[svar2]**2)
+
+                if split[0] == 'comega':
+                    
+                    x = par[svar1]/r
+
+                else:
+
+                    x = par[svar2]/r
+
+                log_like += self.prior_dict[var].apply_priors(x)
+
             else:
 
                 x = par[var]
@@ -430,7 +519,7 @@ class AllPriors:
             tuple: The lower and upper bounds on this fit parameter.
         """
 
-        logvars = {'log(P)':'P', 'log(a/rs)':'a/rs', 'log(K)':'K', 'log(rho_gp)':'rho_gp', 'log(sigma_gp)':'sigma_gp'}
+        logvars = {'log(P)':'P', 'log(a/rs)':'a/rs', 'log(K)':'K', 'log(rho_gp)':'rho_gp', 'log(sigma_gp)':'sigma_gp', 'log(rhostar)':'rhostar', 'log(q)':'q'}
 
         lbound, ubound = -np.inf, np.inf
 
