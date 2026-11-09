@@ -409,21 +409,19 @@ class Init_priors(InitFile):
 
         self.converters = {'Variable':str,'Prior Type':str,'Param 1':float,'Param 2':float}
 
-        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
+        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
+                             'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
-                             'eep', 'log10(age)', 'age', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
+                             'ra*_offset', 'dec_offset', 'pmra*', 'pmdec',
+                             'eep', 'log10(age)', 'age', 'feh', 'plx', 'distance', 'AV', 'mstar', 'rstar', 'log(rhostar)', 'rhostar']
         
-        self.planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp']
-        self.lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
-        self.ld_vars = ['u1', 'u2']
         
         self.var_descriptions = ['natural log of the planet period in days',
                                  'planet period in days',
                                  'planet time of conjunction in BJD - 2450000',
-                                 'planet radius to stellar radius ratio',
+                                 'planet to star radius ratio',
                                  'natural log of planet semi-major axis to stellar radius ratio',
                                  'planet semi-major axis to stellar radius ratio',
-                                 'implied stellar density from planet transit in g/cm^3',
                                  'cosine of the planet orbital inclination',
                                  'planet orbital inclination in radians',
                                  'natural log of the planet RV semi-amplitude in m/s',
@@ -433,7 +431,14 @@ class Init_priors(InitFile):
                                  'planet eccentricity',
                                  'planet argument of periastron in radians',
                                  'individual planet transit time (for fitting TTVs) in BJD - 2450000',
-                                 'planet to star flux ratio',
+                                 'planet to star flux ratio, only used for secondary eclipse fitting',
+                                 'natural log of the planet to star mass ratio',
+                                 'planet to star mass ratio',
+                                 'sine of inclination/2 times cosine of the longitude of the ascending node',
+                                 'sine of inclination/2 times sine of the longitude of the ascending node',
+                                 'cosine of the longitude of the ascending node',
+                                 'sine of the longitude of the ascending node',
+                                 'longitude of the ascending node in radians',
                                  'lightcurve baseline flux value',
                                  'natural log of the light curve gaussian process period in days',
                                  'light curve gaussian process period in days',
@@ -445,15 +450,21 @@ class Init_priors(InitFile):
                                  '1st derivative of RV systemic velocity in m/s per day, relative to time of first RV point',
                                  '2nd derivative of RV systemic velocity in m/s per day^2, relative to time of first RV point',
                                  'RV offset in m/s, for additional data sets beyond the first',
+                                 'offset from reference value of right ascension times cosine of declination in mas',
+                                 'offset from reference value of declination in mas',
+                                 'proper motion of right ascension times cosine of declination in mas/yr',
+                                 'proper motion of declination in mas/yr',
                                  'equivalent evolutionary phase, used in fitting the star with isochrones',
                                  'log10 of stellar age in yr. This is used directly in fitting',
                                  'stellar age in yr.',
                                  'stellar metallicity in dex',
+                                 'parallax in mas',
                                  'distance to the system in pc',
                                  'V band extinction in mags',
                                  'stellar mass in solar masses',
                                  'stellar radius in solar radii',
-                                 'mean stellar density in g/cm^3 in stellar fitting']
+                                 'natural log of the mean stellar density in g/cm^3',
+                                 'mean stellar density in g/cm^3']
         
 
         self.table = Table(rows = [['']*2 + [np.nan]*2],

@@ -1170,9 +1170,11 @@ class PriorFrame(ctk.CTkFrame):
 
         varlabel = ctk.CTkLabel(self, text = 'Variable', font = (font, 16, 'bold'))
         varlabel.grid(row = 0, column = 1, padx = (10,0), sticky = 'nsew')
-        varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
-                    'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
-                    'eep', 'log10(age)', 'age', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
+        varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
+                      'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega',
+                      'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
+                      'ra*_offset', 'dec_offset', 'pmra*', 'pmdec',
+                      'eep', 'log10(age)', 'age', 'feh', 'plx', 'distance', 'AV', 'mstar', 'rstar', 'log(rhostar)', 'rhostar']
         self.variable_anchor = ctk.CTkButton(self, text = 'P' if data['Variable'] == '' else data['Variable'].split()[0], font = (font, 18))
         self.variable_anchor.grid(row = 1, column = 1, padx = (10,0), pady = (10,0), sticky = 'nesw')
         self.variable = ScrollableDropdown(self, self.variable_anchor, values = varoptions, height = 400, command = self.varoption_cmd, font = (font, 18))
@@ -1233,15 +1235,19 @@ class PriorFrame(ctk.CTkFrame):
 
         self.variable_anchor.configure(text=choice)
 
-        varunits = {'log(P)': 'days', 'P': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'a/rs': '', 'rhos': 'g/cm^3', 'cos(i)': '',
+        varunits = {'log(P)': 'days', 'P': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'a/rs': '', 'cos(i)': '',
                     'i': 'rads', 'log(K)': 'm/s', 'K': 'm/s', 'secw': '', 'sesw': '', 'e': '', 'w': 'rads', 'TT': 'BJD-2450000', 'fp': '',
+                    'log(q)': '', 'q': '', 'sico': '', 'siso': '', 'comega': '', 'somega': '', 'omega': 'rads',
                     'F0': '', 'log(rho_gp)': 'days', 'rho_gp': 'days', 'log(sigma_gp)': '', 'sigma_gp': '', 'u1': '', 'u2': '', 'gamma': 'm/s',
-                    'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'eep': '', 'log10(age)': 'yr', 'age': 'yr', 'feh': 'dex',
-                    'distance': 'pc', 'AV': 'mag', 'mstar': 'Msun', 'rstar': 'Rsun', 'rhostar': 'g/cm^3'}
+                    'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s',
+                    'ra*_offset': 'mas', 'dec_offset': 'mas', 'pmra*': 'mas/yr', 'pmdec': 'mas/yr',
+                    'eep': '', 'log10(age)': 'yr', 'age': 'yr', 'feh': 'dex', 'plx': 'mas', 'distance': 'pc', 'AV': 'mag', 'mstar': 'Msun',
+                    'rstar': 'Rsun', 'log(rhostar)': 'g/cm^3', 'rhostar': 'g/cm^3'}
         
         self.unitsvar.set(varunits[choice])
 
-        planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'fp']
+        planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'fp', 'log(q)', 'q',
+                       'sico', 'siso', 'comega', 'somega', 'omega']
         lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         ld_vars = ['u1', 'u2']
 
@@ -1306,7 +1312,7 @@ class PriorFrame(ctk.CTkFrame):
         variable = self.variable_anchor.cget('text')
         priortype = self.priortype.get()
 
-        pos_def_vars = ['P', 'a/rs', 'rhos', 'K', 'rho_gp', 'sigma_gp', 'eep', 'log10(age)', 'age', 'distance',
+        pos_def_vars = ['P', 'ror', 'a/rs', 'K', 'fp', 'q', 'rho_gp', 'sigma_gp', 'eep', 'log10(age)', 'age', 'plx', 'distance',
                         'mstar', 'rstar', 'rhostar']
 
         if priortype in ["Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
@@ -1315,8 +1321,8 @@ class PriorFrame(ctk.CTkFrame):
         if priortype in ['Gaussian',"Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
             self.par2.min_val = 0
 
-        bounded_vars = {'cos(i)':[0,1], 'i':[-np.pi,np.pi], 'secw':[-1,1], 'sesw':[-1,1], 'e':[0,1], 'w':[-np.pi,np.pi], 
-                        'u1':[0,1], 'u2':[0,1], 'feh':[-0.5,0.5], 'AV':[0,1]}
+        bounded_vars = {'cos(i)':[-1,1], 'i':[-np.pi/2,np.pi/2], 'secw':[-1,1], 'sesw':[-1,1], 'e':[0,1], 'w':[-np.pi,np.pi], 'sico':[-1, 1],
+                        'siso':[-1,1], 'comega':[-1,1], 'somega':[-1,1], 'omega':[-np.pi,np.pi], 'u1':[0,1], 'u2':[0,1], 'feh':[-0.5,0.5], 'AV':[0,1]}
         
         if variable in bounded_vars:
 
