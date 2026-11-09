@@ -804,12 +804,45 @@ class ExoSystem:
                     self.x0['u1 {0}'.format(filt)] = self.ld[filt][0]
                     self.x0['u2 {0}'.format(filt)] = self.ld[filt][1]
 
+
+        self.lin_names = []
+
+        if self.fit_transit:
+
+            for i in range(self.n):
+                if self.is_transit[i] and self.fit_ttv[i]:
+                    self.lin_names.append('P {0}'.format(i+1))
+                    self.lin_names.append('Tc {0}'.format(i+1))
+
+            for i in range(len(self.lcnames)):
+                self.lin_names.append('F0 {0}'.format(self.lcnames[i]))
+
+        if self.fit_rv:
+
+            self.lin_names.append('gamma')
+            if self.rv_bkg_order > 0:
+                self.lin_names.append('gamma_dot')
+            if self.rv_bkb_order > 1:
+                self.lin_names.append('gamma_ddot')
+
+            for i in range(1,len(self.rvnames)):
+                self.lin_names.append('rv_offset {0}'.format(self.rvnames[i]))
+
+        if self.fit_gaia:
+
+            self.lin_names.append('ra*_offset')
+            self.lin_names.append('dec_offset')
+            self.lin_names.append('pmra*')
+            self.lin_names.append('pmdec')
+
         
         self.allpriors = AllPriors()
 
         if self.use_priors:
 
             self.allpriors.init_fixed(self.init_priors.table, self.x0)
+
+            self.all_priors.init_fixed(self.init_priors.table, {ln: 0 for ln in self.lin_names})
 
             self.fixed = self.allpriors.fixed.copy()
 
@@ -837,6 +870,10 @@ class ExoSystem:
                 if f in self.x0:
 
                     self.x0.pop(f)
+
+                if f in self.lin_names:
+
+                    self.lin_names.remove(f)
 
 
         req_priors = Table(rows = [
@@ -871,7 +908,9 @@ class ExoSystem:
 
             prior_tab = vstack([self.init_priors.table, req_priors])
 
-            self.allpriors.init_priors(prior_tab, self.x0, self.fit_ttv)            
+            self.allpriors.init_priors(prior_tab, self.x0, self.fit_ttv) 
+
+            self.allpriors.init_priors(prior_tab, {ln: 0 for ln in self.lin_names}, self.fit_ttv)           
 
         else:
 
@@ -890,38 +929,6 @@ class ExoSystem:
         if self.use_priors and len(self.fixed) > 0:
             print('Fixed Parameters:')
             print(self.fixed)
-
-
-        self.lin_names = []
-
-        if self.fit_transit:
-
-            for i in range(self.n):
-                if self.is_transit[i] and self.fit_ttv[i]:
-                    self.lin_names.append('P {0}'.format(i+1))
-                    self.lin_names.append('Tc {0}'.format(i+1))
-
-            for i in range(len(self.lcnames)):
-                self.lin_names.append('F0 {0}'.format(self.lcnames[i]))
-
-        if self.fit_rv:
-
-            self.lin_names.append('gamma')
-            if self.rv_bkg_order > 0:
-                self.lin_names.append('gamma_dot')
-            if self.rv_bkb_order > 1:
-                self.lin_names.append('gamma_ddot')
-
-            for i in range(1,len(self.rvnames)):
-                self.lin_names.append('rv_offset {0}'.format(self.rvnames[i]))
-
-        if self.fit_gaia:
-
-            self.lin_names.append('ra*_offset')
-            self.lin_names.append('dec_offset')
-            self.lin_names.append('pmra*')
-            self.lin_names.append('pmdec')
-
 
 
         if self.nwalk < len(self.keys) * 2:
@@ -5402,46 +5409,60 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
                 except:
                     return -np.inf, np.zeros((nlin))
 
-                M = np.ones((len(miniexs.tt[i]), 1))
+                if 'F0 {0}'.format(miniexs.lcnames[i]) in miniexs.fixed:
 
-                invKM = gp.apply_inverse(M)
-                invKr = gp.apply_inverse(resid)
+                    resid -= miniexs.fixed['F0 {0}'.format(miniexs.lcnames[i])]
 
-                MTinvKM = M.T @ invKM
-                MTinvKr = M.T @ invKr
+                else:
 
-                X = np.linalg.solve(MTinvKM, MTinvKr)
-                resid -= M @ X
+                    M = np.ones((len(miniexs.tt[i]), 1))
+
+                    invKM = gp.apply_inverse(M)
+                    invKr = gp.apply_inverse(resid)
+
+                    MTinvKM = M.T @ invKM
+                    MTinvKr = M.T @ invKr
+
+                    X = np.linalg.solve(MTinvKM, MTinvKr)
+                    resid -= M @ X
+
+                    _, logdet = np.linalg.slogdet(MTinvKM)
+                    like += -0.5 * logdet
+
+                    lin_par = np.append(lin_par, X)
 
                 like += gp.log_likelihood(resid)
 
-                _, logdet = np.linalg.slogdet(MTinvKM)
-                like += -0.5 * logdet
-
-                lin_par = np.append(lin_par, X)
-
             else:
 
-                resid = miniexs.f[i] - fm
+                if 'F0 {0}'.format(miniexs.lcnames[i]) in miniexs.fixed:
 
-                M = np.ones((len(miniexs.tt[i]), 1))
+                    fm += miniexs.fixed['F0 {0}'.format(miniexs.lcnames[i])]
 
-                W = 1/miniexs.ferr[i]**2
-                Mw = M * np.sqrt(W)[:, None]
-                Yw = resid * np.sqrt(W)
+                    like += np.sum(lnNorm(miniexs.f[i], fm, miniexs.ferr[i]))
 
-                X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
-    
-                if len(chi2) > 0:
-                    chi2min = chi2[0]
                 else:
-                    chi2min = np.sum((Yw - Mw @ X)**2)
 
-                _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+                    resid = miniexs.f[i] - fm
 
-                like += -0.5 * (chi2min + logdet)
+                    M = np.ones((len(miniexs.tt[i]), 1))
 
-                lin_par = np.append(lin_par, X)
+                    W = 1/miniexs.ferr[i]**2
+                    Mw = M * np.sqrt(W)[:, None]
+                    Yw = resid * np.sqrt(W)
+
+                    X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+        
+                    if len(chi2) > 0:
+                        chi2min = chi2[0]
+                    else:
+                        chi2min = np.sum((Yw - Mw @ X)**2)
+
+                    _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+                    like += -0.5 * (chi2min + logdet)
+
+                    lin_par = np.append(lin_par, X)
 
 
     if miniexs.fit_rv:
@@ -5459,35 +5480,65 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
         rvclean = miniexs.rv - rvm
 
-        M = [np.ones((len(miniexs.tr)))]
+        M = []
+
+        if 'gamma' in miniexs.fixed:
+            rvclean -= miniexs.fixed['gamma']
+
+        else:
+            M.append(np.ones((len(miniexs.tr))))
 
         if miniexs.rv_bkg_order > 0:
-            M.append(miniexs.tr - miniexs.tr_ref)
+
+            if 'gamma_dot' in miniexs.fixed:
+                rvclean -= miniexs.fixed['gamma_dot'] * (miniexs.tr - miniexs.tr_ref)
+
+            else:
+                M.append(miniexs.tr - miniexs.tr_ref)
 
         if miniexs.rv_bkg_order > 1:
-            M.append((miniexs.tr - miniexs.tr_ref)**2)
+
+            if 'gamma_ddot' in miniexs.fixed:
+                rvclean -= miniexs.fixed['gamma_ddot'] * (miniexs.tr - miniexs.tr_ref)**2
+
+            else:
+                M.append((miniexs.tr - miniexs.tr_ref)**2)
 
         for i in np.unique(miniexs.which_rv)[1:]:
-            M.append((miniexs.which_rv == i).astype(float))
 
-        M = np.column_stack(M)
+            if 'rv_offset {0}'.format(miniexs.rvnames[i]) in miniexs.fixed:
 
-        W = 1/miniexs.rverr**2
-        Mw = M * np.sqrt(W)[:, None]
-        Yw = rvclean * np.sqrt(W)
+                j = np.where(miniexs.which_rv == i)[0]
 
-        X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+                rvclean[j] -= miniexs.fixed['rv_offset {0}'.format(miniexs.rvnames[i])]
 
-        if len(chi2) > 0:
-            chi2min = chi2[0]
+            else:
+                M.append((miniexs.which_rv == i).astype(float))
+
+        if len(M) > 0:
+
+            M = np.column_stack(M)
+
+            W = 1/miniexs.rverr**2
+            Mw = M * np.sqrt(W)[:, None]
+            Yw = rvclean * np.sqrt(W)
+
+            X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+
+            if len(chi2) > 0:
+                chi2min = chi2[0]
+            else:
+                chi2min = np.sum((Yw - Mw @ X)**2)
+
+            _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+            like += -0.5 * (chi2min + logdet)
+
+            lin_par = np.append(lin_par, X)
+
         else:
-            chi2min = np.sum((Yw - Mw @ X)**2)
 
-        _, logdet = np.linalg.slogdet(Mw.T @ Mw)
-
-        like += -0.5 * (chi2min + logdet)
-
-        lin_par = np.append(lin_par, X)
+            like += np.sum(lnNorm(rvclean, np.zeros(rvclean.shape), miniexs.rverr))
 
 
     if miniexs.fit_gaia:
@@ -5506,28 +5557,65 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
         gclean = miniexs.gal - galm
         tgyr = (miniexs.tg - miniexs.tgref)/365.25
 
-        M = np.zeros((len(miniexs.tg),4))
-        M[:,0] = np.sin(miniexs.psi)
-        M[:,1] = np.cos(miniexs.psi)
-        M[:,2] = tgyr*np.sin(miniexs.psi)
-        M[:,3] = tgyr*np.cos(miniexs.psi)
-    
-        W = 1/miniexs.galerr**2
-        Mw = M * np.sqrt(W)[:, None]
-        Yw = gclean * np.sqrt(W)
-    
-        X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
-    
-        if len(chi2) > 0:
-            chi2min = chi2[0]
+        M = []
+
+        if 'ra*_offset' in miniexs.fixed:
+            gclean -= miniexs.fixed['ra*_offset']*np.sin(miniexs.psi)
+
         else:
-            chi2min = np.sum((Yw - Mw @ X)**2)
+            M.append(np.sin(miniexs.psi))
 
-        _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+        if 'dec_offset' in miniexs.fixed:
+            gclean -= miniexs.fixed['dec_offset']*np.cos(miniexs.psi)
 
-        like += -0.5 * (chi2min + logdet)
+        else:
+            M.append(np.cos(miniexs.psi))
 
-        lin_par = np.append(lin_par, X)
+        if 'pmra*' in miniexs.fixed:
+            gclean -= miniexs.fixed['pmra*']*tgyr*np.sin(miniexs.psi)
+
+        else:
+            M.append(tgyr*np.sin(miniexs.psi))
+
+        if 'pmdec' in miniexs.fixed:
+            gclean -= miniexs.fixed['pmdec']*tgyr*np.cos(miniexs.psi)
+
+        else:
+            M.append(tgyr*np.cos(miniexs.psi))
+
+        if len(M) > 0:
+
+            M = np.column_stack(M)
+    
+            W = 1/miniexs.galerr**2
+            Mw = M * np.sqrt(W)[:, None]
+            Yw = gclean * np.sqrt(W)
+        
+            X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+        
+            if len(chi2) > 0:
+                chi2min = chi2[0]
+            else:
+                chi2min = np.sum((Yw - Mw @ X)**2)
+
+            _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+            like += -0.5 * (chi2min + logdet)
+
+            lin_par = np.append(lin_par, X)
+
+        else:
+
+            like += np.sum(lnNorm(gclean, np.zeros(gclean.shape), miniexs.galerr))
+
+
+    linpriorlike = miniexs.allpriors.apply({miniexs.lin_names[i]: lin_par[i] for i in range(len(lin_par))})
+
+    if np.isinf(linpriorlike):
+        return -np.inf, np.zeros((nlin))
+    
+    else:
+        like += linpriorlike
 
 
     return (like, lin_par) if not np.isnan(like) else (-np.inf, np.zeros((nlin)))

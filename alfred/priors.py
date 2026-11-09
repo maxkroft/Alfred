@@ -498,7 +498,7 @@ class AllPriors:
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
-            else:
+            elif var in par:
 
                 x = par[var]
 
