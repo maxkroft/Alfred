@@ -786,6 +786,8 @@ class ExoSystem:
             
             for i in range(len(self.tt)):
 
+                self.x0['F0 {0}'.format(self.lcnames[i])] = 1.0
+
                 if self.detrend[i]:
 
                     self.x0['log(rho_gp) {0}'.format(self.lcnames[i])] = 1
@@ -811,9 +813,6 @@ class ExoSystem:
                 if self.is_transit[i] and self.fit_ttv[i]:
                     self.lin_names.append('P {0}'.format(i+1))
                     self.lin_names.append('Tc {0}'.format(i+1))
-
-            for i in range(len(self.lcnames)):
-                self.lin_names.append('F0 {0}'.format(self.lcnames[i]))
 
         if self.fit_rv:
 
@@ -1151,7 +1150,9 @@ class ExoSystem:
 
             for j in range(len(self.tt)):
 
-                fm = 0
+                mean = y['F0 {0}'.format(self.lcnames[j])]
+
+                fm = mean
 
                 ld = self.ld[self.filters[j]]
 
@@ -1223,12 +1224,6 @@ class ExoSystem:
 
                 resid = self.f[j] - fm
 
-                if 'F0 {0}'.format(self.lcnames[j]) in self.fixed:
-
-                    mean = self.fixed['F0 {0}'.format(self.lcnames[j])]
-                    resid -= mean
-                    fm += mean
-
                 gpf = 0
 
                 if self.detrend[j]:
@@ -1237,38 +1232,9 @@ class ExoSystem:
 
                     gp = set_gp_params(np.exp(y['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(y['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[jj])
 
-                    if 'F0 {0}'.format(self.lcnames[j]) not in self.fixed:
-
-                        M = np.ones((len(self.tt[j]), 1))
-
-                        invKM = gp.apply_inverse(M)
-                        invKr = gp.apply_inverse(resid)
-
-                        MTinvKM = M.T @ invKM
-                        MTinvKr = M.T @ invKr
-
-                        X = np.linalg.solve(MTinvKM, MTinvKr)
-                        mean = X[0]
-                        resid -= M @ X     
-                        fm += mean                                             
-
                     gpf = gp.predict(resid)
 
                     resid = self.f[j] - fm - gpf
-
-                elif 'F0 {0}'.format(self.lcnames[j]) not in self.fixed:
-
-                    M = np.ones((len(miniexs.tt[j]), 1))
-
-                    W = 1/miniexs.ferr[j]**2
-                    Mw = M * np.sqrt(W)[:, None]
-                    Yw = resid * np.sqrt(W)
-
-                    X, _, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
-
-                    mean = X[0]
-                    resid -= mean
-                    fm += mean
 
                 rms = np.sqrt(np.median(resid**2))
 
@@ -1521,7 +1487,7 @@ class ExoSystem:
                 else:
                     pos.append(np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, self.nwalk)))
 
-            if k == 'plx':
+            if k == 'plx' or 'F0' in k:
                 if self.use_priors:
 
                     acc = []
@@ -1671,8 +1637,11 @@ class ExoSystem:
         best_time = np.inf
         opt_cores = 0
 
+        blobs_dtype = [(name, np.float64) for name in self.lin_names]
+
         sampler_kwargs = {'nwalkers': self.nwalk,
                          'ndim': len(self.x),
+                         'blobs_dtype': blobs_dtype,
                          }
 
         if self.sampler_type == 'emcee':
@@ -2782,7 +2751,7 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
-        fig, ax = plt.subplots(np.sum(self.detrend), 2, figsize = (10, 3*len(self.tt)), sharex = True, layout = 'constrained')
+        fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
         if np.sum(self.detrend) == 1:
             ax = np.array([ax])
@@ -2796,16 +2765,21 @@ class ExoSystem:
 
             ax[i][0].set_ylabel('{0}'.format(self.lcnames[j]))
 
+            if 'F0 {0}'.format(self.lcnames[j]) in self.parnames:
+                v = self.parnames['F0 {0}'.format(self.lcnames[j])]
+                ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+
             if 'log(rho_gp) {0}'.format(self.lcnames[j]) in self.parnames:
                 v = self.parnames['log(rho_gp) {0}'.format(self.lcnames[j])]
-                ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[i][1].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
             if 'log(sigma_gp) {0}'.format(self.lcnames[j]) in self.parnames:
                 v = self.parnames['log(sigma_gp) {0}'.format(self.lcnames[j])]
-                ax[i][1].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[i][2].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
-        ax[0][0].set_title('log(rho_gp)')
-        ax[0][1].set_title('log(sigma_gp)')
+        ax[0][0].set_title('F0')
+        ax[0][1].set_title('log(rho_gp)')
+        ax[0][2].set_title('log(sigma_gp)')
 
         fig.supxlabel('N Steps')
 
@@ -5525,7 +5499,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
         for i in range(len(miniexs.tt)):
 
-            fm = 0
+            fm = par['F0 {0}'.format(miniexs.lcnames[i])]
 
             ld = miniexs.ld[miniexs.filters[i]]
 
@@ -5603,60 +5577,11 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
                 except:
                     return -np.inf, *np.zeros((nlin))
 
-                if 'F0 {0}'.format(miniexs.lcnames[i]) in miniexs.fixed:
-
-                    resid -= miniexs.fixed['F0 {0}'.format(miniexs.lcnames[i])]
-
-                else:
-
-                    M = np.ones((len(miniexs.tt[i]), 1))
-
-                    invKM = gp.apply_inverse(M)
-                    invKr = gp.apply_inverse(resid)
-
-                    MTinvKM = M.T @ invKM
-                    MTinvKr = M.T @ invKr
-
-                    X = np.linalg.solve(MTinvKM, MTinvKr)
-                    resid -= M @ X
-
-                    _, logdet = np.linalg.slogdet(MTinvKM)
-                    like += -0.5 * logdet
-
-                    lin_par = np.append(lin_par, X)
-
                 like += gp.log_likelihood(resid)
 
             else:
 
-                if 'F0 {0}'.format(miniexs.lcnames[i]) in miniexs.fixed:
-
-                    fm += miniexs.fixed['F0 {0}'.format(miniexs.lcnames[i])]
-
-                    like += np.sum(lnNorm(miniexs.f[i], fm, miniexs.ferr[i]))
-
-                else:
-
-                    resid = miniexs.f[i] - fm
-
-                    M = np.ones((len(miniexs.tt[i]), 1))
-
-                    W = 1/miniexs.ferr[i]**2
-                    Mw = M * np.sqrt(W)[:, None]
-                    Yw = resid * np.sqrt(W)
-
-                    X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
-        
-                    if len(chi2) > 0:
-                        chi2min = chi2[0]
-                    else:
-                        chi2min = np.sum((Yw - Mw @ X)**2)
-
-                    _, logdet = np.linalg.slogdet(Mw.T @ Mw)
-
-                    like += -0.5 * (chi2min + logdet)
-
-                    lin_par = np.append(lin_par, X)
+                like += np.sum(lnNorm(miniexs.f[i], fm, miniexs.ferr[i]))
 
 
     if miniexs.fit_rv:
@@ -5802,14 +5727,15 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
             like += np.sum(lnNorm(gclean, np.zeros(gclean.shape), miniexs.galerr))
 
+    if nlin > 0:
 
-    linpriorlike = miniexs.allpriors.apply({miniexs.lin_names[i]: lin_par[i] for i in range(len(lin_par))})
+        linpriorlike = miniexs.allpriors.apply({miniexs.lin_names[i]: lin_par[i] for i in range(len(lin_par))})
 
-    if np.isinf(linpriorlike):
-        return -np.inf, *np.zeros((nlin))
-    
-    else:
-        like += linpriorlike
+        if np.isinf(linpriorlike):
+            return -np.inf, *np.zeros((nlin))
+        
+        else:
+            like += linpriorlike
 
     return (like, *lin_par) if not np.isnan(like) else (-np.inf, *np.zeros((nlin)))
 
