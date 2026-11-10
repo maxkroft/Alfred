@@ -101,7 +101,7 @@ class ExoSystem:
         self.is_rv = np.array(tab_planets['RV Signal'])
         self.nr = int(np.sum(self.is_rv))
 
-        self.is_astro = np.array(tab_planets['Gaia Signal'])
+        self.is_astro = np.array(tab_planets['Fit Gaia'])
 
         self.fit_ttv = np.array(tab_planets['Fit TTVs'])
         self.nttv = int(np.sum(self.fit_ttv))
@@ -387,6 +387,7 @@ class ExoSystem:
         self.gaia_err_scale = np.array(tab_gaia['Err Scale'][0])
 
         fname = tab_gaia['File'][0]
+        print(fname)
 
         if not os.path.isfile(self.direc+'/'+fname) and fname != '':
             print('Gaia file {0} not found.'.format(fname))
@@ -4340,8 +4341,8 @@ class ExoSystem:
         ax[0].legend(fontsize = 15)
         ax[0].tick_params(axis = 'both', labelsize = 15)
         ax[0].set_title('On-Sky Motion')
-        ax[0].set_xlabel('$\Delta \alpha \mathrm{cos}(\delta)$ [mas]', fontsize = 20)
-        ax[0].set_ylabel('$\Delta \delta$ [mas]')
+        ax[0].set_xlabel('$\\Delta \\alpha \\mathrm{cos}(\\delta)$ [mas]', fontsize = 20)
+        ax[0].set_ylabel('$\\Delta \\delta$ [mas]')
 
         gmorbra, gmorbdec = self._gaiam['gmorbra'], self._gaiam['gmorbdec']
         gmorbra_draws, gmorbdec_draws = self._gaiam['gmorbra_draws'], self._gaiam['gmorbdec_draws']
@@ -4383,7 +4384,7 @@ class ExoSystem:
                 dy = gmorbdec[ii] - gmorbdec[ii-1]
                 ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 0, mutation_scale = 15))
 
-            ax[1].scatter(xpts[j][0], ypts[j][0], c = 'black', marker = '+', s = 100, zorder = 3, label = '$\omega$' if j == 0 else None)
+            ax[1].scatter(xpts[j][0], ypts[j][0], c = 'black', marker = '+', s = 100, zorder = 3, label = '$\\omega$' if j == 0 else None)
             ax[1].scatter(xpts[j][2], ypts[j][2], c = 'black', marker = 's', s = 100, zorder = 3, label = '\u260A' if j == 0 else None)
             ax[1].plot(xpts[j][2:], ypts[j][2:], c = 'gray', linestyle = '--', linewidth = 1, zorder = 2, label = 'Line of Nodes' if j == 0 else None)
 
@@ -4400,8 +4401,8 @@ class ExoSystem:
         ax[1].legend(fontsize = 15, ncols = 2)
         ax[1].tick_params(axis = 'both', labelsize = 15)
         ax[1].set_title('Astrometric Orbit')
-        ax[1].set_xlabel('$\Delta \alpha \mathrm{cos}(\delta)$ [mas]', fontsize = 20)
-        ax[1].set_ylabel('$\Delta \delta$ [mas]')
+        ax[1].set_xlabel('$\\Delta \\alpha \\mathrm{cos}(\\delta)$ [mas]', fontsize = 20)
+        ax[1].set_ylabel('$\\Delta \\delta$ [mas]')
 
         width, height = fig.get_size_inches()
         twidth = 14

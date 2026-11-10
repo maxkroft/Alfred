@@ -330,6 +330,30 @@ class Init_planets(InitFile):
         app.mainloop()
 
 
+    def from_file(self) -> Self:
+        """Loads an an Init_planets table from a previously created file. This is stored in .table. Makes sure it has the newly added columns
+        for Gaia astrometry fitting.
+
+        Returns:
+            Init_planets: The whole Init_planets object is returned by this function.
+        """
+
+        super().from_file()
+
+        if 'Fit Gaia' not in self.table.colnames:
+            self.table.add_column(np.full(len(self.table), False), name = 'Fit Gaia', index = 2)
+
+        if 'Mp/Ms' not in self.table.colnames:
+            self.table.add_column(np.full(len(self.table), np.nan), name = 'Mp/Ms')
+
+        if 'omega' not in self.table.colnames:
+            self.table.add_column(np.full(len(self.table), np.nan), name = 'omega')
+
+        self.save()
+
+        return self
+
+
 class Init_ttvs(InitFile):
     """Class for creating, loading, and editing TTV initialization files. Inherits from InitFile. Contains initial estimates for all of the transit
     times for each planet which is being fit for TTVs. These will only be utilized if the planet has fit TTVs set to true in the Init_planets file.
