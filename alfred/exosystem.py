@@ -387,7 +387,6 @@ class ExoSystem:
         self.gaia_err_scale = np.array(tab_gaia['Err Scale'][0])
 
         fname = tab_gaia['File'][0]
-        print(fname)
 
         if not os.path.isfile(self.direc+'/'+fname) and fname != '':
             print('Gaia file {0} not found.'.format(fname))
@@ -610,9 +609,6 @@ class ExoSystem:
             print('To fit stellar parameters simultaneously with planet parameters, please use transit data and/or Gaia epoch astrometry.')
             return None
         
-        if not os.path.isdir(self.direc+'Plots/'+name):
-            os.mkdir(self.direc+'Plots/'+name)
-        
         self.use_priors = use_priors
         if self.init_priors is None and use_priors:
             print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create(). Running with no priors.')
@@ -620,6 +616,9 @@ class ExoSystem:
 
 
         self.delete_run(name)
+
+        if not os.path.isdir(self.direc+'Plots/'+name):
+            os.mkdir(self.direc+'/Plots/'+name)
         
         
         if self.fit_transit:
@@ -821,7 +820,7 @@ class ExoSystem:
             self.lin_names.append('gamma')
             if self.rv_bkg_order > 0:
                 self.lin_names.append('gamma_dot')
-            if self.rv_bkb_order > 1:
+            if self.rv_bkg_order > 1:
                 self.lin_names.append('gamma_ddot')
 
             for i in range(1,len(self.rvnames)):
@@ -841,7 +840,7 @@ class ExoSystem:
 
             self.allpriors.init_fixed(self.init_priors.table, self.x0)
 
-            self.all_priors.init_fixed(self.init_priors.table, {ln: 0 for ln in self.lin_names})
+            self.allpriors.init_fixed(self.init_priors.table, {ln: 0 for ln in self.lin_names})
 
             self.fixed = self.allpriors.fixed.copy()
 
@@ -1228,6 +1227,7 @@ class ExoSystem:
 
                     mean = self.fixed['F0 {0}'.format(self.lcnames[j])]
                     resid -= mean
+                    fm += mean
 
                 gpf = 0
 
@@ -1249,7 +1249,8 @@ class ExoSystem:
 
                         X = np.linalg.solve(MTinvKM, MTinvKr)
                         mean = X[0]
-                        resid -= M @ X                                                  
+                        resid -= M @ X     
+                        fm += mean                                             
 
                     gpf = gp.predict(resid)
 
@@ -1267,6 +1268,7 @@ class ExoSystem:
 
                     mean = X[0]
                     resid -= mean
+                    fm += mean
 
                 rms = np.sqrt(np.median(resid**2))
 
@@ -1354,7 +1356,7 @@ class ExoSystem:
                         lp = self.allpriors.apply({k: x})
                         valid = np.isfinite(lp)
                         acc.append(x[valid])
-                        cnt += len(np.sum(valid))
+                        cnt += np.sum(valid)
 
                     pos.append(np.concatenate(acc)[:self.nwalk])
 
@@ -1371,7 +1373,7 @@ class ExoSystem:
                         lp = self.allpriors.apply({k: x})
                         valid = np.isfinite(lp)
                         acc.append(x[valid])
-                        cnt += len(np.sum(valid))
+                        cnt += np.sum(valid)
 
                     pos.append(np.concatenate(acc)[:self.nwalk])
                     
@@ -1388,7 +1390,7 @@ class ExoSystem:
                         lp = self.allpriors.apply({k: x})
                         valid = np.isfinite(lp)
                         acc.append(x[valid])
-                        cnt += len(np.sum(valid))
+                        cnt += np.sum(valid)
 
                     pos.append(np.concatenate(acc)[:self.nwalk])
                     
@@ -1405,7 +1407,7 @@ class ExoSystem:
                         lp = self.allpriors.apply({k: x})
                         valid = np.isfinite(lp)
                         acc.append(x[valid])
-                        cnt += len(np.sum(valid))
+                        cnt += np.sum(valid)
 
                     pos.append(np.concatenate(acc)[:self.nwalk])
 
@@ -1421,7 +1423,7 @@ class ExoSystem:
                     lp = self.allpriors.apply({k: x})
                     valid = np.isfinite(lp)
                     acc.append(x[valid])
-                    cnt += len(np.sum(valid))
+                    cnt += np.sum(valid)
 
                 pos.append(np.concatenate(acc)[:self.nwalk])
 
@@ -1435,14 +1437,14 @@ class ExoSystem:
                         lp = self.allpriors.apply({k: x})
                         valid = np.isfinite(lp)
                         acc.append(x[valid])
-                        cnt += len(np.sum(valid))
+                        cnt += np.sum(valid)
 
                     pos.append(np.concatenate(acc)[:self.nwalk])
 
                 else:
                     pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01, self.nwalk)))
 
-            if 'secw' in k or 'sesw' in k or 'comega' in k or 'somega' in k or 'sico' in k or 'siso' in k or  k in ['u1','u2']:
+            if 'secw' in k or 'sesw' in k or 'comega' in k or 'somega' in k or 'sico' in k or 'siso' in k or k in ['u1','u2','feh','AV']:
 
                 acc = []
                 cnt = 0
@@ -1451,7 +1453,7 @@ class ExoSystem:
                     lp = self.allpriors.apply({k: x})
                     valid = np.isfinite(lp)
                     acc.append(x[valid])
-                    cnt += len(np.sum(valid))
+                    cnt += np.sum(valid)
 
                 pos.append(np.concatenate(acc)[:self.nwalk])
                 
@@ -1464,7 +1466,7 @@ class ExoSystem:
                     lp = self.allpriors.apply({k: x})
                     valid = np.isfinite(lp)
                     acc.append(x[valid])
-                    cnt += len(np.sum(valid))
+                    cnt += np.sum(valid)
 
                 pos.append(np.concatenate(acc)[:self.nwalk])
 
@@ -1478,7 +1480,7 @@ class ExoSystem:
                         lp = self.allpriors.apply({k: x})
                         valid = np.isfinite(lp)
                         acc.append(x[valid])
-                        cnt += len(np.sum(valid))
+                        cnt += np.sum(valid)
 
                     pos.append(np.concatenate(acc)[:self.nwalk])
                     
@@ -1486,26 +1488,55 @@ class ExoSystem:
                     pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), self.nwalk)))
 
             if k == 'eep':
-                pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
+                if self.use_priors:
+
+                    acc = []
+                    cnt = 0
+                    while cnt < self.nwalk:
+                        x = np.random.normal(self.x[k], 0.1, 2*self.nwalk)
+                        lp = self.allpriors.apply({k: x})
+                        valid = np.isfinite(lp)
+                        acc.append(x[valid])
+                        cnt += np.sum(valid)
+
+                    pos.append(np.concatenate(acc)[:self.nwalk])
+
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
 
             if k == 'log10(age)':
                 if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log10(truncnorm.rvs((10**lb-10**self.x[k])/(10**self.x[k]/100), (10**ub-10**self.x[k])/(10**self.x[k]/100), loc = 10**self.x[k], scale = 10**self.x[k]/100, size = self.nwalk)))
+
+                    acc = []
+                    cnt = 0
+                    while cnt < self.nwalk:
+                        x = np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, 2*self.nwalk))
+                        lp = self.allpriors.apply({k: x})
+                        valid = np.isfinite(lp)
+                        acc.append(x[valid])
+                        cnt += np.sum(valid)
+
+                    pos.append(np.concatenate(acc)[:self.nwalk])
+
                 else:
                     pos.append(np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, self.nwalk)))
 
-            if k == 'feh':
-                lb, ub = -0.5, 0.5
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
-
             if k == 'plx':
-                pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
+                if self.use_priors:
 
-            if k == 'AV':
-                lb, ub = 0, np.inf
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+                    acc = []
+                    cnt = 0
+                    while cnt < self.nwalk:
+                        x = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
+                        lp = self.allpriors.apply({k: x})
+                        valid = np.isfinite(lp)
+                        acc.append(x[valid])
+                        cnt += np.sum(valid)
 
+                    pos.append(np.concatenate(acc)[:self.nwalk])
+                
+                else:
+                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
 
         pos = np.transpose(np.array(pos))
 
@@ -1522,7 +1553,7 @@ class ExoSystem:
                 with emcee sampler.
         """
 
-        blobs_dtype = [(name, float) for name in self.lin_names]
+        blobs_dtype = [(name, np.float64) for name in self.lin_names]
 
         sampler_kwargs = {'nwalkers': self.nwalk,
                           'ndim': len(self.x),
@@ -1617,7 +1648,7 @@ class ExoSystem:
 
             self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
 
-            self.lin_par = self.sampler.get_blobs(flat = True)
+            self.lin_par = self.sampler.get_blobs(flat = True, discard = int(burnfrac*it))
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
@@ -5394,7 +5425,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
         starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
         if np.isnan(starlike):
-            return -np.inf, np.zeros((nlin))
+            return -np.inf, *np.zeros((nlin))
         
         like += starlike
 
@@ -5407,7 +5438,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
         if miniexs.fit_planets:
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
-                return -np.inf, np.zeros((nlin))
+                return -np.inf, *np.zeros((nlin))
 
             for i in range(miniexs.n):
 
@@ -5484,7 +5515,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
     priorlike = miniexs.allpriors.apply(par)
 
     if np.isinf(priorlike):
-        return -np.inf, np.zeros((nlin))
+        return -np.inf, *np.zeros((nlin))
     
     else:
         like += priorlike
@@ -5570,7 +5601,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
                     gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(miniexs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(miniexs.lcnames[i])]), miniexs.tt[i], miniexs.ferr[i], miniexs.gps[ii])
 
                 except:
-                    return -np.inf, np.zeros((nlin))
+                    return -np.inf, *np.zeros((nlin))
 
                 if 'F0 {0}'.format(miniexs.lcnames[i]) in miniexs.fixed:
 
@@ -5775,13 +5806,12 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
     linpriorlike = miniexs.allpriors.apply({miniexs.lin_names[i]: lin_par[i] for i in range(len(lin_par))})
 
     if np.isinf(linpriorlike):
-        return -np.inf, np.zeros((nlin))
+        return -np.inf, *np.zeros((nlin))
     
     else:
         like += linpriorlike
 
-
-    return (like, lin_par) if not np.isnan(like) else (-np.inf, np.zeros((nlin)))
+    return (like, *lin_par) if not np.isnan(like) else (-np.inf, *np.zeros((nlin)))
 
 
 def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:

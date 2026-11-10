@@ -202,6 +202,8 @@ class AllPriors:
                 can be set to fixed.
         """
 
+        x0keys = list(x0.keys())
+
         for i in range(len(tab)):
 
             if tab['Prior Type'][i] != 'F':
@@ -219,7 +221,7 @@ class AllPriors:
 
             fvar = [' '.join([sv]+split[1:]) for sv in svar]
 
-            if np.any(np.isin(fvar, x0)):
+            if np.any(np.isin(fvar, x0keys)):
 
                 self.fixed[var] = tab['Param 1'][i]
 
@@ -308,7 +310,9 @@ class AllPriors:
             fit_ttv (ndarray): An array of bools for each planet. They represent whether or not each planet is being fit for TTVs. Priors can be placed
                 on P and Tc for a planet even if they are fit for TTVs and don't directly have those in the fit parameters.
         """
-        
+
+        x0keys = list(x0.keys())
+
         for i in range(len(tab)):
 
             if tab['Prior Type'][i] == 'F':
@@ -341,7 +345,7 @@ class AllPriors:
                     self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
 
-            if np.any(np.isin(fvar, x0)):
+            if np.any(np.isin(fvar, x0keys)):
 
                 self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
@@ -411,7 +415,7 @@ class AllPriors:
             float: The total log likelihood from the priors.
         """
 
-        log_like = 0
+        log_like = np.zeros(np.array(list(par.values())[0]).shape)
 
         for var in self.prior_dict:
 
@@ -421,15 +425,19 @@ class AllPriors:
 
                 svar = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
-                x = np.exp(par[svar])
+                if svar in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = np.exp(par[svar])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'age':
 
-                x = 10**(par['log10(age)'])
+                if 'log10(age)' in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = 10**(par['log10(age)'])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] in ['log(rhostar)','rhostar']:
 
@@ -440,13 +448,16 @@ class AllPriors:
 
                     x = 0.018916375 * np.exp(par[svar2])**3 / np.exp(par[svar1])**2
 
-                elif split[0] == 'rhostar':
+                elif split[0] == 'rhostar' and 'log(rhostar)' in par:
 
                     x = np.exp(par['log(rhostar)'])
 
-                else:
+                elif 'log(rhostar)' in par:
 
                     x = par['log(rhostar)']
+
+                else:
+                    pass
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
@@ -460,9 +471,12 @@ class AllPriors:
 
                     x = np.arccos(par[svar])
 
-                else:
+                elif svar1 in par:
 
                     x = np.arccos(1-2*(par[svar1]**2 + par[svar2]**2))
+
+                else:
+                    pass
 
                 log_like += self.prior_dict[var].apply_priors(x)
 
@@ -471,22 +485,26 @@ class AllPriors:
                 svar1 = ' '.join(['secw']+split[1:])
                 svar2 = ' '.join(['sesw']+split[1:])
 
-                x = par[svar1]**2 + par[svar2]**2
+                if svar1 in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = par[svar1]**2 + par[svar2]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'w':
 
                 svar1 = ' '.join(['secw']+split[1:])
                 svar2 = ' '.join(['sesw']+split[1:])
 
-                x = np.arctan2(par[svar2], par[svar1])
+                if svar1 in par:
 
-                p0 = self.prior_dict[var].apply_priors(x)
-                p1 = self.prior_dict[var].apply_priors(x+2*np.pi)
-                p2 = self.prior_dict[var].apply_priors(x-2*np.pi)
+                    x = np.arctan2(par[svar2], par[svar1])
 
-                log_like += np.max([p0,p1,p2])
+                    p0 = self.prior_dict[var].apply_priors(x)
+                    p1 = self.prior_dict[var].apply_priors(x+2*np.pi)
+                    p2 = self.prior_dict[var].apply_priors(x-2*np.pi)
+
+                    log_like += np.max([p0,p1,p2])
 
             elif split[0] == 'omega':
 
@@ -498,44 +516,53 @@ class AllPriors:
                     svar1 = ' '.join(['comega']+split[1:])
                     svar2 = ' '.join(['somega']+split[1:])
 
-                x = np.arctan2(par[svar2], par[svar1])
+                if svar1 in par:
 
-                p0 = self.prior_dict[var].apply_priors(x)
-                p1 = self.prior_dict[var].apply_priors(x+2*np.pi)
-                p2 = self.prior_dict[var].apply_priors(x-2*np.pi)
+                    x = np.arctan2(par[svar2], par[svar1])
 
-                log_like += np.max([p0,p1,p2])
+                    p0 = self.prior_dict[var].apply_priors(x)
+                    p1 = self.prior_dict[var].apply_priors(x+2*np.pi)
+                    p2 = self.prior_dict[var].apply_priors(x-2*np.pi)
+
+                    log_like += np.max([p0,p1,p2])
 
             elif split[0] == 'rsq_omega':
 
                 svar1 = ' '.join(['comega']+split[1:])
                 svar2 = ' '.join(['somega']+split[1:])
 
-                x = par[svar1]**2 + par[svar2]**2
+                if svar1 in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = par[svar1]**2 + par[svar2]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] in ['comega', 'somega'] and var not in par:
                 
                 svar1 = ' '.join(['sico']+split[1:])
                 svar2 = ' '.join(['siso']+split[1:])
-                r = np.sqrt(par[svar1]**2 + par[svar2]**2)
 
-                if split[0] == 'comega':
-                    
-                    x = par[svar1]/r
+                if svar1 in par:
 
-                else:
+                    r = np.sqrt(par[svar1]**2 + par[svar2]**2)
 
-                    x = par[svar2]/r
+                    if split[0] == 'comega':
+                        
+                        x = par[svar1]/r
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    else:
+
+                        x = par[svar2]/r
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'distance':
 
-                x = 1000/par['plx']
+                if 'plx' in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = 1000/par['plx']
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif var in par:
 

@@ -37,7 +37,8 @@ class InitFile:
         """
 
         self.table = Table.read(self.direc + '/' + self.name, format = 'ascii.fixed_width_two_line', delimiter = '|',
-                                header_rows = self.header_rows, converters = self.converters)
+                                header_rows = self.header_rows, converters = self.converters,
+                                fill_values = [('', '0', '*'),('', 'NaN', '*'),('', '', '*')])
         return self
 
     def save(self):
