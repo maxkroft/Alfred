@@ -573,7 +573,6 @@ class ExoSystem:
         self.fit_star = fit_star
         self.parallel = parallel
         self.sampler_type = sampler_type
-        self.fit_planets = self.fit_transit or self.fit_rv
         self.lc_supersample_size = lc_supersample_size
         self.conv_check_inter = conv_check_inter
 
@@ -589,6 +588,8 @@ class ExoSystem:
         if self.fit_gaia and not np.any(self.is_astro):
             self.fit_gaia = False
             print('No Gaia astrometric planets found.')
+
+        self.fit_planets = self.fit_transit or self.fit_rv or self.fit_gaia
 
 
         if isinstance(self.nburn, float) and not 0 <= self.nburn < 1:
@@ -882,6 +883,8 @@ class ExoSystem:
             ['w x', 'U', -np.pi, np.pi],
             ['u1 x', 'U', 0, 1],
             ['u2 x', 'U', 0, 1],
+            ['feh', 'U', -0.5, 0.5],
+            ['AV', 'U', 0, np.inf]
         ], names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'])
 
         if self.fit_transit and not self.fit_gaia:
@@ -920,6 +923,21 @@ class ExoSystem:
             self.allpriors.init_priors(req_priors, self.x0, self.fit_ttv)
 
             self.fixed = {}
+
+
+        if self.fit_gaia and not self.fit_star:
+
+            if self.fit_transit:
+
+                if 'rstar' not in self.allpriors.prior_dict:
+
+                    print('It is highly recommended to place an informative prior on rstar with astrometry+transit fits.')
+
+            else:
+
+                if 'mstar' not in self.allpriors.prior_dict:
+
+                    print('It is highly recommended to place an informative prior on mstar with astrometry fits.')
 
 
         self.keys = list(self.x0.keys())
@@ -1010,7 +1028,9 @@ class ExoSystem:
 
         if self.use_priors:
 
-            self.allpriors = AllPriors(self.init_priors.table, x0, self.fit_ttv)
+            self.allpriors = AllPriors()
+
+            self.allpriors.init_fixed(self.init_priors.table, x0)
 
             self.fixed = self.allpriors.fixed.copy()
 
@@ -1019,6 +1039,8 @@ class ExoSystem:
                 if f in self.x0:
 
                     self.x0.pop(f)
+
+            self.allpriors.init_priors(self.init_priors.table, x0, np.empty(0))
 
         res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args), [x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
         x = {k:v for k,v in zip(keys, res.x)}
@@ -1071,7 +1093,10 @@ class ExoSystem:
 
             if self.fit_star:
 
-                rstar, mstar, Tstar, loggstar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg'])
+                rstar, mstar, Tstar, loggstar, rhostar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg','density'])
+
+                y['rstar'] = rstar
+                y['log(rhostar)'] = np.log(rhostar)
 
                 for j in range(self.n):
 
@@ -1086,7 +1111,12 @@ class ExoSystem:
 
                         p = np.exp(y['log(P) {0}'.format(j+1)])
 
-                    if self.is_rv[j] and self.fit_rv:
+                    if self.is_astro[j] and self.fit_gaia:
+
+                        q = np.exp(y['log(q) {0}'.format(j+1)])
+                        mp = q * mstar
+
+                    elif self.is_rv[j] and self.fit_rv:
 
                         e = 0
                         if self.fit_ecc[j]:
@@ -1121,9 +1151,7 @@ class ExoSystem:
 
             for j in range(len(self.tt)):
 
-                mean = y['F0 {0}'.format(self.lcnames[j])]
-
-                fm = mean
+                fm = 0
 
                 ld = self.ld[self.filters[j]]
 
@@ -1169,26 +1197,36 @@ class ExoSystem:
 
                         if self.is_eclipse[k]:
 
-                            mp = 0
-                            ms = mstar if self.fit_star else self.ms
+                            ms = y['mstar'] if 'mstar' in y else self.ms
+                            rs = y['rstar'] if 'rstar' in y else self.rs
+                            q = 0
 
-                            if self.is_rv[k] and self.fit_rv:
-                            
+                            if self.is_astro[k] and self.fit_gaia:
+
+                                q = np.exp(y['log(q) {0}'.format(k+1)])
+
+                            elif self.is_rv[k] and self.fit_rv:
+
                                 e = 0
                                 if self.fit_ecc[k]:
                                     e = y['secw {0}'.format(k+1)]**2 + y['sesw {0}'.format(k+1)]**2
-        
-                                mp = calc_m_from_k(p, np.exp(y['log(K) {0}'.format(k+1)]), e, np.arccos(y['cos(i) {0}'.format(k+1)]), ms)
+                                
+                                mp = calc_m_from_k(np.exp(y['log(P) {0}'.format(k+1)]), np.exp(y['log(K) {0}'.format(k+1)]), e, np.arccos(y['cos(i) {0}'.format(k+1)]), ms)
 
-                            q = mp/ms
+                                q = mp/ms
 
-                            fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j], eclipse = True, fp = y['fp {0}'.format(k+1)], rstar = rstar if self.fit_star else self.rs, q = q)
+                            fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j], eclipse = True, fp = y['fp {0}'.format(k+1)], rstar = rs, q = q)
 
                         else:
 
                             fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j])
 
                 resid = self.f[j] - fm
+
+                if 'F0 {0}'.format(self.lcnames[j]) in self.fixed:
+
+                    mean = self.fixed['F0 {0}'.format(self.lcnames[j])]
+                    resid -= mean
 
                 gpf = 0
 
@@ -1198,9 +1236,36 @@ class ExoSystem:
 
                     gp = set_gp_params(np.exp(y['log(rho_gp) {0}'.format(self.lcnames[j])]), np.exp(y['log(sigma_gp) {0}'.format(self.lcnames[j])]), self.tt[j], self.ferr[j], self.gps[jj])
 
+                    if 'F0 {0}'.format(self.lcnames[j]) not in self.fixed:
+
+                        M = np.ones((len(self.tt[j]), 1))
+
+                        invKM = gp.apply_inverse(M)
+                        invKr = gp.apply_inverse(resid)
+
+                        MTinvKM = M.T @ invKM
+                        MTinvKr = M.T @ invKr
+
+                        X = np.linalg.solve(MTinvKM, MTinvKr)
+                        mean = X[0]
+                        resid -= M @ X                                                  
+
                     gpf = gp.predict(resid)
 
                     resid = self.f[j] - fm - gpf
+
+                elif 'F0 {0}'.format(self.lcnames[j]) not in self.fixed:
+
+                    M = np.ones((len(miniexs.tt[j]), 1))
+
+                    W = 1/miniexs.ferr[j]**2
+                    Mw = M * np.sqrt(W)[:, None]
+                    Yw = resid * np.sqrt(W)
+
+                    X, _, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+
+                    mean = X[0]
+                    resid -= mean
 
                 rms = np.sqrt(np.median(resid**2))
 
@@ -1864,11 +1929,16 @@ class ExoSystem:
         else:
 
             T = np.random.normal(self.Ts, self.Tserr, n)
+            self.dres['Tstar'] = T
+
+            if 'plx' in y:
+                self.dres['distance'] = 1000/y['plx']
 
             if 'rstar' in y:
                 rstar = y['rstar']
             else:
                 rstar = np.random.normal(self.rs, self.rserr, n)
+                self.dres['rstar'] = rstar
 
             if 'mstar' in y:
                 mstar = y['mstar']
@@ -1882,6 +1952,7 @@ class ExoSystem:
 
             else:
                 mstar = np.random.normal(self.ms, self.mserr, n)
+                self.dres['mstar'] = mstar
 
         hasJ = False
         if 'J' in self.magbands:
@@ -1908,15 +1979,7 @@ class ExoSystem:
 
                     if self.fit_ttv[i]:
 
-                        ttvi = np.array([self.ttvi['{0}'.format(i+1)]]).T
-                        tts = np.array([y['TT {0} {1}'.format(i, j+1)] for j in range(ttvi.shape[0])])
-                        
-                        res = linregress(ttvi, tts)
-                        p = res.slope
-                        tc = res.intercept
-
-                        self.dres['P {0}'.format(i+1)] = p
-                        self.dres['Tc {0}'.format(i+1)] = tc
+                        p = y['P {0}'.format(i+1)]
 
                     else:
 
@@ -1965,7 +2028,7 @@ class ExoSystem:
 
                 fc = np.pi/2 - w
                 Ec = np.arctan2(np.sqrt(1-e**2) * np.sin(fc), e + np.cos(fc))
-                tc = y['Tc {0}'.format(i+1)] if 'Tc {0}'.format(i+1) in y else self.dres['Tc {0}'.format(i+1)]
+                tc = y['Tc {0}'.format(i+1)]
                 tp = tc - p/(2*np.pi) * (Ec - e * np.sin(Ec))
                 self.dres['Tp {0}'.format(i+1)] = tp
 
@@ -2019,7 +2082,7 @@ class ExoSystem:
                         mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
                         self.dres['Mpsini {0}'.format(i+1)] = mp
 
-                if self.fit_star or (not (self.fit_transit and self.is_transit[i]) and ((self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia))):
+                if self.fit_star or self.fit_gaia or (not (self.fit_transit and self.is_transit[i]) and (self.is_rv[i] and self.fit_rv)):
 
                     a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
                     self.dres['a {0}'.format(i+1)] = a
@@ -2046,7 +2109,7 @@ class ExoSystem:
                     dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
                     self.dres['dur {0}'.format(i+1)] = dur
 
-                    if not self.fit_star:
+                    if not self.fit_star and not self.fit_gaia:
 
                         rhos = 0.018916375 * ars**3 / p**2
                         self.dres['rhos {0}'.format(i+1)] = rhos
@@ -2064,11 +2127,6 @@ class ExoSystem:
                         tsm = sf * rp**3 * teq / (mp * rstar**2) * 10**(-J/5)
                         self.dres['TSM {0}'.format(i+1)] = tsm
 
-
-        if not self.fit_star:
-            self.dres['rstar'] = rstar
-            self.dres['mstar'] = mstar
-            self.dres['Tstar'] = T
 
 
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
@@ -2097,7 +2155,7 @@ class ExoSystem:
         self.restab = tab
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
-        run_settings = {'fit_transit': self.fit_transit, 'fit_rv': self.fit_rv, 'fit_star': self.fit_star, 'fit_ld': self.fit_ld, 'use_priors': self.use_priors, 'lc_supersample_size': self.lc_supersample_size}
+        run_settings = {'fit_transit': self.fit_transit, 'fit_rv': self.fit_rv, 'fit_gaia': self.fit_gaia, 'fit_star': self.fit_star, 'fit_ld': self.fit_ld, 'use_priors': self.use_priors, 'lc_supersample_size': self.lc_supersample_size}
         if self.use_priors:
             run_settings['fixed'] = self.fixed
 
@@ -2160,6 +2218,14 @@ class ExoSystem:
 
             self.plot_rv(name, show_plot = show_plots)
 
+        if self.fit_gaia:
+
+            self.gen_Gaia_astrometry(name)
+
+            self.plot_Gaia_AL(name, show_plot = show_plots)
+
+            self.plot_Gaia_onsky(name, show_plot = show_plots)
+
         if self.nttv > 0 and self.fit_transit:
 
             self.plot_ttvs(name, show_plot = show_plots)
@@ -2185,16 +2251,28 @@ class ExoSystem:
         Potential fit parameters:
 
         - log(P) x: Natural log of the orbital period, in days, for planet number x.
-        - Tc x: Time of conjunction, in BJD-2457000, for planet number x.
+        - Tc x: Time of conjunction, in BJD-2457000, for planet number x. Defined for non-transiting planets as the time when the true anomaly is
+            pi - w. For circular orbits, w is pi/2, and this is equal to Tp.
         - ror x: Planet to star radius ratio, for planet number x.
         - log(a/rs) x: Natural log of the orbital semi-major axis to stellar radius ratio, for planet number x.
-        - cos(i) x: Cosine of the orbital inclination, restricted between 0 and 90 degrees, for planet number x.
+        - cos(i) x: Cosine of the orbital inclination, for planet number x. Restricted between 0 and 90 degrees for transiting planets, extended
+            to -90 to 90 degrees for astrometric planets.
         - log(K) x: Natural log of the RV semi-amplitude, in m/s, for planet number x.
         - secw x: Square root of the eccentricity times the cosine of the argument of periastron, for planet number x.
         - sesw x: Square root of the eccentricity times the sine of the argument of periastron, for planet number x.
         - e x: Orbital eccentricity, for planet number x. Only fit if w is fixed.
         - w x: Orbital argument of periastron, in radians, for planet number x. Only fit if e is fixed.
         - fp x: Planet to star flux ratio, for planet number x.
+        - log(q) x: Natural log of the planet to star mass ratio, for planet number x.
+        - sico x: Sine of the inclination/2 times the cosine of the longitude of the ascending node, for planet number x. Fit for astrometric-only planets.
+        - siso x: Sine of the inclination/2 times the sine of the longitude of the ascending node, for planet number x. Fit for astrometric-only planets.
+        - comega x: Cosine of the longitude of the ascending node, for planet x. Fit for astrometric+transiting planets, or astrometric-only planets
+            in the case of fixed cos(i) or somega.
+        - somega x: Sine of the longitude of the ascending node, for planet x. Fit for astrometric+transiting planets, or astrometric-only planets
+            in the case of fixed cos(i) or comega.
+        - mstar: The stellar mass, in solar masses. Fit in Gaia-only fits.
+        - rstar: The stellar radius, in solar radii. Fit in Gaia+transit fits.
+        - log(rhostar): The natural log of the mean stellar density, in g/cm^3. Fit in Gaia+transit fits.
         - TT x y: Transit time (when fitting for TTVs), in BJD-2457000, for planet number x transit number y.
         - F0 x: Baseline flux value, for transit data set x.
         - log(rho_gp) x: Natural log of the GP period, in days, for transit data set x.
@@ -2203,12 +2281,16 @@ class ExoSystem:
         - gamma_dot: 1st derivative of the RV systemic velocity, in m/s/day. Relative to time of first RV measurement.
         - gamma_ddot: 2nd derivative of the RV systemic velocity, in m/s/day^2. Relative to time of first RV measurement.
         - rv_offset x: RV offset relative to first data set, in m/s, for RV data set x.
+        - ra*_offset: The offset from the reference value of right ascension times cosine of declination, in mas.
+        - dec_offset: The offset from the reference value of declination, in mas.
+        - pmra*: Proper motion in right ascension times cosine of declination, in mas/yr
+        - pmdec: Proper motion in declination, in mas/yr.
         - u1 x: Linear coefficient for quadratic limb darkening, for filter x.
         - u2 x: Non-linear coefficient for quadratic limb darkening, for filter x.
         - eep: Equivalent evolutionary phase, used to interpolate across MIST models for stellar fitting.
         - log10(age): Log base 10 of the stellar age, in yr.
         - feh: Stellar metallicity, in dex.
-        - distance: Distance to the system, in pc.
+        - plx: Parallax angle of the star, in mas.
         - AV: Visual band extinction to the system, in mags.
         """
         return self.res
@@ -2220,13 +2302,17 @@ class ExoSystem:
         Potential derived parameters:
     
         - P x: Orbital period, in days, for planet number x.
+        - Tp x: Time of periastron, in BJD-2457000, for planet number x. Equal to Tc for circular orbits.
         - Rp x: Planetary radius, in earth radii, for planet number x.
         - a/rs x: Orbital semi-major axis to stellar radius ratio, for planet number x.
         - a x: Orbital semi-major axis, in AU, for planet number x.
-        - i x: Orbital inclination, in degrees, for planet number x (restricted between 0 and 90 degrees).
+        - i x: Orbital inclination, in degrees, for planet number x. Restricted between 0 and 90 degrees for transiting planets, extended
+            to -90 to 90 degrees for astrometric planets.
         - e x: Orbital eccentricity, for planet number x.
         - w x: Orbital argument of periastron, in radians, for planet number x.
+        - omega x: Orbital longitude of the ascending node, in radians, for planet number x.
         - K x: RV semi-amplitude, in m/s, for planet number x.
+        - q x: The planet to star mass ratio, for planet number x.
         - Mp x: Planetary mass, in earth masses, for planet number x.
         - Mpsini x: Planetary mass times the sine of the orbital inclination, in earth masses, for planet number x (used when transit wasn't fit).
         - rhop x: Planetary mean density, in g/cm^3, for planet number x.
@@ -2235,12 +2321,13 @@ class ExoSystem:
         - b x: Transit impact parameter, for planet number x.
         - depth x: Transit depth, in ppm, for planet number x.
         - dur x: Transit duration, in hours, for planet number x.
-        - rhos x: Implied stellar density from transit of planet number x, in g/cm^3.
+        - rhos x: Implied stellar density from transit of planet number x, in g/cm^3. Only when fitting transits with stellar parameters or Gaia data.
         - TSM x: Transmission spectroscopy metric, for planet number x.
         - rstar: Stellar radius, in solar radii.
         - mstar: Stellar mass, in solar masses.
+        - distance: Distance to the system, in pc.
         - mstar_init: Initial stellar mass at the zero-age main sequence point, in solar masses.
-        - rhostar: Mean stellar density from stellar fitting, in g/cm^3.
+        - rhostar: Mean stellar density, in g/cm^3.
         - Tstar: Stellar effective temperature, in K.
         - loggstar: log10 of the stellar surface gravity, in cm/s^2.
         - Lstar: Stellar bolometric luminosity, in solar luminosities.
@@ -2302,6 +2389,11 @@ class ExoSystem:
             pass
 
         try:
+            self.load_gaia_mod(name)
+        except:
+            pass
+
+        try:
             self.load_magfit(name)
         except:
             pass
@@ -2328,7 +2420,7 @@ class ExoSystem:
 
         
     def load_lcs_mod(self, name: str):
-        """Loads in the best fit transit model of a previous run into ExoSystem.fm.
+        """Loads in the best fit transit model of a previous run into ExoSystem._lcm.
 
         Args:
             name (str): Name of the previous run to load in.
@@ -2338,13 +2430,23 @@ class ExoSystem:
 
 
     def load_rv_mod(self, name: str):
-        """Loads in the best fit RV model of a previous run into ExoSystem.rvm.
+        """Loads in the best fit RV model of a previous run into ExoSystem._rvm.
 
         Args:
             name (str): Name of the previous run to load in.
         """
 
         self._rvm = pickle.load(open(self.direc+'/Output/'+name+'_rvm.p', 'rb'))
+
+    
+    def load_gaia_mod(self, name: str):
+        """Loads in the best fit Gaia astrometry model of a previous run into ExoSystem._gaiam.
+
+        Args:
+            name (str): Name of the previous run to load in.
+        """
+
+        self._gaiam = pickle.load(open(self.direc+'/Output/'+name+'_gaiam.p', 'rb'))
 
 
     def load_magfit(self, name: str):
@@ -2386,13 +2488,14 @@ class ExoSystem:
         run_settings = pickle.load(open(self.direc+'/Output/'+name+'_run_settings.p', 'rb'))
         self.fit_transit = run_settings['fit_transit']
         self.fit_rv = run_settings['fit_rv']
+        self.fit_gaia = run_settings['fit_gaia']
         self.fit_star = run_settings['fit_star']
         self.fit_ld = run_settings['fit_ld']
         self.use_priors = run_settings['use_priors']
         self.lc_supersample_size = run_settings['lc_supersample_size']
         if self.use_priors:
             self.fixed = run_settings['fixed']
-        self.fit_planets = self.fit_transit or self.fit_rv
+        self.fit_planets = self.fit_transit or self.fit_rv or self.fit_gaia
 
 
     def delete_run(self, name: str):
@@ -2419,6 +2522,9 @@ class ExoSystem:
 
         if os.path.exists(self.direc+'Output/'+name+'_rvm.p'):
             os.remove(self.direc+'Output/'+name+'_rvm.p')
+
+        if os.path.exists(self.direc+'Output/'+name+'_gaiam.p'):
+            os.remove(self.direc+'Output/'+name+'_gaiam.p')
 
         if os.path.exists(self.direc+'Output/'+name+'_samples.p'):
             os.remove(self.direc+'Output/'+name+'_samples.p')
@@ -2515,21 +2621,33 @@ class ExoSystem:
 
         for i in range(self.n):
 
-            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i])):
+            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]) or (self.fit_gaia and self.is_astro[i])):
 
                 continue
 
             num2 += 1
             vargrid.append([])
 
-            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','secw','sesw','e','w','fp']:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','e','w','sico','siso','comega','somega','fp']:
 
                 if z+' {0}'.format(i+1) in self.parnames:
                     vargrid[-1].append(z)
 
             num1 = max(num1, len(vargrid[-1]))
 
-        fig, ax = plt.subplots(num1, num2, figsize = (7*num2, 18), sharex = True, layout = 'constrained')
+        if self.fit_gaia and not self.fit_star:
+
+            num2 += 1
+            vargrid.append([])
+
+            for z in ['plx','mstar','log(rhostar)','rstar']:
+
+                if z in self.parnames:
+                    vargrid[-1].append(z)
+
+            num1 = max(num1, len(vargrid[-1]))
+
+        fig, ax = plt.subplots(num1, num2, figsize = (7*num2, 2*num1), sharex = True, layout = 'constrained')
 
         if num2 == 1:
             ax = np.array([ax.T]).T
@@ -2537,7 +2655,7 @@ class ExoSystem:
         j = 0
         for i in range(self.n):
 
-            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i])):
+            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]) or (self.fit_gaia and self.is_astro[i])):
 
                 continue
 
@@ -2550,6 +2668,16 @@ class ExoSystem:
                 ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
 
             j += 1
+
+        if self.fit_gaia and not self.fit_star:
+
+            ax[0][j].set_title('Star')
+
+            for k in range(len(vargrid[j])):
+
+                v = self.parnames[vargrid[j][k]+' {0}'.format(i+1)]
+                ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
 
         fig.supxlabel('N Steps')
 
@@ -2622,7 +2750,7 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
-        fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
+        fig, ax = plt.subplots(np.sum(self.detrend), 2, figsize = (10, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
         if np.sum(self.detrend) == 1:
             ax = np.array([ax])
@@ -2636,21 +2764,16 @@ class ExoSystem:
 
             ax[i][0].set_ylabel('{0}'.format(self.lcnames[j]))
 
-            if 'F0 {0}'.format(self.lcnames[j]) in self.parnames:
-                v = self.parnames['F0 {0}'.format(self.lcnames[j])]
-                ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
-
             if 'log(rho_gp) {0}'.format(self.lcnames[j]) in self.parnames:
                 v = self.parnames['log(rho_gp) {0}'.format(self.lcnames[j])]
-                ax[i][1].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[i][0].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
             if 'log(sigma_gp) {0}'.format(self.lcnames[j]) in self.parnames:
                 v = self.parnames['log(sigma_gp) {0}'.format(self.lcnames[j])]
-                ax[i][2].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[i][1].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
-        ax[0][0].set_title('F0')
-        ax[0][1].set_title('log(rho_gp)')
-        ax[0][2].set_title('log(sigma_gp)')
+        ax[0][0].set_title('log(rho_gp)')
+        ax[0][1].set_title('log(sigma_gp)')
 
         fig.supxlabel('N Steps')
 
@@ -2675,7 +2798,7 @@ class ExoSystem:
 
         fig, ax = plt.subplots(5, figsize = (7, 12), sharex = True, layout = 'constrained')
 
-        for i, z in enumerate(['eep','log10(age)','feh','distance','AV']):
+        for i, z in enumerate(['eep','log10(age)','feh','plx','AV']):
 
             if z in self.parnames:
                 v = self.parnames[z]
@@ -2743,7 +2866,7 @@ class ExoSystem:
 
             labels = []
 
-            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','secw','sesw','e','w','fp']:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','e','w','sico','siso','comega','somega','fp']:
 
                 if z+' {0}'.format(i+1) in self.parnames:
 
@@ -2755,6 +2878,13 @@ class ExoSystem:
 
                     if 'TT {0} {1}'.format(i+1, k+1) in self.parnames:
                         labels.append('TT {0} {1}'.format(i+1, k+1))
+
+            if self.fit_gaia and not self.fit_star:
+
+                for z in ['plx','mstar','log(rhostar)','rstar']:
+
+                    if z in self.parnames:
+                        labels.append(z)
 
             if not labels:
 
@@ -2789,7 +2919,7 @@ class ExoSystem:
 
         labels = []
 
-        for z in ['eep','log10(age)','feh','distance','AV']:
+        for z in ['eep','log10(age)','feh','plx','AV']:
             if z in self.parnames:
                 labels.append(z)
 
@@ -2922,9 +3052,7 @@ class ExoSystem:
 
                 self.ldgrids[filt] = [interpu1, interpu2]
 
-            self.misti = get_ichrone('mist')
-
-            rstar, mstar, Tstar, loggstar = self.misti.interp_value([y[x] for x in ['eep','log10(age)','feh']],['radius','mass','Teff','logg']).T
+            y['log(rhostar)'] = np.log(y['rhostar'])
 
             for j in range(self.n):
 
@@ -2933,21 +3061,9 @@ class ExoSystem:
 
                 p = y['P {0}'.format(j+1)]
 
-                if self.is_rv[j] and self.fit_rv:
+                if 'log(a/rs) {0}'.format(i+1) not in y:
 
-                    e = 0
-                    if self.fit_ecc[j]:
-                        e = y['e {0}'.format(j+1)]
-
-                    mp = calc_m_from_k(p, y['K {0}'.format(j+1)], e, np.arccos(y['cos(i) {0}'.format(j+1)]), mstar)
-
-                else:
-
-                    mp = 0
-
-                ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
-
-                y['log(a/rs) {0}'.format(i+1)] = np.log(ar)
+                    y['log(a/rs) {0}'.format(i+1)] = np.log(y['a/rs {0}'.format(i+1)])
 
         pars = []
         tcs = []
@@ -2957,24 +3073,17 @@ class ExoSystem:
             if not self.is_transit[j]:
                 continue
             
-            if self.fit_ttv[j]:
+            p = y['P {0}'.format(j+1)]
+            tc = y['Tc {0}'.format(j+1)]
+            ror = y['ror {0}'.format(j+1)]
+            ar = y['a/rs {0}'.format(j+1)]
+            inc = y['i {0}'.format(j+1)]
+            e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
+            w = y['w {0}'.format(j+1)]*180/np.pi if 'w {0}'.format(j+1) in y else np.full((n), 90)
+            
+            pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
 
-                p = y['P {0}'.format(j+1)]
-                tc = y['Tc {0}'.format(j+1)]
-                ror = y['ror {0}'.format(j+1)]
-                ar = np.exp(y['log(a/rs) {0}'.format(j+1)])
-                inc = y['i {0}'.format(j+1)]
-                e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
-                w = y['w {0}'.format(j+1)]*180/np.pi if 'w {0}'.format(j+1) in y else np.full((n), 90)
-                
-                pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
-
-                tcs.append(np.median(tc))
-
-            else:
-
-                pars.append(get_transit_params(y, j+1, shape = (n)).T)
-                tcs.append(np.median(y['Tc {0}'.format(j+1)]))
+            tcs.append(np.median(tc))
 
 
         filts = np.unique(self.filters)
@@ -2999,7 +3108,7 @@ class ExoSystem:
 
             if self.fit_star:
 
-                starpars = np.array([Tstar, loggstar, y['feh']]).T
+                starpars = np.array([y['Tstar'], y['loggstar'], y['feh']]).T
                 ld = np.array([self.ldgrids[filt][0](starpars)[0], self.ldgrids[filt][1](starpars)[0]]).T
 
             fmphase = []
@@ -3017,17 +3126,16 @@ class ExoSystem:
 
                 if self.is_eclipse[k]:
 
-                    rs = np.median(rstar) if self.fit_star else self.rs
-
+                    rs = np.median(y['rstar'])
                     q = 0
 
-                    if self.fit_rv and self.is_rv[k]:
+                    if 'Mp {0}'.format(k+1) in y:
                         mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
-                        ms = np.median(mstar) if self.fit_star else self.ms
+                        ms = np.median(y['mstar'])
                         q = mp/ms
 
                     tc2 = calc_t_sec(medpar[0], medpar[1], medpar[5], medpar[6]*np.pi/180, medpar[3], medpar[4]*np.pi/180, rs, q)
-                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = np.median(rstar) if self.fit_star else self.rs, q = q))
+                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = rs, q = q))
 
 
             fmphase_err = [[] for j in range(self.nt)]
@@ -3046,18 +3154,17 @@ class ExoSystem:
 
                     if self.is_eclipse[k]:
 
-                        rs = rstar[j] if self.fit_star else self.rs
-                        
+                        rs = y['rstar'][j]
                         q = 0
     
-                        if self.fit_rv and self.is_rv[k]:
+                        if 'Mp {0}'.format(k+1) in y:
                             mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
-                            ms = mstar[j] if self.fit_star else self.ms
+                            ms = y['mstar'][j]
                             q = mp/ms
 
                         tc2 = calc_t_sec(pars[l][j][0], pars[l][j][1], pars[l][j][5], pars[l][j][6]*np.pi/180, pars[l][j][3], pars[l][j][4]*np.pi/180, rs, q)
                         le = np.sum(self.is_eclipse[:k])
-                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rstar[j] if self.fit_star else self.rs, q = q))
+                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rs, q = q))
 
             fmphase_err = np.percentile(fmphase_err, [16,84], axis = 1)
             if np.any(self.is_eclipse):
@@ -3081,7 +3188,7 @@ class ExoSystem:
 
             if self.fit_star:
 
-                starpars = np.array([Tstar, loggstar, y['feh']]).T
+                starpars = np.array([y['Tstar'], y['loggstar'], y['feh']]).T
                 ld = np.array([self.ldgrids[self.filters[i]][0](starpars)[0], self.ldgrids[self.filters[i]][1](starpars)[0]]).T
 
             detrend = self.detrend[i]
@@ -3134,13 +3241,12 @@ class ExoSystem:
 
                     if self.is_eclipse[k]:
 
-                        rs = np.median(rstar) if self.fit_star else self.rs
-                        
+                        rs = np.median(y['rstar'])
                         q = 0
     
-                        if self.fit_rv and self.is_rv[k]:
+                        if 'Mp {0}'.format(k+1) in y:
                             mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
-                            ms = np.median(mstar) if self.fit_star else self.ms
+                            ms = np.median(y['mstar'])
                             q = mp/ms
 
                         fm0 = lightCurve(np.median(pars[l], axis = 0), self.tt[i], np.median(ld, axis = 0) if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = rs, q = q)
@@ -3203,13 +3309,12 @@ class ExoSystem:
 
                         if self.is_eclipse[k]:
 
-                            rs = rstar[j] if self.fit_star else self.rs
-                            
+                            rs = y['rstar'][j]                           
                             q = 0
         
-                            if self.fit_rv and self.is_rv[k]:
+                            if 'Mp {0}'.format(k+1) in y:
                                 mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
-                                ms = mstar[j] if self.fit_star else self.ms
+                                ms = y['mstar'][j]
                                 q = mp/ms
 
                             fm0 = lightCurve(pars[l][j], self.tt[i], ld[j] if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rs, q = q)
@@ -3383,9 +3488,7 @@ class ExoSystem:
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
 
-        eclipse = False
-        if np.any(self.is_eclipse):
-            eclipse = True
+        eclipse = np.any(self.is_eclipse)
 
         y = self.res | self.dres
 
@@ -3501,7 +3604,7 @@ class ExoSystem:
 
                     mp = 0
                     ms = np.median(y['mstar'])
-                    if self.fit_rv and self.is_rv[j]:
+                    if 'Mp {0}'.format(j+1) in y:
                         mp = (np.median(y['Mp {0}'.format(j+1)])*u.earthMass).to(u.Msun).value
 
                     q = mp/ms
@@ -4581,8 +4684,8 @@ class ExoSystem:
         Does this light curve by light curve. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
         value to put into init_lcs for each light curve, accounting for any error scaling already in effect.
 
-        It can be useful to rescale errors to if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
-        This is an alternative to using a jitter term in other fitting packages. Rescaling the errors can be very important when detrending light
+        It can be useful to rescale errors if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is a simple alternative to using a jitter term in other fitting packages. Rescaling the errors can be very important when detrending light
         curves using a GP, as underestimated errors will cause the GP to try to detrend to each individual point.
         """
 
@@ -4613,8 +4716,8 @@ class ExoSystem:
         Does this data set by data set. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
         value to put into init_rv for each data set, accounting for any error scaling already in effect.
 
-        It can be useful to rescale errors to if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
-        This is an alternative to using a jitter term in other fitting packages.
+        It can be useful to rescale errors if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is a simple alternative to using a jitter term in other fitting packages.
         """
 
         y = self.res.copy()
@@ -4639,6 +4742,32 @@ class ExoSystem:
             mederr = np.median(self.rverr[j])
 
             print(self.rvnames[i], ': resid. std', resstd, ', median err', mederr, ', resid. std / median err', resstd / mederr, ', new err scale', resstd/mederr*self.rv_err_scale[i])
+
+
+    def calc_gaia_err_scale(self):
+        """Calculates the standard deviation of the residual of the best fit Gaia astrometry model and compares this to the median error on the Gaia
+        AL data. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
+        value to put into init_gaia, accounting for any error scaling already in effect.
+
+        It can be useful to rescale errors if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is a simple alternative to using a jitter term in other fitting packages.
+        """
+
+        y = self.res.copy()
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
+        gm = self._gaiam['gm'] + self._gaiam['bkg']
+
+        gal = self.gal.copy()
+
+        resstd = np.std(gal - gm)
+
+        mederr = np.median(self.galerr)
+
+        print('resid. std', resstd, ', median err', mederr, ', resid. std / median err', resstd / mederr, ', new err scale', resstd/mederr*self.gaia_err_scale)
 
 
     def calc_autocorr(self):
@@ -4685,11 +4814,26 @@ class ExoSystem:
             frequency, or make other plots.
         """
 
+        y = self.res.copy()
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
+        rv = self.rv.copy()
+        for i in np.unique(self.which_rv):
+
+            j = np.where(self.which_rv == i)[0]
+
+            if i > 0:
+
+                rv[j] -= np.median(y['rv_offset {0}'.format(self.rvnames[i])])
+
         if use_residual:
-            rvres = self.rv - np.sum(self._rvm['rvm'], axis = 0) - self._rvm['bkg']
+            rvres = rv - np.sum(self._rvm['rvm'], axis = 0) - self._rvm['bkg']
 
         else:
-            rvres = self.rv
+            rvres = rv
 
         ls = LombScargle(self.tr, rvres, dy = self.rverr)
 
@@ -4935,6 +5079,10 @@ def get_transit_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArra
     p = np.exp(par['log(P) {0}'.format(i)])
     tc = par['Tc {0}'.format(i)]
     ror = par['ror {0}'.format(i)]
+    inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
+
+    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
+    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(shape, 90)
 
     if 'log(a/rs) {0}'.format(i) in par:
         ar = np.exp(par['log(a/rs) {0}'.format(i)])
@@ -4942,14 +5090,14 @@ def get_transit_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArra
     elif 'log(q) {0}'.format(i) in par:
         ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
         ar = ((ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
+    
+    elif 'log(K) {0}'.format(i) in par:
+        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
+        mp = (calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*u.earthMass).to(u.Msun).value
+        ar = (((ms+mp) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
 
     else:
         ar = (np.exp(par['log(rhostar)']) * p**2 / 0.018916375)**(1/3)
-
-    inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
-
-    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
-    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(shape, 90)
 
     return np.array([p, tc, ror, ar, inc, e, w])
 
@@ -4988,6 +5136,11 @@ def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], shape: 
         ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
         ar = ((ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
 
+    elif 'log(K) {0}'.format(i) in par:
+        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
+        mp = (calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*u.earthMass).to(u.Msun).value
+        ar = (((ms+mp) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
+
     else:
         ar = (np.exp(par['log(rhostar)']) * p**2 / 0.018916375)**(1/3)
 
@@ -5023,7 +5176,12 @@ def get_rv_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
         else:
             inc = np.arccos(par['cos(i) {0}'.format(i)])
 
-        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
+        if ['mstar'] in par:
+            ms = par['mstar']
+
+        else:
+            ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
+
         q = np.exp(par['log(q) {0}'.format(i)])
         k = 29785.326 * np.sin(inc) / np.sqrt(1-e**2) * (p*u.day).to(u.yr).value**(-1/3) * q/(1+q)**(2/3) * ms**(1/3)
 
@@ -5231,12 +5389,6 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
     if miniexs.fit_star:
 
-        if not -0.5 <= par['feh'] <= 0.5:
-            return -np.inf, np.zeros((nlin))
-        
-        if par['AV'] < 0:
-            return -np.inf, np.zeros((nlin))
-
         starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
         starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
@@ -5245,12 +5397,13 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
         
         like += starlike
 
+        rstar, mstar, Tstar, loggstar, rhostar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg','density'])
+
+        par['mstar'] = mstar
+        par['rstar'] = rstar
+        par['log(rhostar)'] = np.log(rhostar)
+
         if miniexs.fit_planets:
-
-            rstar, mstar, Tstar, loggstar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
-
-            par['mstar'] = mstar
-            par['rstar'] = rstar
 
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
                 return -np.inf, np.zeros((nlin))
@@ -5390,13 +5543,13 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
                         if miniexs.is_astro[j] and miniexs.fit_gaia:
 
-                            q = np.exp(par['log(q) {0}'.format(i+1)])
+                            q = np.exp(par['log(q) {0}'.format(j+1)])
 
                         elif miniexs.is_rv[j] and miniexs.fit_rv:
 
                             kr = np.sum(miniexs.is_rv[:j])
                             
-                            mp = (calc_m_from_k(p, rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)*u.earthMass).to(u.Msun).value
+                            mp = (calc_m_from_k(tpars[k][0], rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)*u.earthMass).to(u.Msun).value
 
                             q = mp/ms
 
@@ -5659,6 +5812,12 @@ def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
     starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
     if exs.use_priors:
+
+        rstar, mstar, Tstar, loggstar, rhostar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg','density'])
+
+        par['mstar'] = mstar
+        par['rstar'] = rstar
+        par['log(rhostar)'] = np.log(rhostar)
 
         starlike += exs.allpriors.apply(par)
 

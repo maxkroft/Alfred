@@ -186,13 +186,14 @@ class AllPriors:
         self.prior_dict = {}
         self.fixed = {}
 
-        self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)'], 'rhostar': ['log(rhostar)'], 'i': ['cos(i)','sico'], 'cos(i)': ['cos(i)','sico'],
-                           'K': ['log(K)'], 'e': ['secw'], 'w': ['secw'], 'rho_gp': ['log(rho_gp)'], 'sigma_gp': ['log(sigma_gp)'],
-                           'age': ['log10(age)'], 'q': ['log(q)'], 'omega': ['sico','comega'], 'rsq_omega': ['comega','sico'],
-                           'comega': ['comega','sico'], 'somega': ['somega','sico'], 'distance': ['plx']}
+        self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)'], 'rhostar': ['log(rhostar)', 'eep'], 'i': ['cos(i)','sico'],
+                           'cos(i)': ['cos(i)','sico'], 'K': ['log(K)'], 'e': ['secw'], 'w': ['secw'], 'rho_gp': ['log(rho_gp)'],
+                           'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'], 'omega': ['sico','comega'],
+                           'rsq_omega': ['comega','sico'], 'comega': ['comega','sico'], 'somega': ['somega','sico'], 'distance': ['plx'],
+                           'rstar': ['rstar', 'eep'], 'mstar': ['mstar', 'eep'], 'log(rhostar)': ['log(rhostar)', 'eep']}
 
 
-    def init_fixed(dict, tab: Table, self, x0):
+    def init_fixed(self, tab: Table, x0: dict):
         """Sets up a dict of fixed parameters and their values.
 
         Args:
