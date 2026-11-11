@@ -2533,7 +2533,7 @@ class ExoSystem:
 
             for k in range(len(vargrid[j])):
 
-                v = self.parnames[vargrid[j][k]+' {0}'.format(i+1)]
+                v = self.parnames[vargrid[j][k]]
                 ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
                 ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
 
@@ -3945,12 +3945,12 @@ class ExoSystem:
             tdesc = p/(2*np.pi) * (Edesc - e * np.sin(Edesc)) + tp
             ts = np.array([tp, tp+p/2, tasc, tdesc])
 
-            _, xts, yts = Gaia_AL_Model(medpars, ts, np.zeros(ts.shape))
+            xts, yts, _ = Gaia_AL_Model(medpars, ts, np.zeros(ts.shape))
             xpts.append(xts)
             ypts.append(yts)
 
         gclean = self.gal - gm - self.plxf * plx
-        tgyr = (self.tg - self.tgref)/365.25
+        tgyr = (self.tg - self.tg_ref)/365.25
 
         M = np.zeros((len(self.tg),4))
         M[:,0] = np.sin(self.psi)
@@ -3970,7 +3970,7 @@ class ExoSystem:
         pvec = np.array([-np.sin(ra), np.cos(ra), 0])
         qvec = np.array([-np.sin(dec)*np.cos(ra), -np.sin(dec)*np.sin(ra), np.cos(dec)])
 
-        tplx = Time(self.tg, format = 'jd', scale = 'tdb')
+        tplx = Time(self.tg+2450000, format = 'jd', scale = 'tdb')
         earth = get_body_barycentric('earth', tplx)
         Rxyz = -np.array([earth.x.value, earth.y.value, earth.z.value]).T
         fra = Rxyz @ pvec
@@ -3981,7 +3981,7 @@ class ExoSystem:
         bkgra = X[2] * tgyr + raplx
         bkgdec = X[3] * tgyr + decplx
 
-        tplxsky = Time(tgsky, format = 'jd', scale = 'tdb')
+        tplxsky = Time(tgsky+2450000, format = 'jd', scale = 'tdb')
         earthsky = get_body_barycentric('earth', tplxsky)
         Rxyzsky = -np.array([earthsky.x.value, earthsky.y.value, earthsky.z.value]).T
         frasky = Rxyzsky @ pvec
@@ -3989,8 +3989,8 @@ class ExoSystem:
         raplxsky = plx * frasky
         decplxsky = plx * fdecsky
 
-        bkgskyra = X[2] * (tgsky - self.tgref)/365.25 + raplxsky
-        bkgskydec = X[3] * (tgsky - self.tgref)/365.25 + decplxsky
+        bkgskyra = X[2] * (tgsky - self.tg_ref)/365.25 + raplxsky
+        bkgskydec = X[3] * (tgsky - self.tg_ref)/365.25 + decplxsky
 
         gm_err = []
 
@@ -4005,7 +4005,7 @@ class ExoSystem:
 
                 k = np.sum(self.is_astro[:j])
 
-                gm0 += Gaia_AL_Model(pars[k][i], self.tg, self.psi)
+                gm0 += Gaia_AL_Model(pars[k][i], self.tg, self.psi)[2]
 
             gm_err.append(gm0)
 
@@ -4153,7 +4153,7 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
         
-        fig, ax = plt.subplots(1, 2, layout = 'constrained')
+        fig, ax = plt.subplots(1, 2, figsize = (14,8), layout = 'constrained')
 
         y = self.res | self.dres
         
@@ -4175,36 +4175,37 @@ class ExoSystem:
 
         gmerrorbars = np.array([self.gal-gmtot-self.galerr, self.gal-gmtot+self.galerr])
         for i in range(len(self.tg)):
-            ax[0].plot(gmerrorbars[i]*np.sin(self.psi[i]) + gmra[i] + bkgra[i], gmerrorbars[i]*np.cos(self.psi[i]) + gmdec[i] + bkgdec[i], c = 'black', linewidth = 2, zorder = 3)
+            ax[0].plot(gmerrorbars[:,i]*np.sin(self.psi[i]) + gmra[i] + bkgra[i], gmerrorbars[:,i]*np.cos(self.psi[i]) + gmdec[i] + bkgdec[i], c = 'black', linewidth = 2, zorder = 3)
 
         ax[0].plot(gmskyra + bkgskyra, gmskydec + bkgskydec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
         for i in range(len(gmskyra_draws)):
             ax[0].plot(gmskyra_draws[i] + bkgskyra, gmskydec_draws[i] + bkgskydec, color = 'darkseagreen', linewidth = 1, zorder = 1)
         
-        ax[0].plot(bkgskyra, bkgskydec, color = 'darkred', linewidth = 2, zorder = 0, linestyle = '--', label = 'On-Sky Motion')
+        ax[0].plot(bkgskyra, bkgskydec, color = 'red', linewidth = 2, zorder = 0, linestyle = '--', label = 'On-Sky Motion')
 
         xl, yl = ax[0].get_xlim(), ax[0].get_ylim()
         ax[0].set_xlim(xl)
         ax[0].set_ylim(yl)
 
         xrange, yrange = (xl[1]-xl[0]), (yl[1]-yl[0])
-        xlen = xrange/10*pmra/np.sqrt(pmra**2+pmdec**2)
-        ylen = yrange/10*pmdec/np.sqrt(pmra**2+pmdec**2)
-        ya = yrange/8+xl[0]
-        if pmra/pmdec >= 0:
+        totlen = np.abs(xrange/10*pmra/np.sqrt(pmra**2+pmdec**2)) + np.abs(yrange/10*pmdec/np.sqrt(pmra**2+pmdec**2))
+        xlen = totlen*pmra/np.sqrt(pmra**2+pmdec**2)
+        ylen = totlen*pmdec/np.sqrt(pmra**2+pmdec**2)
+        ya = yrange/8+yl[0]
+        if pmra/pmdec <= 0:
             xa = xrange/8+xl[0]
         else:
             xa = xl[1]-xrange/8
-        ax[0].annotate('', xytext = (xa-xlen, ya-ylen), xy = (xa+xlen, ya+ylen), arrowprops = dict(arrowstyle='->',color='black',linewidth=1))
+        ax[0].annotate('', xytext = (xa-xlen, ya-ylen), xy = (xa+xlen, ya+ylen), arrowprops = dict(arrowstyle='->',color='black',linewidth=2))
 
         ax[0].set_box_aspect(1)
         ax[0].invert_xaxis()
 
-        ax[0].legend(fontsize = 15)
+        ax[0].legend(fontsize = 10, loc = 'upper center', ncols = 2, framealpha = 0.7, borderpad = 0.3)
         ax[0].tick_params(axis = 'both', labelsize = 15)
-        ax[0].set_title('On-Sky Motion')
+        ax[0].set_title('On-Sky Motion', fontsize = 20)
         ax[0].set_xlabel('$\\Delta \\alpha \\mathrm{cos}(\\delta)$ [mas]', fontsize = 20)
-        ax[0].set_ylabel('$\\Delta \\delta$ [mas]')
+        ax[0].set_ylabel('$\\Delta \\delta$ [mas]', fontsize = 20)
 
         gmorbra, gmorbdec = self._gaiam['gmorbra'], self._gaiam['gmorbdec']
         gmorbra_draws, gmorbdec_draws = self._gaiam['gmorbra_draws'], self._gaiam['gmorbdec_draws']
@@ -4214,13 +4215,13 @@ class ExoSystem:
         ax[1].scatter((self.gal-gmtot)*np.sin(self.psi) + gmra, (self.gal-gmtot)*np.cos(self.psi) + gmdec, marker = '.', c = 'black', s = 100, zorder = 4)
 
         for i in range(len(self.tg)):
-            ax[1].plot(gmerrorbars[i]*np.sin(self.psi[i]) + gmra[i], gmerrorbars[i]*np.cos(self.psi[i]) + gmdec[i], c = 'black', linewidth = 2, zorder = 3)
+            ax[1].plot(gmerrorbars[:,i]*np.sin(self.psi[i]) + gmra[i], gmerrorbars[:,i]*np.cos(self.psi[i]) + gmdec[i], c = 'black', linewidth = 2, zorder = 3)
 
         ax[1].plot(gmorbra, gmorbdec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
         for i in range(len(gmorbra_draws)):
             ax[1].plot(gmorbra_draws[i], gmorbdec_draws[i], color = 'darkseagreen', linewidth = 1, zorder = 1)
 
-        ax[1].scatter(0, 0, c = 'black', marker = '*', s = 100, zorder = 3)
+        ax[1].scatter(0, 0, c = '#eeb600', marker = '*', s = 150, zorder = 3)
 
         for i in range(self.n):
 
@@ -4238,16 +4239,16 @@ class ExoSystem:
                 ii = np.argmin(np.sqrt((gmorbra_pl[j]-xpts[j][1])**2 + (gmorbdec_pl[j]-ypts[j][1])**2))
                 dx = gmorbra_pl[j][ii] - gmorbra_pl[j][ii-1]
                 dy = gmorbdec_pl[j][ii] - gmorbdec_pl[j][ii-1]
-                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = color, lw = 0, mutation_scale = 15))
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = color, lw = 2, mutation_scale = 25))
 
             else:
                 ii = np.argmin(np.sqrt((gmorbra-xpts[j][1])**2 + (gmorbdec-ypts[j][1])**2))
                 dx = gmorbra[ii] - gmorbra[ii-1]
                 dy = gmorbdec[ii] - gmorbdec[ii-1]
-                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 0, mutation_scale = 15))
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 2, mutation_scale = 25))
 
-            ax[1].scatter(xpts[j][0], ypts[j][0], c = 'black', marker = '+', s = 100, zorder = 3, label = '$\\omega$' if j == 0 else None)
-            ax[1].scatter(xpts[j][2], ypts[j][2], c = 'black', marker = 's', s = 100, zorder = 3, label = '\u260A' if j == 0 else None)
+            ax[1].scatter(xpts[j][0], ypts[j][0], c = "#eeb600", marker = 'x', linewidths = 2, s = 100, zorder = 3, label = '$\\omega$' if j == 0 else None)
+            ax[1].scatter(xpts[j][2], ypts[j][2], c = '#eeb600', marker = '+', linewidths = 2, s = 100, zorder = 3, label = '\u260A' if j == 0 else None)
             ax[1].plot(xpts[j][2:], ypts[j][2:], c = 'gray', linestyle = '--', linewidth = 1, zorder = 2, label = 'Line of Nodes' if j == 0 else None)
 
 
@@ -4260,16 +4261,11 @@ class ExoSystem:
         ax[1].invert_xaxis()
         ax[1].set_aspect('equal')
 
-        ax[1].legend(fontsize = 15, ncols = 2)
+        ax[1].legend(fontsize = 10, ncols = 4, loc = 'upper center', framealpha = 0.7, borderpad = 0.3)
         ax[1].tick_params(axis = 'both', labelsize = 15)
-        ax[1].set_title('Astrometric Orbit')
+        ax[1].set_title('Astrometric Orbit', fontsize = 20)
         ax[1].set_xlabel('$\\Delta \\alpha \\mathrm{cos}(\\delta)$ [mas]', fontsize = 20)
-        ax[1].set_ylabel('$\\Delta \\delta$ [mas]')
-
-        width, height = fig.get_size_inches()
-        twidth = 14
-        fig.set_figwidth(twidth)
-        fig.set_figheight(twidth * height/width)
+        ax[1].set_ylabel('$\\Delta \\delta$ [mas]', fontsize = 20)
 
         fig.savefig(self.direc+'Plots/'+name+'/gaia_onsky.png')
 
@@ -5039,7 +5035,7 @@ def get_rv_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
         else:
             inc = np.arccos(par['cos(i) {0}'.format(i)])
 
-        if ['mstar'] in par:
+        if 'mstar' in par:
             ms = par['mstar']
 
         else:
@@ -5051,7 +5047,7 @@ def get_rv_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
     return np.array([p, tc, k, e, w])
 
 
-def get_Gaia_params(par: dict, i: int, shape: tuple = ()):
+def get_Gaia_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
     """Generates the specific list of gaia astrometric parameters needed for the Gaia_AL_Model function from the parameter dict used in fitting.
     
     Args:
@@ -5089,7 +5085,7 @@ def get_Gaia_params(par: dict, i: int, shape: tuple = ()):
 
     plx = par['plx']
 
-    return [p, tc, e, w, inc, omega, mp, ms, plx]
+    return np.array([p, tc, e, w, inc, omega, mp, ms, plx])
 
 
 def set_gp_params(rho: float, sigma: float, t: np.typing.ArrayLike, ferr: np.typing.ArrayLike, gp: GaussianProcess) -> GaussianProcess:
