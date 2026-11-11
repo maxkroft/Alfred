@@ -221,7 +221,7 @@ class AllPriors:
 
             fvar = [' '.join([sv]+split[1:]) for sv in svar]
 
-            if np.any(np.isin(fvar, x0keys)):
+            if np.any(np.isin(fvar, x0keys)) or np.any(np.isin(svar, x0keys)):
 
                 self.fixed[var] = tab['Param 1'][i]
 
@@ -345,7 +345,7 @@ class AllPriors:
                     self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
 
-            if np.any(np.isin(fvar, x0keys)):
+            if np.any(np.isin(fvar, x0keys)) or np.any(np.isin(svar, x0keys)):
 
                 self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 

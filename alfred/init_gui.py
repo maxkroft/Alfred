@@ -571,8 +571,8 @@ class PlanetGUI(ctk.CTkToplevel):
         self.a_entry = FloatEntryFrame(self, "a/Rstar", 2, 1, min_val = 0)
         self.a_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['a/Rs']) else self.data['a/Rs']))
 
-        self.i_entry = FloatEntryFrame(self, "cos(i)", 3, 0, min_val = 0, max_val = 1)
-        self.i_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['cos(i)']) else self.data['cos(i)']))
+        self.i_entry = FloatEntryFrame(self, "i (degrees)", 3, 0, min_val = -90, max_val = 90)
+        self.i_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['i']) else self.data['i']))
 
         self.k_entry = FloatEntryFrame(self, "K (m/s)", 3, 1, min_val = 0)
         self.k_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['K']) else self.data['K']))
@@ -603,7 +603,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.r_check = ToggleCheckbox(self.checkbox_frame, 'Fit RV', startval = 1 if self.data['RV Signal'] else 0, toggles = [self.k_entry])
         self.r_check.grid(row = 1, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.g_check = ToggleCheckbox(self.checkbox_frame, 'Fit Gaia', startval = 1 if self.data['Fit Gaia'] else 0, toggles = [self.q_entry, self.omega_entry], toggles_off = [self.k_entry], toggle_off_override = self.r_check)
+        self.g_check = ToggleCheckbox(self.checkbox_frame, 'Fit Gaia', startval = 1 if self.data['Fit Gaia'] else 0, toggles = [self.i_entry, self.q_entry, self.omega_entry], toggles_off = [self.k_entry], toggle_off_override = self.r_check)
         self.g_check.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'w')
 
         self.r_check.toggle_override = self.g_check
@@ -643,7 +643,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.data['Tc'] = self.t_entry.entry.return_float()
         self.data['Rp/Rs'] = self.r_entry.entry.return_float()
         self.data['a/Rs'] = self.a_entry.entry.return_float()
-        self.data['cos(i)'] = self.i_entry.entry.return_float()
+        self.data['i'] = self.i_entry.entry.return_float()
         self.data['K'] = self.k_entry.entry.return_float()
         self.data['sqrt(e)cos(w)'] = self.secw_entry.entry.return_float()
         self.data['sqrt(e)sin(w)'] = self.sesw_entry.entry.return_float()

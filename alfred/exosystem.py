@@ -120,7 +120,7 @@ class ExoSystem:
 
         self.ar = np.array(tab_planets['a/Rs'])
 
-        self.cosi = np.array(tab_planets['cos(i)'])
+        self.inc = np.array(tab_planets['i'])
 
         self.k = np.array(tab_planets['K'])
 
@@ -397,7 +397,7 @@ class ExoSystem:
 
                 gdata = Table.read(self.direc+fname)
 
-                self.tgref = 2457936.875-2450000
+                self.tg_ref = 2457936.875-2450000
                 
                 i = np.where(gdata['source_id'] == tab_gaia['Source ID'][0])[0]
                 gdata = gdata[i]
@@ -419,12 +419,12 @@ class ExoSystem:
                     self.gal.append(gdata['centroid_pos_al'][i][j])
                     self.galerr.append(gdata['centroid_pos_error_al'][i][j])
                     self.psi.append(gdata['scan_pos_angle'][i][j]*np.pi/180)
-                    self.plxf.append(gdata['parallax_factor_al'][i][j])
+                    self.plxf.append([gdata['parallax_factor_al'][i]]*np.sum(j))
 
-                self.tg = np.concatenate(self.tg)
-                self.gal = np.concatenate(self.gal)
-                self.galerr = np.concatenate(self.galerr) * self.gaia_err_scale
-                self.psi = np.concatenate(self.psi)
+                self.tg = np.concatenate(self.tg).data
+                self.gal = np.concatenate(self.gal).data
+                self.galerr = np.concatenate(self.galerr).data * self.gaia_err_scale
+                self.psi = np.concatenate(self.psi).data
                 self.plxf = np.concatenate(self.plxf)
 
                 i = np.argsort(self.tg)
@@ -454,7 +454,7 @@ class ExoSystem:
 
                 self.ra = tab_gaia['RA'][0]
                 self.dec = tab_gaia['Dec'][0]
-                self.tgref = tab_gaia['Ref Time'][0]
+                self.tg_ref = tab_gaia['Ref Time'][0]
 
                 
 
@@ -696,7 +696,7 @@ class ExoSystem:
 
                         self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[i])                    
 
-                    self.x0['cos(i) {0}'.format(i+1)] = self.cosi[i]
+                    self.x0['cos(i) {0}'.format(i+1)] = np.cos(self.inc[i])
 
                     if self.is_eclipse[i]:
 
@@ -712,8 +712,8 @@ class ExoSystem:
                     self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
                     self.x0['Tc {0}'.format(i+1)] = self.tc[i]
 
-                    self.x0['sico {0}'.format(i+1)] = np.sqrt((1-self.cosi[i])/2)*np.cos(self.omega[i])
-                    self.x0['siso {0}'.format(i+1)] = np.sqrt((1-self.cosi[i])/2)*np.sin(self.omega[i])
+                    self.x0['sico {0}'.format(i+1)] = np.sin(self.inc[i]/2)*np.cos(self.omega[i])
+                    self.x0['siso {0}'.format(i+1)] = np.sin(self.inc[i]/2)*np.sin(self.omega[i])
 
                 elif self.is_rv[i] and self.fit_rv:
 
@@ -858,7 +858,7 @@ class ExoSystem:
                     self.x0.pop('sico {0}'.format(i+1))
                     self.x0.pop('siso {0}'.format(i+1))
 
-                    self.x0['cos(i) {0}'.format(i+1)] = self.cosi[i]
+                    self.x0['cos(i) {0}'.format(i+1)] = np.cos(self.inc[i])
                     self.x0['comega {0}'.format(i+1)] = np.cos(self.omega)
                     self.x0['somega {0}'.format(i+1)] = np.sin(self.omega)
 
@@ -1306,205 +1306,59 @@ class ExoSystem:
 
         self.parnames = {}
 
-        pos = []
+        pos = np.empty((len(self.keys),0))
 
         for i, k in enumerate(self.keys):
 
             self.parnames[k] = i
 
-            if 'log(P)' in k:
-                if self.use_priors:
+        while pos.shape[1] < self.nwalk:
 
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.log(np.random.normal(np.exp(self.x[k]), 0.0001, 2*self.nwalk))
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
+            trial = np.zeros((len(self.keys),2*self.nwalk))
 
-                    pos.append(np.concatenate(acc)[:self.nwalk])
+            for k in self.parnames:
 
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.0001, self.nwalk)))
+                if 'log(P)' in k:
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.0001, 2*self.nwalk))
 
-            if 'Tc' in k or 'TT' in k:
-                if self.use_priors:
+                if 'Tc' in k or 'TT' in k:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.0001, 2*self.nwalk)
 
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.random.normal(self.x[k], 0.0001, 2*self.nwalk)
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
+                if 'ror' in k or 'fp' in k or 'rstar' in k or 'mstar' in k:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.1*self.x[k], 2*self.nwalk)
 
-                    pos.append(np.concatenate(acc)[:self.nwalk])
+                if 'log(a/rs)' in k or 'log(rhostar)' in k:
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.1, 2*self.nwalk))
+
+                if 'cos(i)' in k or k.split()[0] == 'e':
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
+
+                if 'log(K)' in k or 'log(q)' in k:
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01, 2*self.nwalk))
+
+                if 'secw' in k or 'sesw' in k or 'comega' in k or 'somega' in k or 'sico' in k or 'siso' in k or k in ['u1','u2','feh','AV']:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.01, 2*self.nwalk)
                     
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.0001, self.nwalk))
+                if k.split()[0] == 'w':
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 1, 2*self.nwalk)
 
-            if 'ror' in k or 'fp' in k or 'rstar' in k or 'mstar' in k:
-                if self.use_priors:
+                if '_gp' in k:
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
 
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.random.normal(self.x[k], 0.1*self.x[k], 2*self.nwalk)
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
+                if k == 'eep':
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.1, 2*self.nwalk)
 
-                    pos.append(np.concatenate(acc)[:self.nwalk])
-                    
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.1*self.x[k], self.nwalk))
+                if k == 'log10(age)':
+                    trial[self.parnames[k]] = np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, 2*self.nwalk))
 
-            if 'log(a/rs)' in k or 'log(rhostar)' in k:
-                if self.use_priors:
-                    
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.log(np.random.normal(np.exp(self.x[k]), 0.1, 2*self.nwalk))
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
+                if k == 'plx' or 'F0' in k:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
 
-                    pos.append(np.concatenate(acc)[:self.nwalk])
+            lp = self.allpriors.apply({k: trial[self.parnames[k]] for k in self.parnames} | self.fixed)
+            valid = np.isfinite(lp)
+            pos = np.append(pos, trial[:,valid], axis = 1)
 
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.1, self.nwalk)))
-
-            if 'cos(i)' in k or k.split()[0] == 'e':
-
-                acc = []
-                cnt = 0
-                while cnt < self.nwalk:
-                    x = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
-                    lp = self.allpriors.apply({k: x})
-                    valid = np.isfinite(lp)
-                    acc.append(x[valid])
-                    cnt += np.sum(valid)
-
-                pos.append(np.concatenate(acc)[:self.nwalk])
-
-            if 'log(K)' in k or 'log(q)' in k:
-                if self.use_priors:
-
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.log(np.random.normal(np.exp(self.x[k]), 0.01, 2*self.nwalk))
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
-
-                    pos.append(np.concatenate(acc)[:self.nwalk])
-
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01, self.nwalk)))
-
-            if 'secw' in k or 'sesw' in k or 'comega' in k or 'somega' in k or 'sico' in k or 'siso' in k or k in ['u1','u2','feh','AV']:
-
-                acc = []
-                cnt = 0
-                while cnt < self.nwalk:
-                    x = np.random.normal(self.x[k], 0.01, 2*self.nwalk)
-                    lp = self.allpriors.apply({k: x})
-                    valid = np.isfinite(lp)
-                    acc.append(x[valid])
-                    cnt += np.sum(valid)
-
-                pos.append(np.concatenate(acc)[:self.nwalk])
-                
-            if k.split()[0] == 'w':
-
-                acc = []
-                cnt = 0
-                while cnt < self.nwalk:
-                    x = np.random.normal(self.x[k], 1, 2*self.nwalk)
-                    lp = self.allpriors.apply({k: x})
-                    valid = np.isfinite(lp)
-                    acc.append(x[valid])
-                    cnt += np.sum(valid)
-
-                pos.append(np.concatenate(acc)[:self.nwalk])
-
-            if '_gp' in k:
-                if self.use_priors:
-
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
-
-                    pos.append(np.concatenate(acc)[:self.nwalk])
-                    
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), self.nwalk)))
-
-            if k == 'eep':
-                if self.use_priors:
-
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.random.normal(self.x[k], 0.1, 2*self.nwalk)
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
-
-                    pos.append(np.concatenate(acc)[:self.nwalk])
-
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
-
-            if k == 'log10(age)':
-                if self.use_priors:
-
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, 2*self.nwalk))
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
-
-                    pos.append(np.concatenate(acc)[:self.nwalk])
-
-                else:
-                    pos.append(np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, self.nwalk)))
-
-            if k == 'plx' or 'F0' in k:
-                if self.use_priors:
-
-                    acc = []
-                    cnt = 0
-                    while cnt < self.nwalk:
-                        x = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
-                        lp = self.allpriors.apply({k: x})
-                        valid = np.isfinite(lp)
-                        acc.append(x[valid])
-                        cnt += np.sum(valid)
-
-                    pos.append(np.concatenate(acc)[:self.nwalk])
-                
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
-
-        pos = np.transpose(np.array(pos))
+        pos = pos.T[:self.nwalk]
 
         return pos
 
@@ -5225,7 +5079,7 @@ def get_Gaia_params(par: dict, i: int, shape: tuple = ()):
         inc = np.arccos(par['cos(i) {0}'.format(i)])
         omega = np.arctan2(par['somega {0}'.format(i)], par['comega {0}'.format(i)])
 
-    if ['mstar'] in par:
+    if 'mstar' in par:
         ms = par['mstar']
 
     else:
@@ -5677,7 +5531,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
             galm += Gaia_AL_Model(gpars[j], miniexs.tg, miniexs.psi)[2]
 
         gclean = miniexs.gal - galm
-        tgyr = (miniexs.tg - miniexs.tgref)/365.25
+        tgyr = (miniexs.tg - miniexs.tg_ref)/365.25
 
         M = []
 

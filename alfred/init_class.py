@@ -315,11 +315,11 @@ class Init_planets(InitFile):
 
         self.header_rows = ['name', 'unit']
 
-        self.converters = {'Transiting':bool, 'RV Signal':bool, 'Fit Gaia': bool, 'Fit Ecc':bool, 'Fit TTVs':bool, 'Fit Eclipse':bool, 'Period':float, 'Tc':float, 'Rp/Rs':float, 'a/Rs':float, 'cos(i)':float, 'K':float, 'sqrt(e)cos(w)':float, 'sqrt(e)sin(w)':float, 'Mp/Ms':float, 'Omega':float, 'fp':float}
+        self.converters = {'Transiting':bool, 'RV Signal':bool, 'Fit Gaia': bool, 'Fit Ecc':bool, 'Fit TTVs':bool, 'Fit Eclipse':bool, 'Period':float, 'Tc':float, 'Rp/Rs':float, 'a/Rs':float, 'i':float, 'K':float, 'sqrt(e)cos(w)':float, 'sqrt(e)sin(w)':float, 'Mp/Ms':float, 'Omega':float, 'fp':float}
 
         self.table = Table(rows = [[False]*6 + [np.nan]*11],
-            names = ['Transiting', 'RV Signal', 'Fit Gaia', 'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'cos(i)', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'Mp/Ms', 'omega', 'fp'],
-            units = [None, None, None, None, None, None, 'days', 'BJD-2450000', None, None, None, 'm/s', None, None, None, 'rad', None],
+            names = ['Transiting', 'RV Signal', 'Fit Gaia', 'Fit Ecc', 'Fit TTVs', 'Fit Eclipse', 'Period', 'Tc', 'Rp/Rs', 'a/Rs', 'i', 'K', 'sqrt(e)cos(w)', 'sqrt(e)sin(w)', 'Mp/Ms', 'omega', 'fp'],
+            units = [None, None, None, None, None, None, 'days', 'BJD-2450000', None, None, 'deg', 'm/s', None, None, None, 'rad', None],
             dtype = [bool, bool, bool, bool, bool, bool, float, float, float, float, float, float, float, float, float, float, float])
 
 
@@ -349,6 +349,10 @@ class Init_planets(InitFile):
 
         if 'omega' not in self.table.colnames:
             self.table.add_column(np.full(len(self.table), np.nan), name = 'omega')
+
+        if 'cos(i)' in self.table.colnames:
+            self.table.rename_column('cos(i)', 'i')
+            self.table['i'] = np.arccos(self.table['i'])
 
         self.save()
 
