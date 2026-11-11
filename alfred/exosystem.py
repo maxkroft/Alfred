@@ -1062,7 +1062,7 @@ class ExoSystem:
             show_plot (bool): Whether or not to show the plots.
         """
 
-        print('\nStarting sigma clipping of lightcurves.')
+        print('\nStarting sigma clipping of lightcurves...')
 
         clipped = [0]*len(self.tt)
 
@@ -1628,6 +1628,8 @@ class ExoSystem:
             int: The optimal number of cores to use, with 0 for serial.
         """
 
+        print('\nDetermining optimal number of cores...')
+
         max_cores = os.cpu_count()
 
         test_cores = list(range(0, max_cores+1, 2))
@@ -2002,7 +2004,7 @@ class ExoSystem:
                     self.dres['i {0}'.format(i+1)] = inc
 
 
-                elif self.is_rv[i] and self.fit_rv:
+                elif (self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia):
 
                     p = np.exp(y['log(P) {0}'.format(i+1)])
                     self.dres['P {0}'.format(i+1)] = p
@@ -2027,11 +2029,12 @@ class ExoSystem:
                     e = 0
                     w = np.pi/2
 
-                fc = np.pi/2 - w
-                Ec = np.arctan2(np.sqrt(1-e**2) * np.sin(fc), e + np.cos(fc))
-                tc = y['Tc {0}'.format(i+1)]
-                tp = tc - p/(2*np.pi) * (Ec - e * np.sin(Ec))
-                self.dres['Tp {0}'.format(i+1)] = tp
+                if (self.is_transit[i] and self.fit_transit) or (self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia):
+                    fc = np.pi/2 - w
+                    Ec = np.arctan2(np.sqrt(1-e**2) * np.sin(fc), e + np.cos(fc))
+                    tc = y['Tc {0}'.format(i+1)]
+                    tp = tc - p/(2*np.pi) * (Ec - e * np.sin(Ec))
+                    self.dres['Tp {0}'.format(i+1)] = tp
 
                 mp = 0
 

@@ -363,7 +363,7 @@ class AllPriors:
 
                 for y in x0:
 
-                    if y.split[0] == 'log(a/rs)':
+                    if y.split()[0] == 'log(a/rs)':
 
                         self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
 
@@ -441,25 +441,31 @@ class AllPriors:
 
             elif split[0] in ['log(rhostar)','rhostar']:
 
-                svar1 = ' '.join(['log(P)']+split[1:])
-                svar2 = ' '.join(['log(a/rs)']+split[1:])
-
-                if svar2 in par:
-
-                    x = 0.018916375 * np.exp(par[svar2])**3 / np.exp(par[svar1])**2
-
-                elif split[0] == 'rhostar' and 'log(rhostar)' in par:
+                if split[0] == 'rhostar' and 'log(rhostar)' in par:
 
                     x = np.exp(par['log(rhostar)'])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
                 elif 'log(rhostar)' in par:
 
                     x = par['log(rhostar)']
 
-                else:
-                    pass
+                    log_like += self.prior_dict[var].apply_priors(x)
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                else:
+
+                    for y in par:
+
+                        if y.split()[0] == 'log(a/rs)':
+
+                            y2 = ' '.join(['log(P)']+y.split()[1:])
+
+                            if y2 in par:
+
+                                x = 0.018916375 * np.exp(par[y])**3 / np.exp(par[y2])**2
+
+                                log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'i':
 
