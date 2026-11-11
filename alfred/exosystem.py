@@ -2525,6 +2525,12 @@ class ExoSystem:
                 ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
                 ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
 
+            for k in range(len(vargrid[j]), num1):
+
+                plt.setp(ax[k][j].get_xticklabels(), visible = False)
+                plt.setp(ax[k][j].get_yticklabels(), visible = False)
+                ax[k][j].axis('off')
+
             j += 1
 
         if self.fit_gaia and not self.fit_star:
@@ -2536,6 +2542,12 @@ class ExoSystem:
                 v = self.parnames[vargrid[j][k]]
                 ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
                 ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
+
+            for k in range(len(vargrid[j]), num1):
+
+                plt.setp(ax[k][j].get_xticklabels(), visible = False)
+                plt.setp(ax[k][j].get_yticklabels(), visible = False)
+                ax[k][j].axis('off')
 
         fig.supxlabel('N Steps')
 
@@ -2584,6 +2596,18 @@ class ExoSystem:
                 if 'TT {0} {1}'.format(i+1, z+1) in self.parnames:
                     v = self.parnames['TT {0} {1}'.format(i+1, z+1)]
                     ax[z][k].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+
+                else:
+
+                    plt.setp(ax[z][k].get_xticklabels(), visible = False)
+                    plt.setp(ax[z][k].get_yticklabels(), visible = False)
+                    ax[z][k].axis('off')
+
+            for z in range(len(self.ttvi['{0}'.format(i+1)]), n):
+
+                plt.setp(ax[z][k].get_xticklabels(), visible = False)
+                plt.setp(ax[z][k].get_yticklabels(), visible = False)
+                ax[z][k].axis('off')
 
 
         fig.supxlabel('N Steps')
@@ -2703,6 +2727,15 @@ class ExoSystem:
 
             ax[i][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
             ax[i][j].text(0.01, 0.99, k, fontsize = 20, ha = 'left', va = 'top', transform = ax[i][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
+
+        for k in range(len(self.parnames), num1*num2):
+
+            i = k%10
+            j = k//10
+
+            plt.setp(ax[i][j].get_xticklabels(), visible = False)
+            plt.setp(ax[i][j].get_yticklabels(), visible = False)
+            ax[i][j].axis('off')
 
         fig.supxlabel('N Steps')
 
