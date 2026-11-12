@@ -501,10 +501,10 @@ class AllPriors:
 
                 elif svar1 in par:
 
-                    x = np.arccos(1-2*(par[svar1]**2 + par[svar2]**2))
+                    x = 1-2*(par[svar1]**2 + par[svar2]**2)
 
                     log_like += self.prior_dict[var].apply_priors(x)
-                    
+
 
             elif split[0] == 'e':
 

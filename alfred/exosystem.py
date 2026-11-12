@@ -590,6 +590,7 @@ class ExoSystem:
             print('No Gaia astrometric planets found.')
 
         self.fit_planets = self.fit_transit or self.fit_rv or self.fit_gaia
+        self.is_fit = (self.fit_transit and self.is_transit) or (self.fit_rv and self.is_rv) or (self.fit_gaia and self.is_astro)
 
 
         if isinstance(self.nburn, float) and not 0 <= self.nburn < 1:
@@ -728,7 +729,7 @@ class ExoSystem:
 
                     self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[i])
 
-                if self.fit_ecc[i]:
+                if self.fit_ecc[i] and self.is_fit[i]:
 
                     self.x0['secw {0}'.format(i+1)] = self.secosw[i]
                     self.x0['sesw {0}'.format(i+1)] = self.sesinw[i]
@@ -922,7 +923,7 @@ class ExoSystem:
             self.allpriors.init_priors(req_priors, self.x0, self.fit_ttv)
 
             self.fixed = {}
-
+        
 
         if self.fit_gaia and not self.fit_star:
 
@@ -1863,7 +1864,7 @@ class ExoSystem:
                     p = np.exp(y['log(P) {0}'.format(i+1)])
                     self.dres['P {0}'.format(i+1)] = p
 
-                if self.fit_ecc[i]:
+                if self.fit_ecc[i] and self.is_fit[i]:
 
                     if 'e {0}'.format(i+1) not in y:
 
@@ -1883,7 +1884,7 @@ class ExoSystem:
                     e = 0
                     w = np.pi/2
 
-                if (self.is_transit[i] and self.fit_transit) or (self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia):
+                if self.is_fit[i]:
                     fc = np.pi/2 - w
                     Ec = np.arctan2(np.sqrt(1-e**2) * np.sin(fc), e + np.cos(fc))
                     tc = y['Tc {0}'.format(i+1)]
@@ -1940,7 +1941,7 @@ class ExoSystem:
                         mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
                         self.dres['Mpsini {0}'.format(i+1)] = mp
 
-                if self.fit_star or self.fit_gaia or (not (self.fit_transit and self.is_transit[i]) and (self.is_rv[i] and self.fit_rv)):
+                if self.is_fit[i] and 'a/rs {0}'.format(i+1) not in self.dres:
 
                     a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
                     self.dres['a {0}'.format(i+1)] = a
@@ -1948,7 +1949,7 @@ class ExoSystem:
                     ars = (a*u.AU).to(u.Rsun).value / rstar
                     self.dres['a/rs {0}'.format(i+1)] = ars
 
-                if (self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]) or (self.fit_gaia and self.is_astro[i]):
+                if self.is_fit[i]:
 
                     teq = (1/4)**(1/4) * T * ars**(-1/2)
                     self.dres['teq {0}'.format(i+1)] = teq
@@ -2479,7 +2480,7 @@ class ExoSystem:
 
         for i in range(self.n):
 
-            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]) or (self.fit_gaia and self.is_astro[i])):
+            if not self.is_fit[i]:
 
                 continue
 
@@ -2513,7 +2514,7 @@ class ExoSystem:
         j = 0
         for i in range(self.n):
 
-            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]) or (self.fit_gaia and self.is_astro[i])):
+            if not self.is_fit[i]:
 
                 continue
 
@@ -2759,6 +2760,9 @@ class ExoSystem:
         """
 
         for i in range(self.n):
+
+            if not self.is_fit[i]:
+                continue
 
             labels = []
 
@@ -5358,7 +5362,6 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
     
     else:
         like += priorlike
-
             
     tpars = []
     rpars = []
