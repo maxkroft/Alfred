@@ -754,7 +754,7 @@ class InitPlanetsGUI(InitGUI):
 
     def add_cmd(self):
         
-        self.table.add_row([False]*5 + [np.nan]*9)
+        self.table.add_row([False]*6 + [np.nan]*11)
         i = len(self.planets)
         self.add_planet(i)
         self.planets[i].edit_cmd()

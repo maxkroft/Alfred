@@ -239,7 +239,7 @@ class AllPriors:
 
                 for y in x0:
 
-                    if y.split[0] == 'log(a/rs)':
+                    if y.split()[0] == 'log(a/rs)':
 
                         self.fixed[var] = tab['Param 1'][i]
 
@@ -477,14 +477,34 @@ class AllPriors:
 
                     x = np.arccos(par[svar])
 
+                    log_like += self.prior_dict[var].apply_priors(x)
+
                 elif svar1 in par:
 
                     x = np.arccos(1-2*(par[svar1]**2 + par[svar2]**2))
 
-                else:
-                    pass
+                    log_like += self.prior_dict[var].apply_priors(x)
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                
+
+            elif split[0] == 'cos(i)':
+
+                svar = ' '.join(['cos(i)']+split[1:])
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
+
+                if svar in par:
+
+                    x = par[svar]
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                elif svar1 in par:
+
+                    x = np.arccos(1-2*(par[svar1]**2 + par[svar2]**2))
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+                    
 
             elif split[0] == 'e':
 

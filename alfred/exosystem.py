@@ -120,7 +120,7 @@ class ExoSystem:
 
         self.ar = np.array(tab_planets['a/Rs'])
 
-        self.inc = np.array(tab_planets['i'])
+        self.inc = np.array(tab_planets['i'])*np.pi/180
 
         self.k = np.array(tab_planets['K'])
 
@@ -862,7 +862,7 @@ class ExoSystem:
                     self.x0['comega {0}'.format(i+1)] = np.cos(self.omega)
                     self.x0['somega {0}'.format(i+1)] = np.sin(self.omega)
 
-                if 'log(rhostar)' in self.fixed and 'log(a/rs) {0}'.format(i+1) in self.fixed:
+                if 'log(rhostar)' in self.fixed and 'log(a/rs) {0}'.format(i+1) in self.x0:
 
                     self.x0.pop('log(a/rs) {0}'.format(i+1))
 
@@ -1328,7 +1328,7 @@ class ExoSystem:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.1*self.x[k], 2*self.nwalk)
 
                 if 'log(a/rs)' in k or 'log(rhostar)' in k:
-                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.1, 2*self.nwalk))
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
 
                 if 'cos(i)' in k or k.split()[0] == 'e':
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
@@ -1355,7 +1355,7 @@ class ExoSystem:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
 
             lp = self.allpriors.apply({k: trial[self.parnames[k]] for k in self.parnames} | self.fixed)
-            valid = np.isfinite(lp)
+            valid = np.isfinite(lp) & np.all(np.isfinite(trial), axis = 0)
             pos = np.append(pos, trial[:,valid], axis = 1)
 
         pos = pos.T[:self.nwalk]
@@ -3443,19 +3443,19 @@ class ExoSystem:
                 fmphase_err = self._lcm['phase'][self.filters[i]]['fmphase_err'][:,k] + mean
                 fm = self._lcm[sec]['fm'][k]
 
-                ax['a{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                ax['a{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                 exp = self.exptimes[i]*60*60*24
                 bins = np.linspace(-12, 12, 25 if exp == 1800 else (40 if exp == 600 else 50))
                 denom, _ = np.histogram(xfold, bins)
                 num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
                 denom[num == 0] = 1.0
-                ax['a{0}'.format(j)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+                ax['a{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
 
-                ax['a{0}'.format(j)].plot(ttphase, fmphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
-                ax['a{0}'.format(j)].fill_between(ttphase, fmphase_err[0], fmphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
+                ax['a{0}'.format(k)].plot(ttphase, fmphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                ax['a{0}'.format(k)].fill_between(ttphase, fmphase_err[0], fmphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
 
-                ax['a{0}'.format(j)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(j)].transAxes)
+                ax['a{0}'.format(k)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(k)].transAxes)
 
                 l = np.where((xfold >= -12) & (xfold <= 12))[0]
                 if len(l) > 0:
@@ -3467,26 +3467,26 @@ class ExoSystem:
                     high = np.max(fmphase[l])
                     low = np.min(fmphase[l])
 
-                ax['a{0}'.format(j)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
+                ax['a{0}'.format(k)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
 
-                ax['a{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                ax['a{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
-                ax['b{0}'.format(j)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
-                ax['b{0}'.format(j)].axhline(0, c = 'red', lw = 1, zorder = 2)
+                ax['b{0}'.format(k)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                ax['b{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
 
-                ax['b{0}'.format(j)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['b{0}'.format(j)].transAxes)
+                ax['b{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['b{0}'.format(k)].transAxes)
 
-                ax['b{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                ax['b{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
                 if eclipse and not self.is_eclipse[j]:
 
-                    plt.setp(ax['c{0}'.format(j)].get_xticklabels(), visible = False)
-                    plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
-                    ax['c{0}'.format(j)].axis('off')
+                    plt.setp(ax['c{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['c{0}'.format(k)].axis('off')
 
-                    plt.setp(ax['d{0}'.format(j)].get_xticklabels(), visible = False)
-                    plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
-                    ax['d{0}'.format(j)].axis('off')
+                    plt.setp(ax['d{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['d{0}'.format(k)].axis('off')
 
                     continue
 
@@ -3514,34 +3514,34 @@ class ExoSystem:
                     eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke] + mean
                     eclphase_err = self._lcm['phase'][self.filters[i]]['eclphase_err'][:,ke] + mean
 
-                    ax['c{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                    ax['c{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                     exp = self.exptimes[i]*60*60*24
                     bins = np.linspace(-12, 12, 25 if exp == 1800 else (40 if exp == 600 else 50))
                     denom, _ = np.histogram(xfold, bins)
                     num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
                     denom[num == 0] = 1.0
-                    ax['c{0}'.format(j)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+                    ax['c{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
 
-                    ax['c{0}'.format(j)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
-                    ax['c{0}'.format(j)].fill_between(ttphase, eclphase_err[0], eclphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
+                    ax['c{0}'.format(k)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                    ax['c{0}'.format(k)].fill_between(ttphase, eclphase_err[0], eclphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
 
-                    ax['c{0}'.format(j)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(j)].transAxes)
+                    ax['c{0}'.format(k)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(k)].transAxes)
 
-                    ax['c{0}'.format(j)].sharey(ax['a{0}'.format(j)])
-                    plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
+                    ax['c{0}'.format(k)].sharey(ax['a{0}'.format(k)])
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
 
-                    ax['c{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                    ax['c{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
-                    ax['d{0}'.format(j)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
-                    ax['d{0}'.format(j)].axhline(0, c = 'red', lw = 1, zorder = 2)
+                    ax['d{0}'.format(k)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                    ax['d{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
 
-                    ax['d{0}'.format(j)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['d{0}'.format(j)].transAxes)
+                    ax['d{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['d{0}'.format(k)].transAxes)
 
-                    ax['d{0}'.format(j)].sharey(ax['b{0}'.format(j)])
-                    plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
+                    ax['d{0}'.format(k)].sharey(ax['b{0}'.format(k)])
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
 
-                    ax['d{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                    ax['d{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
             
             ax['a0'].set_xlim(-12,12)
@@ -5061,7 +5061,7 @@ def get_rv_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
         k = np.exp(par['log(K) {0}'.format(i)])
 
     else:
-
+        
         if 'sico {0}'.format(i) in par:
             inc = np.arccos(1-2*(par['sico {0}'.format(i)]**2 + par['siso {0}'.format(i)]**2))
         
@@ -5336,6 +5336,29 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
         
     lin_par = np.empty(0)
+
+    if miniexs.fit_transit:
+
+        for i in range(miniexs.n):
+            
+            if miniexs.is_transit[i] and miniexs.fit_ttv[i]:
+
+                pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])
+
+                lin_par = np.append(lin_par, pars[:2])
+
+                par['log(P) {0}'.format(i+1)] = np.log(pars[0])
+                par['Tc {0}'.format(i+1)] = pars[1]
+
+
+    priorlike = miniexs.allpriors.apply(par)
+
+    if np.isinf(priorlike):
+        return -np.inf, *np.zeros((nlin))
+    
+    else:
+        like += priorlike
+
             
     tpars = []
     rpars = []
@@ -5369,16 +5392,6 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
                 gpars.append(get_Gaia_params(par, i+1))
             
-
-    
-
-    priorlike = miniexs.allpriors.apply(par)
-
-    if np.isinf(priorlike):
-        return -np.inf, *np.zeros((nlin))
-    
-    else:
-        like += priorlike
 
 
     if miniexs.fit_transit:
