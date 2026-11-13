@@ -158,12 +158,12 @@ class Init_gaia(InitFile):
 
         self.header_rows = ['name', 'unit']
 
-        self.converters = {'File':str,'Format':str,'Source ID':int,'Time Col':str,'AL Col':str,'Err Col':str,'Psi Col':str,'Plx Fac Col':str,'Err Scale':float,'RA':float,'Dec':float,'Ref Time':float}
+        self.converters = {'File':str,'Format':str,'Source ID':int,'Time Col':str,'AL Col':str,'Err Col':str,'Psi Col':str,'Plx Fac Col':str,'Time Offset':float,'Err Scale':float,'RA':float,'Dec':float,'Ref Time':float}
 
-        self.table = Table(rows = [['']*2 + [0] + ['']*5 + [1] + [np.nan]*3],
-                           names = ['File','Format','Source ID','Time Col','AL Col','Err Col','Psi Col','Plx Fac Col','Err Scale','RA','Dec','Ref Time'],
-                           units = [None, None, None, None, None, None, None, None, None, 'deg', 'deg', 'BJD'],
-                           dtype = [str,str,int,str,str,str,str,str,float,float,float,float])
+        self.table = Table(rows = [['']*2 + [0] + ['']*5 + [np.nan,1] + [np.nan]*3],
+                           names = ['File','Format','Source ID','Time Col','AL Col','Err Col','Psi Col','Plx Fac Col','Time Offset','Err Scale','RA','Dec','Ref Time'],
+                           units = [None, None, None, None, None, None, None, None, 'BJD', None, 'deg', 'deg', 'BJD'],
+                           dtype = [str,str,int,str,str,str,str,str,float,float,float,float,float])
 
 
     def __call__(self):
@@ -573,4 +573,8 @@ def create_folder(direc: str):
     initplanets = Init_planets(direc)
     initplanets()
     initplanets.save()
+
+    initpriors = Init_priors(direc)
+    initpriors()
+    initpriors.save()
 

@@ -446,7 +446,7 @@ class ExoSystem:
 
                 gdata.sort(tab_gaia['Time Col'][0])
 
-                self.tg = gdata[tab_gaia['Time Col'][0]] - 2450000
+                self.tg = gdata[tab_gaia['Time Col'][0]] + tab_gaia['Time Offset'][0] - 2450000
                 self.gal = gdata[tab_gaia['AL Col'][0]]
                 self.galerr = gdata[tab_gaia['Err Col'][0]]
                 self.psi = gdata[tab_gaia['Psi Col'][0]]*np.pi/180

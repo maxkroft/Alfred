@@ -2483,14 +2483,6 @@ class InitGaiaGUI(InitGUI):
         self.sourceid = IntEntry(self.sourceid_frame, min_val = 0, textvariable = self.sourceid_var, font = (font, 18), justify = 'center')
         self.sourceid.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
 
-        self.errscale_frame = ctk.CTkFrame(self.items_frame)
-        self.errscale_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
-        self.errscale_frame.grid_rowconfigure([0,1], weight = 1)
-        self.errscale_label = ctk.CTkLabel(self.errscale_frame, text = 'Error Scale', font = (font, 18, 'bold'))
-        self.errscale_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
-        self.errscale = FloatEntry(self.errscale_frame, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Err Scale']) else self.data['Err Scale']), font = (font, 18), justify = 'center')
-        self.errscale.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
-
         self.timecol_frame = ctk.CTkFrame(self.items_frame)
         self.timecol_frame.grid_rowconfigure([0,1], weight = 1)
         self.timecol_label = ctk.CTkLabel(self.timecol_frame, text = 'Time Column', font = (font, 18, 'bold'))
@@ -2511,6 +2503,20 @@ class InitGaiaGUI(InitGUI):
         self.errcol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
         self.errcol = ctk.CTkEntry(self.errcol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Err Col']))
         self.errcol.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.offset_frame = ctk.CTkFrame(self.items_frame)
+        self.offset_frame.grid_rowconfigure([0,1], weight = 1)
+        self.offset_label = ctk.CTkLabel(self.offset_frame, text = 'Time Offset (BJD)', font = (font, 18, 'bold'))
+        self.offset_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.offset = FloatEntry(self.offset_frame, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Time Offset']) else self.data['Time Offset']), font = (font, 18), justify = 'center')
+        self.offset.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.errscale_frame = ctk.CTkFrame(self.items_frame)
+        self.errscale_frame.grid_rowconfigure([0,1], weight = 1)
+        self.errscale_label = ctk.CTkLabel(self.errscale_frame, text = 'Error Scale', font = (font, 18, 'bold'))
+        self.errscale_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.errscale = FloatEntry(self.errscale_frame, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Err Scale']) else self.data['Err Scale']), font = (font, 18), justify = 'center')
+        self.errscale.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
 
         self.psicol_frame = ctk.CTkFrame(self.items_frame)
         self.psicol_frame.grid_rowconfigure([0,1,2], weight = 1)
@@ -2572,17 +2578,21 @@ class InitGaiaGUI(InitGUI):
         self.errcol_frame.grid_forget()
         self.psicol_frame.grid_forget()
         self.plxfcol_frame.grid_forget()
+        self.offset_frame.grid_forget()
         self.ra_frame.grid_forget()
         self.dec_frame.grid_forget()
         self.tref_frame.grid_forget()
 
         self.sourceid_frame.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.errscale_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
 
     def other_format(self):
         
         self.sourceid_frame.grid_forget()
 
-        self.timecol_frame.grid(row = 1, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.errscale_frame.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.timecol_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.offset_frame.grid(row = 1, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
         self.alcol_frame.grid(row = 1, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
         self.errcol_frame.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
         self.psicol_frame.grid(row = 2, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
@@ -2602,6 +2612,7 @@ class InitGaiaGUI(InitGUI):
         self.table['Err Col'] = update_string_col(self.table['Err Col'], self.errcol.get().strip(), 0)
         self.table['Psi Col'] = update_string_col(self.table['Psi Col'], self.psicol.get().strip(), 0)
         self.table['Plx Fac Col'] = update_string_col(self.table['Plx Fac Col'], self.plxfcol.get().strip(), 0)
+        self.table['Time Offset'] = self.offset.return_float()
         self.table['Err Scale'] = self.errscale.return_float()
         self.table['RA'] = self.ra.return_float()
         self.table['Dec'] = self.dec.return_float()
