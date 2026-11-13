@@ -449,12 +449,12 @@ class ExoSystem:
                 self.tg = gdata[tab_gaia['Time Col'][0]] - 2450000
                 self.gal = gdata[tab_gaia['AL Col'][0]]
                 self.galerr = gdata[tab_gaia['Err Col'][0]]
-                self.psi = gdata[tab_gaia['Psi Col'][0]]
+                self.psi = gdata[tab_gaia['Psi Col'][0]]*np.pi/180
                 self.plxf = gdata[tab_gaia['Plx Fac Col'][0]]
 
                 self.ra = tab_gaia['RA'][0]
                 self.dec = tab_gaia['Dec'][0]
-                self.tg_ref = tab_gaia['Ref Time'][0]
+                self.tg_ref = tab_gaia['Ref Time'][0] - 2450000
 
                 
 
@@ -590,7 +590,7 @@ class ExoSystem:
             print('No Gaia astrometric planets found.')
 
         self.fit_planets = self.fit_transit or self.fit_rv or self.fit_gaia
-        self.is_fit = (self.fit_transit and self.is_transit) or (self.fit_rv and self.is_rv) or (self.fit_gaia and self.is_astro)
+        self.is_fit = (self.fit_transit & self.is_transit) | (self.fit_rv & self.is_rv) | (self.fit_gaia & self.is_astro)
 
 
         if isinstance(self.nburn, float) and not 0 <= self.nburn < 1:
@@ -1328,14 +1328,11 @@ class ExoSystem:
                 if 'ror' in k or 'fp' in k or 'rstar' in k or 'mstar' in k:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.1*self.x[k], 2*self.nwalk)
 
-                if 'log(a/rs)' in k or 'log(rhostar)' in k:
+                if 'log(a/rs)' in k or 'log(rhostar)' in k or 'log(K)' in k or 'log(q)' in k:
                     trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
 
                 if 'cos(i)' in k or k.split()[0] == 'e':
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
-
-                if 'log(K)' in k or 'log(q)' in k:
-                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01, 2*self.nwalk))
 
                 if 'secw' in k or 'sesw' in k or 'comega' in k or 'somega' in k or 'sico' in k or 'siso' in k or k in ['u1','u2','feh','AV']:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.01, 2*self.nwalk)
@@ -3911,7 +3908,6 @@ class ExoSystem:
 
         pars = []
         maxp = 0
-        maxtc = 0
 
         for i in range(self.n):
 
@@ -3922,7 +3918,6 @@ class ExoSystem:
 
             if np.median(y['P {0}'.format(i+1)]) > maxp:
                 maxp = np.median(y['P {0}'.format(i+1)])
-                maxtc = np.median(y['Tc {0}'.format(i+1)])
 
         plx = np.median(y['plx'])
 
@@ -3935,7 +3930,7 @@ class ExoSystem:
         gmorbdec = 0
 
         tgsky = np.linspace(np.min(self.tg)-50, np.max(self.tg)+50, 1000)
-        tgorb = np.linspace(maxtc, maxtc+maxp, 1000)
+        tgorb = np.linspace(np.min(self.tg)-50, max(maxp+np.min(self.tg),np.max(self.tg)+50), 1000)
 
         gmorbra_pl = []
         gmorbdec_pl = []
@@ -3967,8 +3962,8 @@ class ExoSystem:
 
             if np.sum(self.is_astro) > 1:
                 
-                gmorbra_pl.append(gmorbra)
-                gmorbdec_pl.append(gmorbdec)
+                gmorbra_pl.append(gmorb[0])
+                gmorbdec_pl.append(gmorb[1])
 
             p = medpars[0]
             tp = np.median(y['Tp {0}'.format(j+1)])
@@ -4053,6 +4048,7 @@ class ExoSystem:
         gmorbdec_draws = []
 
         idxs = np.random.choice(n, 100, replace = False)
+
         for i in idxs:
 
             gmskyra0 = 0
@@ -4067,11 +4063,11 @@ class ExoSystem:
 
                 k = np.sum(self.is_astro[:j])
 
-                gmsky = Gaia_AL_Model(np.median(pars[k], axis = 0), tgsky, np.zeros(tgsky.shape))
+                gmsky = Gaia_AL_Model(pars[k][i], tgsky, np.zeros(tgsky.shape))
                 gmskyra0 += gmsky[0]
                 gmskydec0 += gmsky[1]
 
-                gmorb = Gaia_AL_Model(np.median(pars[k], axis = 0), tgorb, np.zeros(tgorb.shape))
+                gmorb = Gaia_AL_Model(pars[k][i], tgorb, np.zeros(tgorb.shape))
                 gmorbra0 += gmorb[0]
                 gmorbdec0 += gmorb[1]
 
@@ -4216,7 +4212,7 @@ class ExoSystem:
 
         ax[0].plot(gmskyra + bkgskyra, gmskydec + bkgskydec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
         for i in range(len(gmskyra_draws)):
-            ax[0].plot(gmskyra_draws[i] + bkgskyra, gmskydec_draws[i] + bkgskydec, color = 'darkseagreen', linewidth = 1, zorder = 1)
+            ax[0].plot(gmskyra_draws[i] + bkgskyra, gmskydec_draws[i] + bkgskydec, color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
         
         ax[0].plot(bkgskyra, bkgskydec, color = 'red', linewidth = 2, zorder = 0, linestyle = '--', label = 'On-Sky Motion')
 
@@ -4249,16 +4245,16 @@ class ExoSystem:
         gmorbra_pl, gmorbdec_pl = self._gaiam['gmorbra_pl'], self._gaiam['gmorbdec_pl']
         xpts, ypts = self._gaiam['xpts'], self._gaiam['ypts']
 
-        ax[1].scatter((self.gal-gmtot)*np.sin(self.psi) + gmra, (self.gal-gmtot)*np.cos(self.psi) + gmdec, marker = '.', c = 'black', s = 100, zorder = 4)
+        ax[1].scatter((self.gal-gmtot)*np.sin(self.psi) + gmra, (self.gal-gmtot)*np.cos(self.psi) + gmdec, marker = '.', c = 'black', s = 100, zorder = 4, alpha = 0.5)
 
         for i in range(len(self.tg)):
-            ax[1].plot(gmerrorbars[:,i]*np.sin(self.psi[i]) + gmra[i], gmerrorbars[:,i]*np.cos(self.psi[i]) + gmdec[i], c = 'black', linewidth = 2, zorder = 3)
+            ax[1].plot(gmerrorbars[:,i]*np.sin(self.psi[i]) + gmra[i], gmerrorbars[:,i]*np.cos(self.psi[i]) + gmdec[i], c = 'black', linewidth = 2, zorder = 3, alpha = 0.5)
 
         ax[1].plot(gmorbra, gmorbdec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
         for i in range(len(gmorbra_draws)):
-            ax[1].plot(gmorbra_draws[i], gmorbdec_draws[i], color = 'darkseagreen', linewidth = 1, zorder = 1)
+            ax[1].plot(gmorbra_draws[i], gmorbdec_draws[i], color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
 
-        ax[1].scatter(0, 0, c = '#eeb600', marker = '*', s = 150, zorder = 3)
+        ax[1].scatter(0, 0, c = '#4287f5', marker = '*', s = 150, zorder = 3)
 
         for i in range(self.n):
 
@@ -4269,23 +4265,27 @@ class ExoSystem:
 
             if np.sum(self.is_astro) > 1:
 
-                color = ['black','red','darkorange','green','blue','darkorchid'][j]
+                color = ['red','darkorange','green','blue','darkorchid'][j]
 
                 ax[1].plot(gmorbra_pl[j], gmorbdec_pl[j], linewidth = 2, zorder = 2, label = 'Planet {0}'.format(i+1), color = color)
 
                 ii = np.argmin(np.sqrt((gmorbra_pl[j]-xpts[j][1])**2 + (gmorbdec_pl[j]-ypts[j][1])**2))
                 dx = gmorbra_pl[j][ii] - gmorbra_pl[j][ii-1]
                 dy = gmorbdec_pl[j][ii] - gmorbdec_pl[j][ii-1]
-                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = color, lw = 2, mutation_scale = 25))
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = color, lw = 2, mutation_scale = 25), zorder = 2)
+
+                if j == 0:
+
+                    ax[1].annotate('', xytext = (gmorbra[-2], gmorbdec[-2]), xy = (gmorbra[-1], gmorbdec[-1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 2, mutation_scale = 25), zorder = 2)
 
             else:
                 ii = np.argmin(np.sqrt((gmorbra-xpts[j][1])**2 + (gmorbdec-ypts[j][1])**2))
                 dx = gmorbra[ii] - gmorbra[ii-1]
                 dy = gmorbdec[ii] - gmorbdec[ii-1]
-                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 2, mutation_scale = 25))
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 2, mutation_scale = 25), zorder = 2)
 
-            ax[1].scatter(xpts[j][0], ypts[j][0], c = "#eeb600", marker = 'x', linewidths = 2, s = 100, zorder = 3, label = '$\\omega$' if j == 0 else None)
-            ax[1].scatter(xpts[j][2], ypts[j][2], c = '#eeb600', marker = '+', linewidths = 2, s = 100, zorder = 3, label = '\u260A' if j == 0 else None)
+            ax[1].scatter(xpts[j][0], ypts[j][0], c = "#4287f5", marker = 'x', linewidths = 2, s = 100, zorder = 3, label = '$\\omega$' if j == 0 else None)
+            ax[1].scatter(xpts[j][2], ypts[j][2], c = '#4287f5', marker = '+', linewidths = 2, s = 100, zorder = 3, label = '\u260A' if j == 0 else None)
             ax[1].plot(xpts[j][2:], ypts[j][2:], c = 'gray', linestyle = '--', linewidth = 1, zorder = 2, label = 'Line of Nodes' if j == 0 else None)
 
 
