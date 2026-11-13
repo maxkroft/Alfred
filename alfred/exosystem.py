@@ -1466,7 +1466,7 @@ class ExoSystem:
 
             self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
 
-            self.lin_par = self.sampler.get_blobs(flat = True, discard = int(burnfrac*it))
+            self.lin_par = self.sampler.get_blobs(discard = int(burnfrac*it))
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
@@ -1570,7 +1570,7 @@ class ExoSystem:
             name (str): Name of the run. Sets the name of the pickle file to name_samples.p.
         """
 
-        z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
+        z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes, 'lin_par': self.lin_par}
 
         pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
 
@@ -1735,7 +1735,8 @@ class ExoSystem:
 
         for i in range(len(self.lin_names)):
 
-            self.res[self.lin_names[i]] = self.lin_par[self.lin_names[i]]
+            linpar = self.lin_par[self.lin_names[i]]
+            self.res[self.lin_names[i]] = np.reshape(linpar, (linpar.shape[0]*linpar.shape[1]))
 
         self.res['log_like'] = self.flat_log_likes
 
@@ -2331,6 +2332,10 @@ class ExoSystem:
         self.parnames = z['parnames']
         self.samples = z['samples']
         self.log_likes = z['log_like']
+        try:
+            self.lin_par = z['lin_par']
+        except:
+            pass
 
     
     def load_run_settings(self, name: str):
@@ -4488,6 +4493,7 @@ class ExoSystem:
 
         self.samples = np.delete(self.samples, idxs, axis = 1)
         self.log_likes = np.delete(self.log_likes, idxs, axis = 1)
+        self.lin_par = np.delete(self.lin_par, idxs, axis = 1)
 
         if save_samples:
 
