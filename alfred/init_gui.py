@@ -372,46 +372,6 @@ class IntEntry(ctk.CTkEntry):
         except ValueError:
             return 0
 
-    
-class ToggleCheckbox(ctk.CTkCheckBox):
-    def __init__(self, master, label, startval=0, toggles=[], toggles_off=[], toggle_override = None, toggle_off_override=None):
-
-        self.label = label
-        self.val = ctk.IntVar(value = startval)
-        self.toggles = toggles
-        self.toggles_off = toggles_off
-        self.toggle_override = toggle_override
-        self.toggle_off_override = toggle_off_override
-
-        super().__init__(master, text = self.label, font = (font, 18, 'bold'), variable = self.val, command = self.toggle_entry)
-        self.toggle_entry()
-
-
-    def toggle_entry(self):
-        
-        if self.val.get():
-
-            for x in self.toggles:
-                if self.toggle_override is None or not self.toggle_override.val.get():
-                    x.grid(row = x.row, column = x.col, sticky = "ew", padx = 10)
-            
-            for x in self.toggles_off:
-                x.grid_forget()
-
-        else:
-
-            for x in self.toggles:
-                x.grid_forget()
-
-            for x in self.toggles_off:
-                if self.toggle_off_override is None or self.toggle_off_override.val.get():
-                    x.grid(row = x.row, column = x.col, sticky = 'ew', padx = 10)
-
-    def return_bool(self):
-        return self.val.get() == 1
-    
-    
-
 
 class ScrollableDropdown(ctk.CTkToplevel):
     def __init__(self, master, attach, values=None, height=200, width=None, command=None, font = None, **kwargs):
@@ -597,27 +557,25 @@ class PlanetGUI(ctk.CTkToplevel):
         self.checkbox_frame.grid_columnconfigure(0, weight = 1)
         self.checkbox_frame.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="nsew", columnspan = 2)
 
-        self.t_check = ToggleCheckbox(self.checkbox_frame, 'Fit Transit', startval = 1 if self.data['Transiting'] else 0, toggles = [self.r_entry, self.a_entry, self.i_entry])
+        self.t_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Transit', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Transiting'] else 0), command = self.toggle_cmd)
         self.t_check.grid(row = 0, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.r_check = ToggleCheckbox(self.checkbox_frame, 'Fit RV', startval = 1 if self.data['RV Signal'] else 0, toggles = [self.k_entry])
+        self.r_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit RV', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['RV Signal'] else 0), command = self.toggle_cmd)
         self.r_check.grid(row = 1, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.g_check = ToggleCheckbox(self.checkbox_frame, 'Fit Gaia', startval = 1 if self.data['Fit Gaia'] else 0, toggles = [self.i_entry, self.q_entry, self.omega_entry], toggles_off = [self.k_entry], toggle_off_override = self.r_check)
+        self.g_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Gaia', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit Gaia'] else 0), command = self.toggle_cmd)
         self.g_check.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'w')
 
-        self.r_check.toggle_override = self.g_check
-        self.r_check.toggle_entry()
-
-        self.e_check = ToggleCheckbox(self.checkbox_frame, 'Fit Eccentricity', startval = 1 if self.data['Fit Ecc'] else 0, toggles = [self.secw_entry, self.sesw_entry])
+        self.e_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Eccentricity', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit Ecc'] else 0), command = self.toggle_cmd)
         self.e_check.grid(row = 3, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.ttv_check = ToggleCheckbox(self.checkbox_frame, 'Fit TTVs', startval = 1 if self.data['Fit TTVs'] else 0)
+        self.ttv_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit TTVs', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit TTVs'] else 0), command = self.toggle_cmd)
         self.ttv_check.grid(row = 4, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.se_check = ToggleCheckbox(self.checkbox_frame, 'Fit Secondary Eclipse', startval = 1 if self.data['Fit Eclipse'] else 0, toggles = [self.f_entry])
+        self.se_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Secondary Eclipse', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit Eclipse'] else 0), command = self.toggle_cmd)
         self.se_check.grid(row = 5, column = 0, padx=10, pady=(10, 0), sticky="w")
 
+        self.toggle_cmd()
 
         self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
         self.save.grid(row = 7, column = 0, padx = 10, pady = (10,0), sticky = "ew", columnspan = 2)
@@ -630,15 +588,53 @@ class PlanetGUI(ctk.CTkToplevel):
         self.after(200, lambda: self.attributes("-topmost", False))
 
 
+    def toggle_cmd(self):
+
+        if self.t_check.get():
+            self.r_entry.grid(row = self.r_entry.row, column = self.r_entry.col, sticky = "ew", padx = 10)
+            self.a_entry.grid(row = self.a_entry.row, column = self.a_entry.col, sticky = "ew", padx = 10)
+        else:
+            self.r_entry.grid_forget()
+            self.a_entry.grid_forget()
+
+        if self.t_check.get() or self.g_check.get():
+            self.i_entry.grid(row = self.i_entry.row, column = self.i_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.i_entry.grid_forget()
+
+        if self.r_check.get() and not self.g_check.get():
+            self.k_entry.grid(row = self.k_entry.row, column = self.k_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.k_entry.grid_forget()
+
+        if self.e_check.get():
+            self.secw_entry.grid(row = self.secw_entry.row, column = self.secw_entry.col, sticky = 'ew', padx = 10)
+            self.sesw_entry.grid(row = self.sesw_entry.row, column = self.sesw_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.secw_entry.grid_forget()
+            self.sesw_entry.grid_forget()
+
+        if self.g_check.get():
+            self.q_entry.grid(row = self.q_entry.row, column = self.q_entry.col, sticky = 'ew', padx = 10)
+            self.omega_entry.grid(row = self.omega_entry.row, column = self.omega_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.q_entry.grid_forget()
+            self.omega_entry.grid_forget()
+
+        if self.se_check.get():
+            self.f_entry.grid(row = self.f_entry.row, column = self.f_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.f_entry.grid_forget()
+
 
     def save_cmd(self):
 
-        self.data['Transiting'] = self.t_check.return_bool()
-        self.data['RV Signal'] = self.r_check.return_bool()
-        self.data['Fit Gaia'] = self.g_check.return_bool()
-        self.data['Fit Ecc'] = self.e_check.return_bool()
-        self.data['Fit TTVs'] = self.ttv_check.return_bool()
-        self.data['Fit Eclipse'] = self.se_check.return_bool()
+        self.data['Transiting'] = self.t_check.get() == 1
+        self.data['RV Signal'] = self.r_check.get() == 1
+        self.data['Fit Gaia'] = self.g_check.get() == 1
+        self.data['Fit Ecc'] = self.e_check.get() == 1
+        self.data['Fit TTVs'] = self.ttv_check.get() == 1
+        self.data['Fit Eclipse'] = self.se_check.get() == 1
         self.data['Period'] = self.p_entry.entry.return_float()
         self.data['Tc'] = self.t_entry.entry.return_float()
         self.data['Rp/Rs'] = self.r_entry.entry.return_float()
