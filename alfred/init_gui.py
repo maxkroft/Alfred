@@ -390,7 +390,6 @@ class ScrollableDropdown(ctk.CTkToplevel):
         self.requested_height = height
         
         # Build standard Frame container inside window wrapper
-        # We start with placeholder dimensions, then update them on click
         self.frame = ctk.CTkScrollableFrame(self, width=150, height=self.requested_height, fg_color = "#4F4F4F")
         self.frame.pack(fill="both", expand=True)
         
@@ -433,13 +432,36 @@ class ScrollableDropdown(ctk.CTkToplevel):
         self.attach.update_idletasks()
         
         x = self.attach.winfo_rootx()
-        y = self.attach.winfo_rooty() + self.attach.winfo_height()
+        y = self.attach.winfo_rooty()
+        w = self.attach.winfo_width()
+        h = self.attach.winfo_height()
+
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+
+        below = sh - y - h
+        above = y
+        pad = 10
+
+        if below >= self.requested_height + pad:
+            finalh = self.requested_height
+            finaly = y+h
+        elif above > below:
+            finalh = min(self.requested_height, above-pad)
+            finaly = y-finalh
+        else:
+            finalh = max(50, below-pad)
+            finaly = y+h
         
-        width = self.requested_width if self.requested_width else self.attach.winfo_width()
+        width = self.requested_width if self.requested_width else w
+        if x + width > sw:
+            finalx = max(0, sw - width - pad)
+        else:
+            finalx = x
         
-        self.frame.configure(width=width - 15)
-        
-        self.geometry(f"{width}x{self.requested_height}+{x}+{y}")
+        self.frame.configure(width=width - 15, height = finalh)
+        self.geometry(f"{int(width)}x{int(finalh)}+{int(finalx)}+{int(finaly)}")
+
         self.deiconify()
         self.lift()
         self.focus_force()
