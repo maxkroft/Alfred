@@ -1160,11 +1160,12 @@ class ExoSystem:
 
                 if self.fit_ttv[j]:
 
-                    pars.append(get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)]))
+                    ttvpar = get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)])
 
-                else:
+                    y['log(P) {0}'.format(j+1)] = np.log(ttvpar[0])
+                    y['Tc {0}'.format(j+1)] = ttvpar[1]
 
-                    pars.append(get_transit_params(y, j+1))
+                pars.append(get_transit_params(y, j+1))
 
 
             lastclipped = [0]*len(self.tt)
@@ -5025,26 +5026,18 @@ def get_transit_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArra
     return np.array([p, tc, ror, ar, inc, e, w])
 
 
-def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], shape: tuple = ()) -> np.typing.NDArray:
-    """Generates the specific list of transit parameters needed for the lightCurve function from the parameter dict used in fitting, in the case
-    when the planet is being fit for TTVs. Calculates the period and time of conjunction using linear regression on the transit times.
+def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64]) -> np.typing.NDArray:
+    """Calculates the period and time of conjunction for a planet with ttvs using linear regression on the transit times.
 
     Args:
         par (dict): Dictionary of fit parameters.
         i (int): Planet number.
         ttvi (ndarray): Array of integers representing the number of periods that have occurred between the first observed transit and each
             observed transit that is being fit.
-        shape (tuple, optional): The shape of each parameter. Default is (), which is a scalar.
         
     Returns:
-        ndarray: Array of transit parameters that can be input directly into lightCurve.
+        ndarray: Array of period and Tc.
     """
-
-    ror = par['ror {0}'.format(i)]
-    inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
-
-    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
-    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(shape, 90)
 
     tts = [par['TT {0} {1}'.format(i, j+1)] for j in range(len(ttvi))]
 
@@ -5052,22 +5045,7 @@ def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], shape: 
     p = res.slope
     tc = res.intercept
 
-    if 'log(a/rs) {0}'.format(i) in par:
-        ar = np.exp(par['log(a/rs) {0}'.format(i)])
-
-    elif 'log(q) {0}'.format(i) in par:
-        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
-        ar = (ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
-
-    elif 'log(K) {0}'.format(i) in par:
-        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
-        mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*earthm_to_msun
-        ar = ((ms+mp) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
-
-    else:
-        ar = (np.exp(par['log(rhostar)']) * p**2 / 0.018916375)**(1/3)
-
-    return np.array([p, tc, ror, ar, inc, e, w])
+    return np.array([p, tc])
 
 
 def get_rv_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
@@ -5376,7 +5354,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
                 pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])
 
-                lin_par = np.append(lin_par, pars[:2])
+                lin_par = np.append(lin_par, pars)
 
                 par['log(P) {0}'.format(i+1)] = np.log(pars[0])
                 par['Tc {0}'.format(i+1)] = pars[1]
@@ -5400,19 +5378,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
             
             if miniexs.is_transit[i] and miniexs.fit_transit:
 
-                if miniexs.fit_ttv[i]:
-
-                    pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])
-                    tpars.append(pars)
-
-                    lin_par = np.append(lin_par, pars[:2])
-
-                    par['log(P) {0}'.format(i+1)] = np.log(pars[0])
-                    par['Tc {0}'.format(i+1)] = pars[1]
-
-                else:
-
-                    tpars.append(get_transit_params(par, i+1))
+                tpars.append(get_transit_params(par, i+1))
 
             if miniexs.is_rv[i] and miniexs.fit_rv:
 
