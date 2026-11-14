@@ -43,6 +43,21 @@ np.set_printoptions(legacy='1.25')
 miniexs = None
 
 
+ns_to_d = (1*u.ns).to(u.d).value
+msunrsun3_to_gcm3 = (1*u.Msun/u.Rsun**3).to(u.g/u.cm**3).value
+earthm_to_msun = (1*u.earthMass).to(u.Msun).value
+d_to_yr = (1*u.d).to(u.yr).value
+au_to_rsun = (1*u.AU).to(u.Rsun).value
+gcm3rsun3_to_msun = (1*u.g/u.cm**3*u.Rsun**3).to(u.Msun).value
+rsun_to_earthr = (1*u.Rsun).to(u.earthRad).value
+msun_to_earthm = (1*u.Msun).to(u.earthMass).value
+earthmearthr3_to_gcm3 = (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+d_to_hr = (1*u.d).to(u.hr).value
+d_to_min = (1*u.d).to(u.min).value
+c_ms = constants.c.to(u.m/u.s).value
+rsunsm_to_d = (1*u.Rsun/u.m*u.s).to(u.d).value
+
+
 class ExoSystem:
     """A class for fitting exoplanet systems.
     """
@@ -434,7 +449,7 @@ class ExoSystem:
                 self.psi = self.psi[i]
                 self.plxf = self.plxf[i]
 
-                time = Time(2455197.5+(self.tg*u.ns).to(u.d).value, format = 'jd', scale = 'tcb')
+                time = Time(2455197.5+self.tg*ns_to_d, format = 'jd', scale = 'tcb')
                 self.tg = time.tdb.value-2450000
 
             else:
@@ -669,7 +684,7 @@ class ExoSystem:
 
                 if self.fit_transit:
 
-                    self.x0['log(rhostar)'] = np.log((self.ms*u.Msun/(4/3*np.pi*(self.rs*u.Rsun)**3)).to(u.g/u.cm**3).value)
+                    self.x0['log(rhostar)'] = np.log(self.ms/(4/3*np.pi*self.rs**3)*msunrsun3_to_gcm3)
                     self.x0['rstar'] = self.rs
 
                 else:
@@ -1128,7 +1143,7 @@ class ExoSystem:
 
                         mp = 0
 
-                    ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+                    ar = ((mstar + mp*earthm_to_msun) * (p*d_to_yr)**2)**(1/3) * au_to_rsun / rstar
 
                     y['log(a/rs) {0}'.format(i+1)] = np.log(ar)
 
@@ -1803,7 +1818,7 @@ class ExoSystem:
                 rhostar = np.exp(y['log(rhostar)'])
                 self.dres['rhostar'] = rhostar
 
-                mstar = (rhostar*u.g/u.cm**3 * 4/3*np.pi * (rstar*u.Rsun)**3).to(u.Msun).value
+                mstar = rhostar * 4/3*np.pi * rstar**3 * gcm3rsun3_to_msun
                 self.dres['mstar'] = mstar
 
             else:
@@ -1842,7 +1857,7 @@ class ExoSystem:
                         p = np.exp(y['log(P) {0}'.format(i+1)])
                         self.dres['P {0}'.format(i+1)] = p
 
-                    rp = y['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
+                    rp = y['ror {0}'.format(i+1)] * rstar * rsun_to_earthr
                     self.dres['Rp {0}'.format(i+1)] = rp
 
                     if not self.fit_star and not self.fit_gaia:
@@ -1850,7 +1865,7 @@ class ExoSystem:
                         ars = np.exp(y['log(a/rs) {0}'.format(i+1)])
                         self.dres['a/rs {0}'.format(i+1)] = ars
 
-                        a = ars * rstar * (1*u.Rsun).to(u.AU).value
+                        a = ars * rstar / au_to_rsun
                         self.dres['a {0}'.format(i+1)] = a
 
                     inc = np.arccos(y['cos(i) {0}'.format(i+1)]) * 180/np.pi
@@ -1896,12 +1911,12 @@ class ExoSystem:
                     q = np.exp(y['log(q) {0}'.format(i+1)])
                     self.dres['q {0}'.format(i+1)] = q
 
-                    mp = (q * mstar*u.Msun).to(u.earthMass).value
+                    mp = q * mstar * msun_to_earthm
                     self.dres['Mp {0}'.format(i+1)] = mp
 
                     if self.is_transit[i] and self.fit_transit:
 
-                        rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+                        rhop = mp / (4/3 * np.pi * rp**3) * earthmearthr3_to_gcm3
                         self.dres['rhop {0}'.format(i+1)] = rhop
 
                         omega = np.arctan2(y['somega {0}'.format(i+1)], y['comega {0}'.format(i+1)])
@@ -1915,7 +1930,7 @@ class ExoSystem:
                         omega = np.arctan2(y['siso {0}'.format(i+1)], y['sico {0}'.format(i+1)])
                         self.dres['omega {0}'.format(i+1)] = omega
 
-                    k = 29785.326 * np.sin(inc*np.pi/180) / np.sqrt(1-e**2) * (p*u.day).to(u.yr).value**(-1/3) * q/(1+q)**(2/3) * mstar**(1/3)
+                    k = 29785.326 * np.sin(inc*np.pi/180) / np.sqrt(1-e**2) * (p*d_to_yr)**(-1/3) * q/(1+q)**(2/3) * mstar**(1/3)
                     self.dres['K {0}'.format(i+1)] = k
 
 
@@ -1926,25 +1941,25 @@ class ExoSystem:
 
                     if (self.is_transit[i] and self.fit_transit) or (self.is_astro[i] and self.fit_gaia):
 
-                        mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, inc*np.pi/180, mstar)
+                        mp = calc_m_from_k(p*d_to_yr, k, e, inc*np.pi/180, mstar)
                         self.dres['Mp {0}'.format(i+1)] = mp
 
                         if self.is_transit[i] and self.fit_transit:
 
-                            rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+                            rhop = mp / (4/3 * np.pi * rp**3) * earthmearthr3_to_gcm3
                             self.dres['rhop {0}'.format(i+1)] = rhop
 
                     else:
 
-                        mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
+                        mp = calc_m_from_k(p*d_to_yr, k, e, np.pi/2, mstar)
                         self.dres['Mpsini {0}'.format(i+1)] = mp
 
                 if self.is_fit[i] and 'a/rs {0}'.format(i+1) not in self.dres:
 
-                    a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
+                    a = ((mstar + mp*earthm_to_msun) * (p*d_to_yr)**2)**(1/3)
                     self.dres['a {0}'.format(i+1)] = a
 
-                    ars = (a*u.AU).to(u.Rsun).value / rstar
+                    ars = a*au_to_rsun / rstar
                     self.dres['a/rs {0}'.format(i+1)] = ars
 
                 if self.is_fit[i]:
@@ -1963,7 +1978,7 @@ class ExoSystem:
                     depth = y['ror {0}'.format(i+1)]**2 * 1e6
                     self.dres['depth {0}'.format(i+1)] = depth
 
-                    dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
+                    dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * d_to_hr
                     self.dres['dur {0}'.format(i+1)] = dur
 
                     if not self.fit_star and not self.fit_gaia:
@@ -3032,7 +3047,7 @@ class ExoSystem:
                     q = 0
 
                     if 'Mp {0}'.format(k+1) in y:
-                        mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
+                        mp = np.median(y['Mp {0}'.format(k+1)])*earthm_to_msun
                         ms = np.median(y['mstar'])
                         q = mp/ms
 
@@ -3060,7 +3075,7 @@ class ExoSystem:
                         q = 0
     
                         if 'Mp {0}'.format(k+1) in y:
-                            mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
+                            mp = y['Mp {0}'.format(k+1)][j]*earthm_to_msun
                             ms = y['mstar'][j]
                             q = mp/ms
 
@@ -3147,7 +3162,7 @@ class ExoSystem:
                         q = 0
     
                         if 'Mp {0}'.format(k+1) in y:
-                            mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
+                            mp = np.median(y['Mp {0}'.format(k+1)])*earthm_to_msun
                             ms = np.median(y['mstar'])
                             q = mp/ms
 
@@ -3215,7 +3230,7 @@ class ExoSystem:
                             q = 0
         
                             if 'Mp {0}'.format(k+1) in y:
-                                mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
+                                mp = y['Mp {0}'.format(k+1)][j]*earthm_to_msun
                                 ms = y['mstar'][j]
                                 q = mp/ms
 
@@ -3507,7 +3522,7 @@ class ExoSystem:
                     mp = 0
                     ms = np.median(y['mstar'])
                     if 'Mp {0}'.format(j+1) in y:
-                        mp = (np.median(y['Mp {0}'.format(j+1)])*u.earthMass).to(u.Msun).value
+                        mp = np.median(y['Mp {0}'.format(j+1)])*earthm_to_msun
 
                     q = mp/ms
 
@@ -3987,7 +4002,7 @@ class ExoSystem:
             ypts.append(yts)
 
         gclean = self.gal - gm - self.plxf * plx
-        tgyr = (self.tg - self.tg_ref)/365.25
+        tgyr = (self.tg - self.tg_ref)*d_to_yr
 
         M = np.zeros((len(self.tg),4))
         M[:,0] = np.sin(self.psi)
@@ -4026,8 +4041,8 @@ class ExoSystem:
         raplxsky = plx * frasky
         decplxsky = plx * fdecsky
 
-        bkgskyra = X[2] * (tgsky - self.tg_ref)/365.25 + raplxsky
-        bkgskydec = X[3] * (tgsky - self.tg_ref)/365.25 + decplxsky
+        bkgskyra = X[2] * (tgsky - self.tg_ref)*d_to_yr + raplxsky
+        bkgskydec = X[3] * (tgsky - self.tg_ref)*d_to_yr + decplxsky
 
         gm_err = []
 
@@ -4417,7 +4432,7 @@ class ExoSystem:
                 tt = y['TT {0} {1}'.format(i+1,k+1)]
                 ttmed = np.median(tt)
 
-                diff = ((tt - (tc + p * self.ttvi['{0}'.format(i+1)][k]))*u.day).to(u.min).value
+                diff = (tt - (tc + p * self.ttvi['{0}'.format(i+1)][k]))*d_to_min
                 diffmed = np.median(diff)
                 differr = np.diff(np.percentile(diff, [16,50,84]))
 
@@ -4811,7 +4826,7 @@ def calc_m_from_k(p: np.typing.ArrayLike, k: np.typing.ArrayLike, e: np.typing.A
 
         sini = np.sin(inc)
         
-        b = (1*u.earthMass).to(u.Msun).value / mstar
+        b = earthm_to_msun / mstar
         c = (k * np.sqrt(1-e**2) / 0.08946 / sini)**(-3/2) * p**(-1/2) / mstar
 
         m = b**2 / (3*c**2) + (2*b**6 + 18*b**3*c**2 + 3*np.sqrt(3)*np.sqrt(4*b**3*c**6 + 27*c**8) + 27*c**4)**(1/3) / (3*2**(1/3)*c**2) - 2**(1/3)*(-b**4 - 6*b*c**2) / (3*c**2*(2*b**6 + 18*b**3*c**2 + 3*np.sqrt(3)*np.sqrt(4*b**3*c**6 + 27*c**8) + 27*c**4)**(1/3))  
@@ -4901,7 +4916,7 @@ def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.Arr
     E2 = np.arctan2(np.sqrt(1-e**2)*np.sin(f2), e + np.cos(f2))
     M2 = E2 - e*np.sin(E2)
 
-    light_delay = (2 / constants.c * 1/(q+1) * a*r*u.Rsun * np.sin(i) * (1-e**2) / (1-(e*np.sin(w))**2)).to(u.day).value
+    light_delay = 2 / c_ms * 1/(q+1) * a*r * np.sin(i) * (1-e**2) / (1-(e*np.sin(w))**2) * rsunsm_to_d
 
     tc2 = p/(2*np.pi)*(M2-M1) + tc + light_delay
 
@@ -4990,13 +5005,13 @@ def get_transit_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArra
         ar = np.exp(par['log(a/rs) {0}'.format(i)])
 
     elif 'log(q) {0}'.format(i) in par:
-        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
-        ar = ((ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
+        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
+        ar = (ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
     
     elif 'log(K) {0}'.format(i) in par:
-        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
-        mp = (calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*u.earthMass).to(u.Msun).value
-        ar = (((ms+mp) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
+        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
+        mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*earthm_to_msun
+        ar = ((ms+mp) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
 
     else:
         ar = (np.exp(par['log(rhostar)']) * p**2 / 0.018916375)**(1/3)
@@ -5035,13 +5050,13 @@ def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], shape: 
         ar = np.exp(par['log(a/rs) {0}'.format(i)])
 
     elif 'log(q) {0}'.format(i) in par:
-        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
-        ar = ((ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
+        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
+        ar = (ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
 
     elif 'log(K) {0}'.format(i) in par:
-        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
-        mp = (calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*u.earthMass).to(u.Msun).value
-        ar = (((ms+mp) * (p*u.day).to(u.yr).value**2)**(1/3)*u.AU).to(u.Rsun).value / par['rstar']
+        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
+        mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*earthm_to_msun
+        ar = ((ms+mp) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
 
     else:
         ar = (np.exp(par['log(rhostar)']) * p**2 / 0.018916375)**(1/3)
@@ -5082,10 +5097,10 @@ def get_rv_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
             ms = par['mstar']
 
         else:
-            ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
+            ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
 
         q = np.exp(par['log(q) {0}'.format(i)])
-        k = 29785.326 * np.sin(inc) / np.sqrt(1-e**2) * (p*u.day).to(u.yr).value**(-1/3) * q/(1+q)**(2/3) * ms**(1/3)
+        k = 29785.326 * np.sin(inc) / np.sqrt(1-e**2) * (p*d_to_yr)**(-1/3) * q/(1+q)**(2/3) * ms**(1/3)
 
     return np.array([p, tc, k, e, w])
 
@@ -5122,7 +5137,7 @@ def get_Gaia_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
         ms = par['mstar']
 
     else:
-        ms = (np.exp(par['log(rhostar)'])*u.g/u.cm**3 * 4/3*np.pi * (par['rstar']*u.Rsun)**3).to(u.Msun).value
+        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
 
     mp = np.exp(par['log(q) {0}'.format(i)]) * ms
 
@@ -5334,13 +5349,13 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
                     if miniexs.fit_ecc[i]:
                         e = par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2
 
-                    mp = (calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)*u.earthMass).to(u.Msun).value
+                    mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)*earthm_to_msun
 
                 else:
 
                     mp = 0
 
-                ar = (((mstar + mp) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+                ar = ((mstar + mp) * (p*d_to_yr)**2)**(1/3) * au_to_rsun / rstar
 
                 par['log(a/rs) {0}'.format(i+1)] = np.log(ar)
 
@@ -5463,7 +5478,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
                             kr = np.sum(miniexs.is_rv[:j])
                             
-                            mp = (calc_m_from_k(tpars[k][0], rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)*u.earthMass).to(u.Msun).value
+                            mp = calc_m_from_k(tpars[k][0], rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)*earthm_to_msun
 
                             q = mp/ms
 
@@ -5582,7 +5597,7 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
             galm += Gaia_AL_Model(gpars[j], miniexs.tg, miniexs.psi)[2]
 
         gclean = miniexs.gal - galm
-        tgyr = (miniexs.tg - miniexs.tg_ref)/365.25
+        tgyr = (miniexs.tg - miniexs.tg_ref)*d_to_yr
 
         M = []
 
