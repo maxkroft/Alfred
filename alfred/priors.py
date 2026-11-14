@@ -188,9 +188,9 @@ class AllPriors:
 
         self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)','log(rhostar)'], 'log(a/rs)': ['log(a/rs)','log(rhostar)'],
                            'rhostar': ['log(rhostar)', 'eep'], 'i': ['cos(i)','sico','siso'], 'cos(i)': ['cos(i)','sico','siso'],
-                           'K': ['log(K)'], 'e': ['secw','sesw'], 'w': ['secw','sesw','cw','sw'], 'rsq_w': ['cw','sw'],
-                           'cw': ['cw','secw','sesw'], 'sw': ['sw','secw','sesw'], 'rho_gp': ['log(rho_gp)'],
-                           'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'],
+                           'K': ['log(K)'], 'e': ['se','secw','sesw'], 'w': ['secw','sesw','cw','sw'], 'rsq_w': ['cw','sw'],
+                           'cw': ['cw','secw','sesw'], 'sw': ['sw','secw','sesw'], 'se': ['se','secw','sesw'],
+                           'rho_gp': ['log(rho_gp)'], 'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'],
                            'omega': ['sico','siso','comega','somega'], 'rsq_omega': ['comega','somega'],
                            'comega': ['comega','sico','siso'], 'somega': ['somega','sico','siso'], 'distance': ['plx'],
                            'rstar': ['rstar', 'eep'], 'mstar': ['mstar', 'eep'], 'log(rhostar)': ['log(rhostar)', 'eep']}
@@ -281,6 +281,12 @@ class AllPriors:
                 self.fixed[sf] = np.cos(self.fixed[f])
                 self.fixed[sf2] = np.sin(self.fixed.pop(f))
 
+            elif split[0] == 'e':
+
+                sf = ' '.join(['se']+split[1:])
+
+                self.fixed[sf] = np.sqrt(self.fixed.pop(f))
+
             elif split[0] == 'w':
 
                 sf = ' '.join(['cw']+split[1:])
@@ -303,7 +309,7 @@ class AllPriors:
                 if sf2 in self.fixed:
                     self.fixed.pop(sf2)
 
-            elif split[0] in ['e','w','cw','sw']:
+            elif split[0] in ['e','se','w','cw','sw']:
 
                 sf = ' '.join(['secw']+split[1:])
                 sf2 = ' '.join(['sesw']+split[1:])
@@ -540,12 +546,30 @@ class AllPriors:
 
             elif split[0] == 'e':
 
+                svar = ' '.join(['se']+split[1:])
+                svar1 = ' '.join(['secw']+split[1:])
+                svar2 = ' '.join(['sesw']+split[1:])
+
+                if svar in par:
+
+                    x = par[svar]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                elif svar1 in par:
+
+                    x = par[svar1]**2 + par[svar2]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'se':
+
                 svar1 = ' '.join(['secw']+split[1:])
                 svar2 = ' '.join(['sesw']+split[1:])
 
                 if svar1 in par:
 
-                    x = par[svar1]**2 + par[svar2]**2
+                    x = np.sqrt(par[svar1]**2 + par[svar2]**2)
 
                     log_like += self.prior_dict[var].apply_priors(x)
 

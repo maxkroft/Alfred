@@ -1188,7 +1188,7 @@ class PriorFrame(ctk.CTkFrame):
 
         varlabel = ctk.CTkLabel(self, text = 'Variable', font = (font, 16, 'bold'))
         varlabel.grid(row = 0, column = 1, padx = (10,0), sticky = 'nsew')
-        varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'cw', 'sw', 'w',
+        varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'se', 'e', 'cw', 'sw', 'w',
                       'TT', 'fp', 'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega',
                       'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
                       'ra*_offset', 'dec_offset', 'pmra*', 'pmdec',
@@ -1254,8 +1254,8 @@ class PriorFrame(ctk.CTkFrame):
         self.variable_anchor.configure(text=choice)
 
         varunits = {'log(P)': 'days', 'P': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'a/rs': '', 'cos(i)': '',
-                    'i': 'rads', 'log(K)': 'm/s', 'K': 'm/s', 'secw': '', 'sesw': '', 'e': '', 'cw': '', 'sw': '', 'w': 'rads', 'TT': 'BJD-2450000',
-                    'fp': '', 'log(q)': '', 'q': '', 'sico': '', 'siso': '', 'comega': '', 'somega': '', 'omega': 'rads',
+                    'i': 'rads', 'log(K)': 'm/s', 'K': 'm/s', 'secw': '', 'sesw': '', 'se': '', 'e': '', 'cw': '', 'sw': '', 'w': 'rads',
+                    'TT': 'BJD-2450000', 'fp': '', 'log(q)': '', 'q': '', 'sico': '', 'siso': '', 'comega': '', 'somega': '', 'omega': 'rads',
                     'F0': '', 'log(rho_gp)': 'days', 'rho_gp': 'days', 'log(sigma_gp)': '', 'sigma_gp': '', 'u1': '', 'u2': '', 'gamma': 'm/s',
                     'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s',
                     'ra*_offset': 'mas', 'dec_offset': 'mas', 'pmra*': 'mas/yr', 'pmdec': 'mas/yr',
@@ -1264,8 +1264,8 @@ class PriorFrame(ctk.CTkFrame):
         
         self.unitsvar.set(varunits[choice])
 
-        planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'cw', 'sw', 'w', 'fp',
-                       'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega']
+        planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'se', 'e', 'cw', 'sw', 'w',
+                       'fp', 'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega']
         lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         ld_vars = ['u1', 'u2']
 
@@ -1339,7 +1339,7 @@ class PriorFrame(ctk.CTkFrame):
         if priortype in ['Gaussian',"Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
             self.par2.min_val = 0
 
-        bounded_vars = {'cos(i)':[-1,1], 'i':[-np.pi/2,np.pi/2], 'secw':[-1,1], 'sesw':[-1,1], 'e':[0,1], 'cw':[-1,1], 'sw':[-1,1], 'w':[-np.pi,np.pi],
+        bounded_vars = {'cos(i)':[-1,1], 'i':[-np.pi/2,np.pi/2], 'secw':[-1,1], 'sesw':[-1,1], 'se':[0,1], 'e':[0,1], 'cw':[-1,1], 'sw':[-1,1], 'w':[-np.pi,np.pi],
                         'sico':[-1, 1], 'siso':[-1,1], 'comega':[-1,1], 'somega':[-1,1], 'omega':[-np.pi,np.pi], 'u1':[0,1], 'u2':[0,1], 'feh':[-0.5,0.5], 'AV':[0,1]}
         
         if variable in bounded_vars:

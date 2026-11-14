@@ -438,7 +438,7 @@ class Init_priors(InitFile):
 
         self.converters = {'Variable':str,'Prior Type':str,'Param 1':float,'Param 2':float}
 
-        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'cw', 'sw', 'w',
+        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'se', 'e', 'cw', 'sw', 'w',
                              'TT', 'fp', 'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
                              'ra*_offset', 'dec_offset', 'pmra*', 'pmdec',
@@ -457,6 +457,7 @@ class Init_priors(InitFile):
                                  'planet RV semi-amplitude in m/s',
                                  'square root of planet eccentricity times cosine of planet argument of periastron',
                                  'square root of planet eccentricity times sine of planet argument of periastron',
+                                 'square root of the planet eccentricity',
                                  'planet eccentricity',
                                  'cosine of the argument of periastron',
                                  'sine of the argument of periastron',
