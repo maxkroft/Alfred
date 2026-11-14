@@ -352,7 +352,7 @@ class Init_planets(InitFile):
 
         if 'cos(i)' in self.table.colnames:
             self.table.rename_column('cos(i)', 'i')
-            self.table['i'] = np.arccos(self.table['i'])
+            self.table['i'] = np.arccos(self.table['i'])*180/np.pi
 
         self.save()
 
