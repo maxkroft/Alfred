@@ -187,10 +187,12 @@ class AllPriors:
         self.fixed = {}
 
         self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)','log(rhostar)'], 'log(a/rs)': ['log(a/rs)','log(rhostar)'],
-                           'rhostar': ['log(rhostar)', 'eep'], 'i': ['cos(i)','sico'],
-                           'cos(i)': ['cos(i)','sico'], 'K': ['log(K)'], 'e': ['secw'], 'w': ['secw'], 'rho_gp': ['log(rho_gp)'],
-                           'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'], 'omega': ['sico','comega'],
-                           'rsq_omega': ['comega','sico'], 'comega': ['comega','sico'], 'somega': ['somega','sico'], 'distance': ['plx'],
+                           'rhostar': ['log(rhostar)', 'eep'], 'i': ['cos(i)','sico','siso'], 'cos(i)': ['cos(i)','sico','siso'],
+                           'K': ['log(K)'], 'e': ['secw','sesw'], 'w': ['secw','sesw','cw','sw'], 'rsq_w': ['cw','sw'],
+                           'cw': ['cw','secw','sesw'], 'sw': ['sw','secw','sesw'], 'rho_gp': ['log(rho_gp)'],
+                           'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'],
+                           'omega': ['sico','siso','comega','somega'], 'rsq_omega': ['comega','somega'],
+                           'comega': ['comega','sico','siso'], 'somega': ['somega','sico','siso'], 'distance': ['plx'],
                            'rstar': ['rstar', 'eep'], 'mstar': ['mstar', 'eep'], 'log(rhostar)': ['log(rhostar)', 'eep']}
 
 
@@ -279,6 +281,14 @@ class AllPriors:
                 self.fixed[sf] = np.cos(self.fixed[f])
                 self.fixed[sf2] = np.sin(self.fixed.pop(f))
 
+            elif split[0] == 'w':
+
+                sf = ' '.join(['cw']+split[1:])
+                sf2 = ' '.join(['sw']+split[1:])
+
+                self.fixed[sf] = np.cos(self.fixed[f])
+                self.fixed[sf2] = np.sin(self.fixed.pop(f))
+
             elif split[0] == 'distance':
 
                 self.fixed['plx'] = 1000/self.fixed.pop(f)
@@ -293,7 +303,7 @@ class AllPriors:
                 if sf2 in self.fixed:
                     self.fixed.pop(sf2)
 
-            if split[0] in ['e','w']:
+            elif split[0] in ['e','w','cw','sw']:
 
                 sf = ' '.join(['secw']+split[1:])
                 sf2 = ' '.join(['sesw']+split[1:])
@@ -425,7 +435,13 @@ class AllPriors:
 
             split = var.split()
 
-            if split[0] in ['P', 'K', 'rho_gp', 'sigma_gp', 'q']:
+            if var in par:
+
+                x = par[var]
+
+                log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] in ['P', 'K', 'rho_gp', 'sigma_gp', 'q']:
 
                 svar = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
@@ -448,12 +464,6 @@ class AllPriors:
                 if var == 'rhostar' and 'log(rhostar)' in par:
 
                     x = np.exp(par['log(rhostar)'])
-
-                    log_like += self.prior_dict[var].apply_priors(x)
-
-                elif 'log(rhostar)' in par:
-
-                    x = par['log(rhostar)']
 
                     log_like += self.prior_dict[var].apply_priors(x)
 
@@ -482,12 +492,6 @@ class AllPriors:
                 if split[0] == 'a/rs' and svar in par:
 
                     x = np.exp(par[svar])
-
-                    log_like += self.prior_dict[var].apply_priors(x)
-
-                elif svar in par:
-
-                    x = par[svar]
 
                     log_like += self.prior_dict[var].apply_priors(x)
 
@@ -523,26 +527,16 @@ class AllPriors:
 
                     log_like += self.prior_dict[var].apply_priors(x)
 
-                
-
             elif split[0] == 'cos(i)':
 
-                svar = ' '.join(['cos(i)']+split[1:])
                 svar1 = ' '.join(['sico']+split[1:])
                 svar2 = ' '.join(['siso']+split[1:])
 
-                if svar in par:
-
-                    x = par[svar]
-
-                    log_like += self.prior_dict[var].apply_priors(x)
-
-                elif svar1 in par:
+                if svar1 in par:
 
                     x = 1-2*(par[svar1]**2 + par[svar2]**2)
 
                     log_like += self.prior_dict[var].apply_priors(x)
-
 
             elif split[0] == 'e':
 
@@ -560,6 +554,11 @@ class AllPriors:
                 svar1 = ' '.join(['secw']+split[1:])
                 svar2 = ' '.join(['sesw']+split[1:])
 
+                if svar1 not in par:
+
+                    svar1 = ' '.join(['cw']+split[1:])
+                    svar2 = ' '.join(['sw']+split[1:])
+
                 if svar1 in par:
 
                     x = np.arctan2(par[svar2], par[svar1])
@@ -569,6 +568,36 @@ class AllPriors:
                     p2 = self.prior_dict[var].apply_priors(x-2*np.pi)
 
                     log_like += np.max([p0,p1,p2])
+
+            elif split[0] == 'rsq_w':
+
+                svar1 = ' '.join(['cw']+split[1:])
+                svar2 = ' '.join(['sw']+split[1:])
+
+                if svar1 in par:
+
+                    x = par[svar1]**2 + par[svar2]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] in ['cw', 'sw']:
+                
+                svar1 = ' '.join(['secw']+split[1:])
+                svar2 = ' '.join(['sesw']+split[1:])
+
+                if svar1 in par:
+
+                    r = np.sqrt(par[svar1]**2 + par[svar2]**2)
+
+                    if split[0] == 'cw':
+                        
+                        x = par[svar1]/r
+
+                    else:
+
+                        x = par[svar2]/r
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'omega':
 
@@ -601,7 +630,7 @@ class AllPriors:
 
                     log_like += self.prior_dict[var].apply_priors(x)
 
-            elif split[0] in ['comega', 'somega'] and var not in par:
+            elif split[0] in ['comega', 'somega']:
                 
                 svar1 = ' '.join(['sico']+split[1:])
                 svar2 = ' '.join(['siso']+split[1:])
@@ -627,11 +656,5 @@ class AllPriors:
                     x = 1000/par['plx']
 
                     log_like += self.prior_dict[var].apply_priors(x)
-
-            elif var in par:
-
-                x = par[var]
-
-                log_like += self.prior_dict[var].apply_priors(x)
 
         return log_like

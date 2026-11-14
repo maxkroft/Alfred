@@ -861,13 +861,16 @@ class ExoSystem:
 
             for i in range(self.n):
 
-                if 'e {0}'.format(i+1) in self.fixed or 'w {0}'.format(i+1) in self.fixed:
+                if 'e {0}'.format(i+1) in self.fixed or 'cw {0}'.format(i+1) in self.fixed or 'sw {0}'.format(i+1) in self.fixed:
 
                     self.x0.pop('secw {0}'.format(i+1))
                     self.x0.pop('sesw {0}'.format(i+1))
 
-                    self.x0['e {0}'.format(i+1)] = self.secosw[i]**2 + self.sesinw[i]**2
-                    self.x0['w {0}'.format(i+1)] = np.arctan2(self.sesinw[i], self.secosw[i])
+                    e = self.secosw[i]**2 + self.sesinw[i]**2
+
+                    self.x0['e {0}'.format(i+1)] = e
+                    self.x0['cw {0}'.format(i+1)] = self.secosw[i] / np.sqrt(e)
+                    self.x0['sw {0}'.format(i+1)] = self.sesinw[i] / np.sqrt(e)
 
                 if ('cos(i) {0}'.format(i+1) in self.fixed or 'comega {0}' in self.fixed or 'somega {0}'.format(i+1) in self.fixed) and 'sico {0}'.format(i+1) in self.x0:
 
@@ -895,7 +898,6 @@ class ExoSystem:
 
         req_priors = Table(rows = [
             ['e x', 'U', 0, 0.9],
-            ['w x', 'U', -np.pi, np.pi],
             ['u1 x', 'U', 0, 1],
             ['u2 x', 'U', 0, 1],
             ['feh', 'U', -0.5, 0.5],
@@ -920,6 +922,9 @@ class ExoSystem:
 
                 elif self.is_transit[i]:
                     req_priors.add_row(['cos(i) {0}'.format(i+1), 'U', 0, 1])
+
+                if 'cw {0}'.format(i+1) in self.x0 or 'sw {0}'.format(i+1) in self.x0:
+                    req_priors.add_row['rsq_w {0}'.format(i+1), 'UC', np.nan, np.nan]
 
         
 
@@ -1099,8 +1104,8 @@ class ExoSystem:
 
                     if 'e {0}'.format(j+1) in y:
 
-                        y['secw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.cos(y['w {0}'.format(j+1)])
-                        y['sesw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.sin(y['w {0}'.format(j+1)])
+                        y['secw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * y['cw {0}'.format(j+1)]
+                        y['sesw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * y['sw {0}'.format(j+1)]
 
             else:
 
@@ -1334,26 +1339,25 @@ class ExoSystem:
 
             for k in self.parnames:
 
-                if 'log(P)' in k:
+                k0 = k.split()[0]
+
+                if k0 == 'log(P)':
                     trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.0001, 2*self.nwalk))
 
-                if 'Tc' in k or 'TT' in k:
+                if k0 in ['Tc','TT']:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.0001, 2*self.nwalk)
 
-                if 'ror' in k or 'fp' in k or 'rstar' in k or 'mstar' in k:
+                if k0 in ['ror','fp','rstar','mstar']:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.1*self.x[k], 2*self.nwalk)
 
-                if 'log(a/rs)' in k or 'log(rhostar)' in k or 'log(K)' in k or 'log(q)' in k:
+                if k0 in ['log(a/rs)','log(rhostar)','log(K)','log(q)']:
                     trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
 
-                if 'cos(i)' in k or k.split()[0] == 'e':
+                if k0 in ['cos(i)','e']:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
 
-                if 'secw' in k or 'sesw' in k or 'comega' in k or 'somega' in k or 'sico' in k or 'siso' in k or k in ['u1','u2','feh','AV']:
+                if k0 in ['secw','sesw','comega','somega','sico','siso','cw','sw','u1','u2','feh','AV']:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.01, 2*self.nwalk)
-                    
-                if k.split()[0] == 'w':
-                    trial[self.parnames[k]] = np.random.normal(self.x[k], 1, 2*self.nwalk)
 
                 if '_gp' in k:
                     trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
@@ -1364,7 +1368,7 @@ class ExoSystem:
                 if k == 'log10(age)':
                     trial[self.parnames[k]] = np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, 2*self.nwalk))
 
-                if k == 'plx' or 'F0' in k:
+                if k0 in ['plx','F0']:
                     trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
 
             lp = self.allpriors.apply({k: trial[self.parnames[k]] for k in self.parnames} | self.fixed)
@@ -1841,8 +1845,8 @@ class ExoSystem:
 
                     if 'e {0}'.format(i+1) in y:
 
-                        y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
-                        y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+                        y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['cw {0}'.format(i+1)]
+                        y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['sw {0}'.format(i+1)]
 
             for i in range(self.n):
 
@@ -1890,7 +1894,8 @@ class ExoSystem:
                     else:
 
                         e = y['e {0}'.format(i+1)]
-                        w = y['w {0}'.format(i+1)]
+                        w = np.arctan2(y['sw {0}'.format(i+1)], y['cw {0}'.format(i+1)])
+                        self.dres['w {0}'.format(i+1)] = w
 
                 else:
 
@@ -2005,14 +2010,14 @@ class ExoSystem:
 
 
         par_units = {'log(P)': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'log(q)': '', 'sico': '',
-                     'siso': '', 'comega': '', 'somega': '', 'secw': '', 'sesw': '', 'fp': '', 'TT': 'BJD-2450000', 'F0': '', 'log(rho_gp)': 'days',
-                     'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'ra*_offset': 'mas',
-                     'dec_offset': 'mas', 'pmra*': 'mas/yr', 'pmdec': 'mas/yr', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex',
-                     'plx': 'mas', 'distance': 'pc', 'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'log(rhostar)': 'g/cm^3', 'rhostar': 'g/cm^3',
-                     'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2', 'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth',
-                     'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad', 'K': 'm/s', 'q': '', 'omega': 'rad', 'Mp': 'Mearth', 'rhop': 'g/cm^3',
-                     'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr', 'rhos': 'g/cm^3', 'TSM': '',
-                     'Tp': 'BJD-2450000',}
+                     'siso': '', 'comega': '', 'somega': '', 'secw': '', 'sesw': '', 'cw': '', 'sw': '', 'fp': '', 'TT': 'BJD-2450000', 'F0': '',
+                     'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s',
+                     'ra*_offset': 'mas', 'dec_offset': 'mas', 'pmra*': 'mas/yr', 'pmdec': 'mas/yr', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr',
+                     'feh': 'dex', 'plx': 'mas', 'distance': 'pc', 'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'log(rhostar)': 'g/cm^3',
+                     'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2', 'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days',
+                     'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad', 'K': 'm/s', 'q': '', 'omega': 'rad', 'Mp': 'Mearth',
+                     'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr', 'rhos': 'g/cm^3',
+                     'TSM': '', 'Tp': 'BJD-2450000',}
 
 
         out = []
@@ -2133,7 +2138,8 @@ class ExoSystem:
         - secw x: Square root of the eccentricity times the cosine of the argument of periastron, for planet number x.
         - sesw x: Square root of the eccentricity times the sine of the argument of periastron, for planet number x.
         - e x: Orbital eccentricity, for planet number x. Only fit if w is fixed.
-        - w x: Orbital argument of periastron, in radians, for planet number x. Only fit if e is fixed.
+        - cw x: Cosine of the orbital argument of periastron, for planet number x. Only fit if e is fixed.
+        - sw x: Sine of the orbital argument of periastron, for planet number x. Only fit if e is fixed.
         - fp x: Planet to star flux ratio, for planet number x.
         - log(q) x: Natural log of the planet to star mass ratio, for planet number x.
         - sico x: Sine of the inclination/2 times the cosine of the longitude of the ascending node, for planet number x. Fit for astrometric-only planets.
@@ -2504,7 +2510,7 @@ class ExoSystem:
             num2 += 1
             vargrid.append([])
 
-            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','e','w','sico','siso','comega','somega','fp']:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','e','cw','sw','sico','siso','comega','somega','fp']:
 
                 if z+' {0}'.format(i+1) in self.parnames:
                     vargrid[-1].append(z)
@@ -2783,7 +2789,7 @@ class ExoSystem:
 
             labels = []
 
-            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','e','w','sico','siso','comega','somega','fp']:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','e','cw','sw','sico','siso','comega','somega','fp']:
 
                 if z+' {0}'.format(i+1) in self.parnames:
 
@@ -2946,8 +2952,8 @@ class ExoSystem:
 
                 if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
 
-                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
-                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['cw {0}'.format(i+1)]
+                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['sw {0}'.format(i+1)]
 
         if self.fit_star:
 
@@ -3610,8 +3616,8 @@ class ExoSystem:
 
                 if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
 
-                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
-                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['cw {0}'.format(i+1)]
+                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['sw {0}'.format(i+1)]
 
         pars = []
         ps = []
@@ -3923,8 +3929,8 @@ class ExoSystem:
 
                 if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
 
-                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
-                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['cw {0}'.format(i+1)]
+                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * y['sw {0}'.format(i+1)]
 
         pars = []
         maxp = 0
@@ -5297,8 +5303,8 @@ def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
 
         if 'e {0}'.format(i+1) in par:
 
-            par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
-            par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
+            par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * par['cw {0}'.format(i+1)]
+            par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * par['sw {0}'.format(i+1)]
  
     nlin = len(miniexs.lin_names)
 

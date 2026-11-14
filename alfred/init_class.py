@@ -438,8 +438,8 @@ class Init_priors(InitFile):
 
         self.converters = {'Variable':str,'Prior Type':str,'Param 1':float,'Param 2':float}
 
-        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
-                             'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega',
+        self.allowed_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'cw', 'sw', 'w',
+                             'TT', 'fp', 'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega',
                              'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
                              'ra*_offset', 'dec_offset', 'pmra*', 'pmdec',
                              'eep', 'log10(age)', 'age', 'feh', 'plx', 'distance', 'AV', 'mstar', 'rstar', 'log(rhostar)', 'rhostar']
@@ -458,6 +458,8 @@ class Init_priors(InitFile):
                                  'square root of planet eccentricity times cosine of planet argument of periastron',
                                  'square root of planet eccentricity times sine of planet argument of periastron',
                                  'planet eccentricity',
+                                 'cosine of the argument of periastron',
+                                 'sine of the argument of periastron',
                                  'planet argument of periastron in radians',
                                  'individual planet transit time (for fitting TTVs) in BJD - 2450000',
                                  'planet to star flux ratio, only used for secondary eclipse fitting',
