@@ -186,7 +186,8 @@ class AllPriors:
         self.prior_dict = {}
         self.fixed = {}
 
-        self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)'], 'rhostar': ['log(rhostar)', 'eep'], 'i': ['cos(i)','sico'],
+        self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)','log(rhostar)'], 'log(a/rs)': ['log(a/rs)','log(rhostar)'],
+                           'rhostar': ['log(rhostar)', 'eep'], 'i': ['cos(i)','sico'],
                            'cos(i)': ['cos(i)','sico'], 'K': ['log(K)'], 'e': ['secw'], 'w': ['secw'], 'rho_gp': ['log(rho_gp)'],
                            'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'], 'omega': ['sico','comega'],
                            'rsq_omega': ['comega','sico'], 'comega': ['comega','sico'], 'somega': ['somega','sico'], 'distance': ['plx'],
@@ -212,6 +213,9 @@ class AllPriors:
             var = tab['Variable'][i]
 
             split = var.split()
+
+            if 'a/rs' in split and 'log(rhostar)' in x0keys:
+                continue
 
             svar = split[0]
             if svar in self.searchvars:
@@ -421,7 +425,7 @@ class AllPriors:
 
             split = var.split()
 
-            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp', 'q']:
+            if split[0] in ['P', 'K', 'rho_gp', 'sigma_gp', 'q']:
 
                 svar = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
@@ -439,9 +443,9 @@ class AllPriors:
 
                     log_like += self.prior_dict[var].apply_priors(x)
 
-            elif split[0] in ['log(rhostar)','rhostar']:
+            elif var in ['log(rhostar)','rhostar']:
 
-                if split[0] == 'rhostar' and 'log(rhostar)' in par:
+                if var == 'rhostar' and 'log(rhostar)' in par:
 
                     x = np.exp(par['log(rhostar)'])
 
@@ -465,7 +469,41 @@ class AllPriors:
 
                                 x = 0.018916375 * np.exp(par[y])**3 / np.exp(par[y2])**2
 
+                                if var == 'log(rhostar)':
+
+                                    x = np.log(x)
+
                                 log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] in ['log(a/rs)','a/rs']:
+
+                svar = ' '.join(['log(a/rs)']+split[1:])
+
+                if split[0] == 'a/rs' and svar in par:
+
+                    x = np.exp(par[svar])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                elif svar in par:
+
+                    x = par[svar]
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                elif 'log(rhostar)' in par:
+
+                    svar2 = ' '.join(['log(P)']+split[1:])
+
+                    if svar2 in par:
+
+                        x = (np.exp(par['log(rhostar)']) / 0.018916375 * np.exp(par[svar2])**2)**(1/3)
+
+                        if split[0] == 'log(a/rs)':
+
+                            x = np.log(x)
+
+                        log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'i':
 
