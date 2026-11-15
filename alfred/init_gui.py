@@ -553,7 +553,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.a_entry = FloatEntryFrame(self, "a/Rstar", 2, 1, min_val = 0)
         self.a_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['a/Rs']) else self.data['a/Rs']))
 
-        self.i_entry = FloatEntryFrame(self, "i (degrees)", 3, 0, min_val = -90, max_val = 90)
+        self.i_entry = FloatEntryFrame(self, "i (degrees)", 3, 0, min_val = 0, max_val = 180)
         self.i_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['i']) else self.data['i']))
 
         self.k_entry = FloatEntryFrame(self, "K (m/s)", 3, 1, min_val = 0)

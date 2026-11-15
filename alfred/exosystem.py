@@ -49,6 +49,8 @@ earthm_to_msun = (1*u.earthMass).to(u.Msun).value
 d_to_yr = (1*u.d).to(u.yr).value
 au_to_rsun = (1*u.AU).to(u.Rsun).value
 gcm3rsun3_to_msun = (1*u.g/u.cm**3*u.Rsun**3).to(u.Msun).value
+g_to_msun = (1*u.g).to(u.Msun).value
+au_to_cm = (1*u.AU).to(u.cm).value
 rsun_to_earthr = (1*u.Rsun).to(u.earthRad).value
 msun_to_earthm = (1*u.Msun).to(u.earthMass).value
 earthmearthr3_to_gcm3 = (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
@@ -475,8 +477,9 @@ class ExoSystem:
 
     def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_gaia: bool, fit_star: bool, nburn: int | float, nrun: int,
             parallel: bool | int | Literal['auto'] = False, sampler_type: Literal['emcee','zeus'] = 'emcee', min_nrun: int = 500, ntau: int = 50,
-            dtau: float = 0.01, nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
-            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, skip_state_check = False, conv_check_inter: int = 100) -> None:
+            dtau: float = 0.01, nwalk: int = 0, use_priors = False, fit_ld = False, fit_rhostar = False, sigma_clip: float = 5,
+            lc_supersample_size: int = 600, rv_bkg_order: int = 0, star_run: str = None, save_samples = False, show_plots = True,
+            skip_state_check = False, conv_check_inter: int = 100) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -531,12 +534,31 @@ class ExoSystem:
 
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
                 less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
-            
-            fit_ld (bool, optional): Whether or not to fit quadratic limb darkening coefficients as free parameters. Will be overriden to False if
-                fit_star is True, as limb darkening coefficients are generated at each step in that case. Default is False.
-            
+
             use_priors (bool, optional): Whether or not to use user specified priors from the init_priors file specified during ExoSystem
                 initialization. Default is False.
+            
+            fit_ld (bool, optional): Whether or not to fit quadratic limb darkening coefficients as free parameters. Will be overridden to False if
+                fit_star is True, as limb darkening coefficients are generated at each step in that case. Default is False.
+
+            fit_rhostar(bool, optional): Whether or not to fit for a single log(rhostar) parameter rather than individual log(a/rs) values for each
+                planet during a transit fit. This is automatically set to True when fit_gaia is also True. Will be overridden to False if fit_star is True,
+                as it will be generated from the MIST models. Default is False.
+
+            sigma_clip (float, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
+                sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
+                that probably shouldn't be, increase this parameter and run it again. To turn off sigma clipping set this parameter to 0. Default is 5.
+
+            lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
+                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
+                
+                For example, if a data set has an exposure time of 1800 seconds and this parameter is set to 600 seconds, each point in the data
+                set will be modeled as the average of three points with an exposure time of 600 seconds.
+                
+                Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the cost of
+                slowing down the fit.
+                
+                Default is 600 seconds.
             
             rv_bkg_order (int, optional): Polynomial order for the background trend fit to the RV data. Can be 0 (for a flat line), 1 (for a slope),
                 or 2 (for a quadratic). Default is 0.
@@ -548,21 +570,6 @@ class ExoSystem:
             save_samples (bool, optional): Whether or not to save the full, unflattened, un-thinned MCMC chains to a pickle file. This can be handy
                 if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
                 and these take up additional storage. Default is False.
-            
-            sigma_clip (float, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
-                sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
-                that probably shouldn't be, increase this parameter and run it again. To turn off sigma clipping set this parameter to 0. Default is 5.
-            
-            lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
-                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
-                
-                For example, if a data set has an exposure time of 1800 seconds and this parameter is set to 600 seconds, each point in the data
-                set will be modeled as the average of three points with an exposure time of 600 seconds.
-                
-                Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the cost of
-                slowing down the fit.
-                
-                Default is 600 seconds.
             
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
 
@@ -582,6 +589,7 @@ class ExoSystem:
         self.rv_bkg_order = rv_bkg_order
         self.sigma_clip = sigma_clip
         self.fit_ld = fit_ld
+        self.fit_rhostar = fit_rhostar
         self.fit_transit = fit_transit
         self.fit_rv = fit_rv
         self.fit_gaia = fit_gaia
@@ -641,9 +649,18 @@ class ExoSystem:
             self.supersamples = np.array([max(1,int(x/self.lc_supersample_size)) for x in self.exptimes*24*60*60])
 
 
+        if self.fit_gaia and self.fit_transit:
+            self.fit_rhostar = True
+
+        elif not self.fit_transit:
+            self.fit_rhostar = False
+
+
         if self.fit_star:
 
             self.fit_ld = False
+
+            self.fit_rhostar = False
 
             self.misti = get_ichrone('mist', bands = list(self.magbands))
 
@@ -678,13 +695,16 @@ class ExoSystem:
 
         if self.fit_planets:
 
+            if self.fit_rhostar:
+
+                self.x0['log(rhostar)'] = np.log(self.ms/(4/3*np.pi*self.rs**3)*msunrsun3_to_gcm3)
+
             if not self.fit_star and self.fit_gaia:
 
                 self.x0['plx'] = self.plx
 
                 if self.fit_transit:
 
-                    self.x0['log(rhostar)'] = np.log(self.ms/(4/3*np.pi*self.rs**3)*msunrsun3_to_gcm3)
                     self.x0['rstar'] = self.rs
 
                 else:
@@ -708,7 +728,7 @@ class ExoSystem:
 
                     self.x0['ror {0}'.format(i+1)] = self.ror[i]
 
-                    if not self.fit_star and not self.fit_gaia:
+                    if not self.fit_rhostar:
 
                         self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[i])                    
 
@@ -1793,6 +1813,7 @@ class ExoSystem:
 
             rstar = self.dres['rstar']
             mstar = self.dres['mstar']
+            rhostar = self.dres['rhostar']
             T = self.dres['Tstar']
 
             interp_input = np.array([self.dres['Tstar'], self.dres['loggstar'], self.res['feh']]).T
@@ -1812,6 +1833,7 @@ class ExoSystem:
 
             if 'rstar' in y:
                 rstar = y['rstar']
+
             else:
                 rstar = np.random.normal(self.rs, self.rserr, n)
                 self.dres['rstar'] = rstar
@@ -1856,9 +1878,15 @@ class ExoSystem:
                     rp = y['ror {0}'.format(i+1)] * rstar * rsun_to_earthr
                     self.dres['Rp {0}'.format(i+1)] = rp
 
-                    if not self.fit_star and not self.fit_gaia:
-
+                    if not self.fit_star and not self.fit_rhostar:
                         ars = np.exp(y['log(a/rs) {0}'.format(i+1)])
+                        self.dres['a/rs {0}'.format(i+1)] = ars
+
+                        a = ars * rstar / au_to_rsun
+                        self.dres['a {0}'.format(i+1)] = a
+
+                    elif not (self.is_rv[i] and self.fit_rv) and not (self.is_astro[i] and self.fit_gaia):
+                        ars = (rhostar * p**2 / 0.018916375)**(1/3)
                         self.dres['a/rs {0}'.format(i+1)] = ars
 
                         a = ars * rstar / au_to_rsun
@@ -1951,6 +1979,15 @@ class ExoSystem:
 
                         mp = calc_m_from_k(p*d_to_yr, k, e, np.pi/2, mstar)
                         self.dres['Mpsini {0}'.format(i+1)] = mp
+
+
+                if (self.fit_star or self.fit_rhostar) and self.is_astro[i] and self.fit_gaia:
+
+                    ars = (rhostar * 4/3*np.pi * g_to_msun * (1+q) * (p*d_to_yr)**2)**(1/3) * au_to_cm
+                    self.dres['a/rs {0}'.format(i+1)] = ars
+
+                    a = ars * rstar / au_to_rsun
+                    self.dres['a {0}'.format(i+1)] = a
 
                 if self.is_fit[i] and 'a/rs {0}'.format(i+1) not in self.dres:
 
@@ -5004,10 +5041,9 @@ def get_transit_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArra
         ar = np.exp(par['log(a/rs) {0}'.format(i)])
 
     elif 'log(q) {0}'.format(i) in par:
-        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
-        ar = (ms*(1+np.exp(par['log(q) {0}'.format(i)])) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
+        ar = (np.exp(par['log(rhostar)']) * 4/3*np.pi * g_to_msun * (1+np.exp(par['log(q) {0}'.format(i)])) * (p*d_to_yr)**2)**(1/3) * au_to_cm
     
-    elif 'log(K) {0}'.format(i) in par:
+    elif 'log(K) {0}'.format(i) in par and 'rstar' in par:
         ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
         mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*earthm_to_msun
         ar = ((ms+mp) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
