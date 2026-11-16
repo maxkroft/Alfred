@@ -937,14 +937,16 @@ class ExoSystem:
                 if self.is_astro[i]:
                     req_priors.add_row(['cos(i) {0}'.format(i+1), 'U', -1, 1])
 
-                    if self.is_transit[i]:
-                        req_priors.add_row(['rsq_omega {0}'.format(i+1), 'UC', np.nan, np.nan])
-
                 elif self.is_transit[i]:
                     req_priors.add_row(['cos(i) {0}'.format(i+1), 'U', 0, 1])
 
-                if 'cw {0}'.format(i+1) in self.x0 or 'sw {0}'.format(i+1) in self.x0:
-                    req_priors.add_row['rsq_w {0}'.format(i+1), 'UC', np.nan, np.nan]
+        for i in range(self.n):
+
+            if 'cw {0}'.format(i+1) in self.x0 or 'sw {0}'.format(i+1) in self.x0:
+                req_priors.add_row['rsq_w {0}'.format(i+1), 'UC', np.nan, np.nan]
+
+            if 'comega {0}'.format(i+1) in self.x0 or 'somega {0}'.format(i+1) in self.x0:
+                req_priors.add_row(['rsq_omega {0}'.format(i+1), 'UC', np.nan, np.nan])
 
         
 
