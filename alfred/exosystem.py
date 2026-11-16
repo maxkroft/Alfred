@@ -1508,7 +1508,7 @@ class ExoSystem:
 
             self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
 
-            self.lin_par = self.sampler.get_blobs(discard = int(burnfrac*it))
+            self.lin_par = self.sampler.get_blobs(discard = int(burnfrac*it))[:self.samples.shape[0]]
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
@@ -2980,6 +2980,8 @@ class ExoSystem:
 
         n = len(y['log_like'])
 
+        idxs = np.random.choice(n, 100, replace = False)
+
         if self.use_priors:
 
             f = self.fixed.copy()
@@ -3103,10 +3105,10 @@ class ExoSystem:
                     eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = rs, q = q))
 
 
-            fmphase_err = [[] for j in range(self.nt)]
-            eclphase_err = [[] for j in range(np.sum(self.is_eclipse))]
+            fmphase_draws = [[] for j in range(self.nt)]
+            eclphase_draws = [[] for j in range(np.sum(self.is_eclipse))]
 
-            for j in tqdm(range(0,n,200)):
+            for j in tqdm(idxs):
 
                 for k in range(self.n):
 
@@ -3115,7 +3117,7 @@ class ExoSystem:
 
                     l = np.sum(self.is_transit[:k])
 
-                    fmphase_err[l].append(lightCurve(pars[l][j], ttphase + tcs[l], ld[j] if ld.ndim > 1 else ld, phaseexp, phasess))
+                    fmphase_draws[l].append(lightCurve(pars[l][j], ttphase + tcs[l], ld[j] if ld.ndim > 1 else ld, phaseexp, phasess))
 
                     if self.is_eclipse[k]:
 
@@ -3129,13 +3131,9 @@ class ExoSystem:
 
                         tc2 = calc_t_sec(pars[l][j][0], pars[l][j][1], pars[l][j][5], pars[l][j][6]*np.pi/180, pars[l][j][3], pars[l][j][4]*np.pi/180, rs, q)
                         le = np.sum(self.is_eclipse[:k])
-                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rs, q = q))
-
-            fmphase_err = np.percentile(fmphase_err, [16,84], axis = 1)
-            if np.any(self.is_eclipse):
-                eclphase_err = np.percentile(eclphase_err, [16,84], axis = 1)
+                        eclphase_draws[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rs, q = q))
             
-            self._lcm['phase'][filt] = {'fmphase': np.array(fmphase), 'fmphase_err': fmphase_err, 'eclphase': np.array(eclphase), 'eclphase_err': eclphase_err}
+            self._lcm['phase'][filt] = {'fmphase': np.array(fmphase), 'fmphase_draws': fmphase_draws, 'eclphase': np.array(eclphase), 'eclphase_draws': eclphase_draws}
 
         print('Full:\n')
 
@@ -3167,8 +3165,6 @@ class ExoSystem:
 
                 kernel = terms.SHOTerm(rho = rhogp[0], sigma = sigmagp[0], Q = 1/np.sqrt(2))
                 gp = GaussianProcess(kernel = kernel)
-
-                gpf_err = []
 
             fm = []
 
@@ -3237,9 +3233,13 @@ class ExoSystem:
                 z['gpf'] = np.array(gpf)
 
 
-            fm_err = [[] for j in range(self.nt)]
+            fm_draws = [[] for j in range(self.nt)]
 
-            for j in tqdm(range(0,n,200)):
+            if detrend:
+
+                gpf_draws = []
+
+            for j in tqdm(idxs):
 
                 fmsum = 0
 
@@ -3289,23 +3289,20 @@ class ExoSystem:
                             fm0 = lightCurve(pars[l][j], self.tt[i], ld[j] if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i])
                         
                     fmsum += fm0
-                    fm_err[l].append(fm0)
+                    fm_draws[l].append(fm0)
 
                 if detrend:
 
                     gp = set_gp_params(rhogp[j], sigmagp[j], self.tt[i], self.ferr[i], gp)
                     gpf0 = gp.predict(self.f[i] - fmsum - mean[j])
-                    gpf_err.append(gpf0)
+                    gpf_draws.append(gpf0)
 
 
-            fm_err = np.percentile(fm_err, [16,84], axis = 1)
-
-            z['fm_err'] = fm_err
+            z['fm_draws'] = fm_draws
 
             if detrend:
 
-                gpf_err = np.percentile(gpf_err, [16,84], axis = 0)
-                z['gpf_err'] = gpf_err
+                z['gpf_draws'] = gpf_draws
 
             self._lcm[sec] = z
 
@@ -3321,25 +3318,23 @@ class ExoSystem:
         is a key for each filter/bandpass used (e.g. TESS or Kepler). These are their own dicts with the following:
 
         - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
-          model light curve for each planet, at the times of ttphase.
-        - fmphase_err: A 3d numpy array of the 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
-          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
-          with each row corresponding to a different planet.
+            model light curve for each planet, at the times of ttphase.
+        - fmphase_draws: A 3d numpy array of 100 model light curves for each transiting planet, randomly drawn from the chains. The 0th axis
+            corresponds to each planet, and the 1st axis corresponds to each different model.
         - eclphase: The same as fmphase, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an empty array if
-          no planets were fit for secondary eclipses.
-        - eclphase_err: The same as fmphase_err, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an empty
-          array if no planets were fit for secondary eclipses.
+            no planets were fit for secondary eclipses.
+        - eclphase_draws: The same as fmphase_draws, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an
+            empty array if no planets were fit for secondary eclipses.
         
         Each of the data set keys is a dict with the following:
 
         - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
-          each planet at the times of this data set.
-        - fm_err: A 3d numpy array of the 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
-          error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
-          corresponding to a different planet.
+            each planet at the times of this data set.
+        - fm_draws: A 3d numpy array of 100 model light curves for each transiting planet, randomly drawn from the chains. The 0th axis corresponds
+            to each planet, and the 1st axis corresponds to each different model.
         - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
-        - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
-          1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.        
+        - gpf_draws: A 2d numpy array of 100 GP detrending models for the light curve, randomly drawn from the chains. The 0th axis corresponds to
+            each different model.        
         """
         return self._lcm
 
@@ -3373,17 +3368,18 @@ class ExoSystem:
             fig, ax = plt.subplot_mosaic(mosaic, figsize = (14,10), layout = 'constrained')
 
             fm = self._lcm[sec]['fm']
-            fm_err = self._lcm[sec]['fm_err']
+            fm_draws = self._lcm[sec]['fm_draws']
             mean = np.median(self.res['F0 {0}'.format(sec)] if 'F0 {0}'.format(sec) in self.res else self.fixed['F0 {0}'.format(sec)])
 
             if self.detrend[i]:
 
                 gpf = self._lcm[sec]['gpf']
-                gpf_err = self._lcm[sec]['gpf_err']
+                gpf_draws = self._lcm[sec]['gpf_draws']
 
                 ax['a'].errorbar(self.tt[i], self.f[i], yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
-                ax['a'].plot(self.tt[i], gpf + mean, color = 'green', label = 'GP Model', zorder = 3, linewidth = 2)
-                ax['a'].fill_between(self.tt[i], gpf_err[0]+mean, gpf_err[1]+mean, color = 'green', edgecolor = 'none', alpha = 0.5, zorder = 2)
+                ax['a'].plot(self.tt[i], gpf + mean, color = 'forestgreen', label = 'GP Model', zorder = 3, linewidth = 2)
+                for j in range(len(gpf_draws)):
+                    ax['a'].plot(self.tt[i], gpf_draws[j]+mean, color = 'darkgreen', linewidth = 1, zorder = 1, alpha = 0.05)
 
                 ax['a'].tick_params(axis = 'both', labelsize = 15)
                 ax['a'].set_title(str(sec), fontsize = 20)
@@ -3399,8 +3395,11 @@ class ExoSystem:
 
                 k = np.sum(self.is_transit[:j])
 
-                ax['b'].plot(self.tt[i], fm[k]+mean, label = 'Planet {0}'.format(j+1), zorder = 3, linewidth = 2)
-                ax['b'].fill_between(self.tt[i], fm_err[0][k]+mean, fm_err[1][k]+mean, zorder = 2, alpha = 0.5, edgecolor = 'none')
+                color = ['red','darkorange','green','blue','darkorchid'][k]
+
+                ax['b'].plot(self.tt[i], fm[k]+mean, label = 'Planet {0}'.format(j+1), zorder = 3, linewidth = 2, color = color)
+                for l in range(len(fm_draws[k])):
+                    ax['b'].plot(self.tt[i], fm_draws[k][l]+mean, color = color, zorder = 1, linewidth = 1, alpha = 0.05)
             
             ax['b'].tick_params(axis = 'both', labelsize = 15)
             ax['b'].legend(fontsize = 15)
@@ -3509,7 +3508,7 @@ class ExoSystem:
                 xfold = ((newt - tc + 0.5 * p) % p - 0.5 * p) * 24
                 ttphase = self._lcm['phase']['ttphase'] * 24
                 fmphase = self._lcm['phase'][self.filters[i]]['fmphase'][k] + mean
-                fmphase_err = self._lcm['phase'][self.filters[i]]['fmphase_err'][:,k] + mean
+                fmphase_draws = self._lcm['phase'][self.filters[i]]['fmphase_draws'][k] + mean
                 fm = self._lcm[sec]['fm'][k]
 
                 ax['a{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
@@ -3522,7 +3521,8 @@ class ExoSystem:
                 ax['a{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
 
                 ax['a{0}'.format(k)].plot(ttphase, fmphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
-                ax['a{0}'.format(k)].fill_between(ttphase, fmphase_err[0], fmphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
+                for l in range(len(fmphase_draws)):
+                    ax['a{0}'.format(k)].plot(ttphase, fmphase_draws[l], color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
 
                 ax['a{0}'.format(k)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(k)].transAxes)
 
@@ -3581,7 +3581,7 @@ class ExoSystem:
                     other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                     xfold = ((newt - tc2 + 0.5 * p) % p - 0.5 * p) * 24
                     eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke] + mean
-                    eclphase_err = self._lcm['phase'][self.filters[i]]['eclphase_err'][:,ke] + mean
+                    eclphase_draws = self._lcm['phase'][self.filters[i]]['eclphase_draws'][ke] + mean
 
                     ax['c{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
@@ -3593,7 +3593,8 @@ class ExoSystem:
                     ax['c{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
 
                     ax['c{0}'.format(k)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
-                    ax['c{0}'.format(k)].fill_between(ttphase, eclphase_err[0], eclphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
+                    for l in range(len(eclphase_draws)):
+                        ax['c{0}'.format(k)].plot(ttphase, eclphase_draws[l], color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
 
                     ax['c{0}'.format(k)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(k)].transAxes)
 
@@ -3719,10 +3720,12 @@ class ExoSystem:
 
         rvallplot += bkgplot
 
-        rvallplot_err = []
-        rvmphase_err = [[] for i in range(self.nr)]
+        rvallplot_draws = []
+        rvmphase_draws = [[] for i in range(self.nr)]
 
-        for i in tqdm(range(0,n,20)):
+        idxs = np.random.choice(n, 100, replace = False)
+
+        for i in tqdm(idxs):
 
             rvallplot0 = 0
 
@@ -3735,17 +3738,14 @@ class ExoSystem:
 
                 rvallplot0 += rvModel(pars[k][i], trplot)
 
-                rvmphase_err[k].append(rvModel(pars[k][i], trphase * ps[k] + tcs[k]))
+                rvmphase_draws[k].append(rvModel(pars[k][i], trphase * ps[k] + tcs[k]))
 
             bkgplot0 = trend0[i] * np.full(trplot.shape, 1) + (trend1[i] * (trplot - self.tr_ref) if bkg_order > 0 else 0) + (trend2[i] * (trplot - self.tr_ref)**2 if bkg_order > 1 else 0)
 
-            rvallplot_err.append(rvallplot0 + bkgplot0)
+            rvallplot_draws.append(rvallplot0 + bkgplot0)
 
 
-        rvallplot_err = np.percentile(rvallplot_err, [16,84], axis = 0)
-        rvmphase_err = np.percentile(rvmphase_err, [16,84], axis = 1)
-
-        self._rvm = {'rvm': np.array(rvm), 'bkg': bkg, 'rvallplot': rvallplot, 'rvallplot_err': rvallplot_err, 'rvmplot': np.array(rvmplot), 'bkgplot': bkgplot, 'rvmphase': np.array(rvmphase), 'rvmphase_err': rvmphase_err, 'trplot': trplot, 'trphase': trphase}
+        self._rvm = {'rvm': np.array(rvm), 'bkg': bkg, 'rvallplot': rvallplot, 'rvallplot_draws': rvallplot_draws, 'rvmplot': np.array(rvmplot), 'bkgplot': bkgplot, 'rvmphase': np.array(rvmphase), 'rvmphase_draws': rvmphase_draws, 'trplot': trplot, 'trphase': trphase}
 
         pickle.dump(self._rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
 
@@ -3764,14 +3764,12 @@ class ExoSystem:
         - bkgplot: A 1d numpy array of the values of the background polynomial trend at the times of trplot, for smooth plotting.
         - rvallplot: A 1d numpy array of the full best fit RV model at the times of trplot, for smooth plotting. It is the sum of all planet
           components and the background polynomial.
-        - rvallplot_err: A 2d numpy array of the 1 sigma uncertainties on rvallplot. In the 0th axis, the 0 index is a 1d array corresponding to
-          the lower 1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
+        - rvallplot_draws: A 2d numpy array of 100 rv models randomly drawn from the chains. The 0th axis corresponds to each different model.
         - trphase: A 1d numpy array of phase folded times.
         - rvmphase: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit phase-folded RV
           model for each planet, at the times of trphase.
-        - rvmphase_err: A 3d numpy array of the 1 sigma uncertainties on rvmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
-          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like rvmphase,
-          with each row corresponding to a different planet.
+        - rvmphase_draws: A 3d numpy array of 100 phased rv models randomly drawn from the chains. The 0th axis corresponds to each planet, and the 1st
+            axis corresponds to each different model.
         """
         return self._rvm
 
@@ -3805,13 +3803,13 @@ class ExoSystem:
 
         trplot = self._rvm['trplot']
         rvallplot = self._rvm['rvallplot']
-        rvallplot_err = self._rvm['rvallplot_err']
+        rvallplot_draws = self._rvm['rvallplot_draws']
         rvmplot = self._rvm['rvmplot']
         bkgplot = self._rvm['bkgplot']
         rvm = self._rvm['rvm']
         bkg = self._rvm['bkg']
         rvmphase = self._rvm['rvmphase']
-        rvmphase_err = self._rvm['rvmphase_err']
+        rvmphase_draws = self._rvm['rvmphase_draws']
         trphase = self._rvm['trphase']
 
         y = self.res | self.dres
@@ -3835,7 +3833,8 @@ class ExoSystem:
 
 
         ax['a'].plot(trplot, rvallplot, color = 'mediumseagreen', linewidth = 2, zorder = 2)
-        ax['a'].fill_between(trplot, rvallplot_err[0], rvallplot_err[1], color = 'mediumseagreen', zorder = 1, alpha = 0.5, edgecolor = 'none')
+        for i in range(len(rvallplot_draws)):
+            ax['a'].plot(trplot, rvallplot_draws[i], color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
 
         for i in range(self.n):
 
@@ -3898,8 +3897,10 @@ class ExoSystem:
 
                 ax['c{0}'.format(j)].errorbar(xfold[jj], rv[jj] - other[jj] - bkg[jj], yerr = self.rverr[jj], fmt = '.', color = ['black','red','darkorange','green','blue','darkorchid'][ii], zorder = 3, markersize = 10, elinewidth = 2)
 
-            ax['c{0}'.format(j)].plot(trphase, rvmphase[j], linewidth = 2, zorder = 2)
-            ax['c{0}'.format(j)].fill_between(trphase, rvmphase_err[0][j], rvmphase_err[1][j], alpha = 0.5, edgecolor = 'none', zorder = 1)
+            ax['c{0}'.format(j)].plot(trphase, rvmphase[j], linewidth = 2, zorder = 2, color = 'dodgerblue')
+            for k in range(len(rvmphase_draws[j])):
+                ax['c{0}'.format(j)].plot(trphase, rvmphase_draws[j][k], color = 'royalblue', linewidth = 1, zorder = 1, alpha = 0.05)
+
 
             ax['c{0}'.format(j)].text(0.01, 0.99, 'Planet {0}'.format(i+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(j)].transAxes)
 
@@ -4092,24 +4093,7 @@ class ExoSystem:
         bkgskyra = X[2] * (tgsky - self.tg_ref)*d_to_yr + raplxsky
         bkgskydec = X[3] * (tgsky - self.tg_ref)*d_to_yr + decplxsky
 
-        gm_err = []
-
-        for i in tqdm(range(0,n,20)):
-
-            gm0 = self.plxf * y['plx'][i] + (y['ra*_offset'][i] + y['pmra*'][i]*tgyr)*np.sin(self.psi) + (y['dec_offset'][i] + y['pmdec'][i]*tgyr)*np.cos(self.psi)
-
-            for j in range(self.n):
-
-                if not self.is_astro[j]:
-                    continue
-
-                k = np.sum(self.is_astro[:j])
-
-                gm0 += Gaia_AL_Model(pars[k][i], self.tg, self.psi)[2]
-
-            gm_err.append(gm0)
-
-
+        gm_draws = []
         gmskyra_draws = []
         gmskydec_draws = []
         gmorbra_draws = []
@@ -4117,8 +4101,9 @@ class ExoSystem:
 
         idxs = np.random.choice(n, 100, replace = False)
 
-        for i in idxs:
+        for i in tqdm(idxs):
 
+            gm0 = self.plxf * y['plx'][i] + (y['ra*_offset'][i] + y['pmra*'][i]*tgyr)*np.sin(self.psi) + (y['dec_offset'][i] + y['pmdec'][i]*tgyr)*np.cos(self.psi)
             gmskyra0 = 0
             gmskydec0 = 0
             gmorbra0 = 0
@@ -4131,6 +4116,8 @@ class ExoSystem:
 
                 k = np.sum(self.is_astro[:j])
 
+                gm0 += Gaia_AL_Model(pars[k][i], self.tg, self.psi)[2]
+
                 gmsky = Gaia_AL_Model(pars[k][i], tgsky, np.zeros(tgsky.shape))
                 gmskyra0 += gmsky[0]
                 gmskydec0 += gmsky[1]
@@ -4139,15 +4126,14 @@ class ExoSystem:
                 gmorbra0 += gmorb[0]
                 gmorbdec0 += gmorb[1]
 
+            gm_draws.append(gm0)
             gmskyra_draws.append(gmskyra0)
             gmskydec_draws.append(gmskydec0)
             gmorbra_draws.append(gmorbra0)
             gmorbdec_draws.append(gmorbdec0)
 
 
-        gm_err = np.percentile(gm_err, [16,84], axis = 0)
-
-        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_err': np.array(gm_err), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(bkgdec), 'tgsky': tgsky, 'gmskyra': np.array(gmskyra), 'gmskydec': np.array(gmskydec), 'gmskyra_draws': np.array(gmskyra_draws), 'gmskydec_draws': np.array(gmskydec_draws), 'bkgskyra': np.array(bkgskyra), 'bkgskydec': np.array(bkgskydec), 'tgorb': tgorb, 'gmorbra': np.array(gmorbra), 'gmorbdec': np.array(gmorbdec), 'gmorbra_draws': np.array(gmorbra_draws), 'gmorbdec_draws': np.array(gmorbdec_draws), 'gmorbra_pl': np.array(gmorbra_pl), 'gmorbdec_pl': np.array(gmorbdec_pl), 'xpts': np.array(xpts), 'ypts': np.array(ypts)}
+        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_draws': np.array(gm_draws), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(bkgdec), 'tgsky': tgsky, 'gmskyra': np.array(gmskyra), 'gmskydec': np.array(gmskydec), 'gmskyra_draws': np.array(gmskyra_draws), 'gmskydec_draws': np.array(gmskydec_draws), 'bkgskyra': np.array(bkgskyra), 'bkgskydec': np.array(bkgskydec), 'tgorb': tgorb, 'gmorbra': np.array(gmorbra), 'gmorbdec': np.array(gmorbdec), 'gmorbra_draws': np.array(gmorbra_draws), 'gmorbdec_draws': np.array(gmorbdec_draws), 'gmorbra_pl': np.array(gmorbra_pl), 'gmorbdec_pl': np.array(gmorbdec_pl), 'xpts': np.array(xpts), 'ypts': np.array(ypts)}
 
         pickle.dump(self._gaiam, open(self.direc+'Output/'+name+'_gaiam.p', 'wb'))
 
@@ -4162,8 +4148,8 @@ class ExoSystem:
             combined with bkg to match the data.
         - bkg: A 1d numpy array of the values of the along scan offsets due to the proper motion, position offsets, and parallax motion, at the
             observation times.
-        - gm_err: A 2d numpy array of the 1 sigma uncertainties on the full gm + bkg model at the observation times. In the 0th axis, the 0 index
-            corresponds to a 1d array of the lower 1 sigma error and the 1 index corresponds to a 1d array of the upper 1 sigma error.
+        - gm_draws: A 2d numpy array of 100 full gm + bkg models at the observation times, randomly drawn from the chains. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gm + bkg.
         - gmra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the observation times.
         - gmdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the observation times.
         - bkgra: A 1d numpy array of the ra* proper motion and ra* component of the parallax motion, at the observation times.
@@ -4216,11 +4202,12 @@ class ExoSystem:
 
         gm = self._gaiam['gm']
         bkg = self._gaiam['bkg']
-        gmerr = self._gaiam['gm_err']
+        gm_draws = self._gaiam['gm_draws']
 
         ax['a'].errorbar(self.tg, self.gal, yerr = self.galerr, fmt = '.k', markersize = 10, elinewidth = 2, zorder = 2)
         ax['a'].plot(self.tg, gm+bkg, color = 'mediumseagreen', linewidth = 2, zorder = 1)
-        ax['a'].fill_between(self.tg, gmerr[0], gmerr[1], color = 'mediumseagreen', zorder = 0, alpha = 0.5, edgecolor = 'none')
+        for i in range(len(gm_draws)):
+            ax['a'].plot(self.tg, gm_draws[i],  color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
 
         ax['a'].tick_params(axis = 'both', labelsize = 15)
         ax['a'].set_ylabel('Gaia AL Offset [mas]', fontsize = 20)
