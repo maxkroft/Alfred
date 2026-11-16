@@ -2053,12 +2053,22 @@ class ExoSystem:
 
 
         out = []
+
         for x in self.res:
             if x == 'log_like':
                 continue
             out.append([x, par_units[x.split()[0]], np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
+
         for x in self.dres:
             out.append([x, par_units[x.split()[0]], np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
+
+        for x in self.fixed:
+            out.append([x, par_units[x.split()[0]], self.fixed[x], 0, 0])
+
+        if 'gamma_dot' in self.res:
+            out.append(['RV t_ref', 'BJD-2450000', self.tr_ref, 0, 0])
+        if self.fit_gaia:
+            out.append(['Gaia t_ref', 'BJD-2450000', self.tg_ref, 0, 0])
 
         tab = Table(rows = out, names = ['Parameter','Units','Median','-Error','+Error'])
         self.restab = tab
