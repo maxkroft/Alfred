@@ -1508,7 +1508,9 @@ class ExoSystem:
 
             self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
 
-            self.lin_par = self.sampler.get_blobs(discard = int(burnfrac*it))[:self.samples.shape[0]]
+            self.lin_par = self.sampler.get_blobs(discard = int(burnfrac*it))
+            if self.lin_par is not None:
+                self.lin_par = self.lin_par[:self.samples.shape[0]]
 
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
