@@ -3524,6 +3524,26 @@ class ExoSystem:
 
             y = y | self.fixed
 
+        mos = []
+        for j in range(self.nt):
+            mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
+            mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
+            mos.append(['b{0}'.format(j),'b{0}'.format(j)] + (['d{0}'.format(j)] if eclipse else []))
+
+        allt = [[] for i in range(len(self.lcnames))]
+        allf = [[] for i in range(len(self.lcnames))]
+        allresid = [[] for i in range(len(self.lcnames))]
+        allferr = [[] for i in range(len(self.lcnames))]
+
+        if eclipse:
+            allte = [[] for i in range(len(self.lcnames))]
+            allfe = [[] for i in range(len(self.lcnames))]
+            allreside = [[] for i in range(len(self.lcnames))]
+            allferre = [[] for i in range(len(self.lcnames))]
+
+
+        ttphase = self._lcm['phase']['ttphase'] * 24
+
         for i in range(len(self.lcnames)):
 
             sec = self.lcnames[i]
@@ -3531,12 +3551,6 @@ class ExoSystem:
             alpha = 0.1
             if self.exptimes[i] >= 1200/60/60/24:
                 alpha = 0.3
-
-            mos = []
-            for j in range(self.nt):
-                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
-                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
-                mos.append(['b{0}'.format(j),'b{0}'.format(j)] + (['d{0}'.format(j)] if eclipse else []))
 
             fig, ax = plt.subplot_mosaic(mos, figsize = (21 if eclipse else 14,6*self.nt), sharex = True, layout = 'constrained')
 
@@ -3570,10 +3584,15 @@ class ExoSystem:
 
                 other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                 xfold = ((newt - tc + 0.5 * p) % p - 0.5 * p) * 24
-                ttphase = self._lcm['phase']['ttphase'] * 24
                 fmphase = self._lcm['phase'][self.filters[i]]['fmphase'][k] + mean
                 fmphase_draws = self._lcm['phase'][self.filters[i]]['fmphase_draws'][k] + mean
                 fm = self._lcm[sec]['fm'][k]
+
+                ind = np.where(np.abs(xfold) <= 12)[0]
+                allt[i].append(xfold[ind])
+                allf[i].append((self.f[i]-other-mean)[ind])
+                allresid[i].append((self.f[i] - other - fm - mean)[ind])
+                allferr[i].append(self.ferr[i][ind])
 
                 ax['a{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
@@ -3647,6 +3666,12 @@ class ExoSystem:
                     eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke] + mean
                     eclphase_draws = self._lcm['phase'][self.filters[i]]['eclphase_draws'][ke] + mean
 
+                    ind = np.where(np.abs(xfold) <= 12)[0]
+                    allt[i].append(xfold[ind])
+                    allf[i].append((self.f[i]-other-mean)[ind])
+                    allreside[i].append((self.f[i]-other-fm-mean)[ind])
+                    allferr[i].append(self.ferr[i][ind])
+
                     ax['c{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                     exp = self.exptimes[i]*60*60*24
@@ -3687,6 +3712,159 @@ class ExoSystem:
                 ax[a].set_rasterized(True)
 
             fig.savefig(self.direc+'/Plots/'+name+'/transits_{0}.png'.format(sec))
+
+            if show_plot:
+                plt.show()
+
+            else:
+                plt.close()
+
+
+        alpha = 0.1
+
+        for filt in np.unique(self.filters):
+
+            fig, ax = plt.subplot_mosaic(mos, figsize = (21 if eclipse else 14,6*self.nt), sharex = True, layout = 'constrained')
+
+            for j in range(self.n):
+
+                if not self.is_transit[j]:
+                    continue
+
+                k = np.sum(self.is_transit[:j])
+
+                fmphase = self._lcm['phase'][filt]['fmphase'][k]
+                fmphase_draws = self._lcm['phase'][filt]['fmphase_draws'][k]
+
+                tempt, tempf = [], []
+
+                for i in range(len(self.lcnames)):
+
+                    if self.filters[i] != filt:
+                        continue
+
+                    ax['a{0}'.format(k)].errorbar(allt[i][k], allf[i][k] + 1, yerr = allferr[i][k], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                    tempt.append(allt[i][k])
+                    tempf.append(allf[i][k] + 1)
+
+                tempt, tempf = np.concatenate(tempt), np.concatenate(tempf)
+
+                bins = np.linspace(-12, 12, 50)
+                denom, _ = np.histogram(tempt, bins)
+                num, _ = np.histogram(tempt, bins, weights = tempf)
+                denom[num == 0] = 1.0
+                ax['a{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+
+                ax['a{0}'.format(k)].plot(ttphase, fmphase + 1, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                for l in range(len(fmphase_draws)):
+                    ax['a{0}'.format(k)].plot(ttphase, fmphase_draws[l] + 1, color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
+
+                ax['a{0}'.format(k)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(k)].transAxes)
+
+                l = np.where((xfold >= -12) & (xfold <= 12))[0]
+                if len(l) > 0:
+                    high = np.max(self.f[i][l] - other[l] + self.ferr[i][l])
+                    low = np.min(self.f[i][l] - other[l] - self.ferr[i][l])
+
+                else:
+                    l = np.where((ttphase >= -12) & (ttphase <= 12))[0]
+                    high = np.max(fmphase[l])
+                    low = np.min(fmphase[l])
+
+                ax['a{0}'.format(k)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
+
+                ax['a{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+                for i in range(len(self.lcnames)):
+
+                    if self.filters[i] != filt:
+                        continue
+
+                    ax['b{0}'.format(k)].errorbar(allt[i][k], allresid[i][k], yerr = allferr[i][k], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                ax['b{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
+
+                ax['b{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['b{0}'.format(k)].transAxes)
+
+                ax['b{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+                if eclipse and not self.is_eclipse[j]:
+
+                    plt.setp(ax['c{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['c{0}'.format(k)].axis('off')
+
+                    plt.setp(ax['d{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['d{0}'.format(k)].axis('off')
+
+                    continue
+
+                if eclipse:
+
+                    ke = np.sum(self.is_eclipse[:j])
+
+                    eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke]
+                    eclphase_draws = self._lcm['phase'][self.filters[i]]['eclphase_draws'][ke]
+
+                    tempt, tempf = [], []
+
+                    for i in range(len(self.lcnames)):
+
+                        if self.filters[i] != filt:
+                            continue
+
+                        ax['c{0}'.format(k)].errorbar(allte[i][ke], allfe[i][ke] + 1, yerr = allferre[i][ke], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                        tempt.append(allte[i][ke])
+                        tempf.append(allfe[i][ke] + 1)
+
+                    tempt, tempf = np.concatenate(tempt), np.concatenate(tempf)
+
+                    bins = np.linspace(-12, 12, 50)
+                    denom, _ = np.histogram(tempt, bins)
+                    num, _ = np.histogram(tempt, bins, weights = tempf)
+                    denom[num == 0] = 1.0
+                    ax['c{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+
+                    ax['c{0}'.format(k)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                    for l in range(len(eclphase_draws)):
+                        ax['c{0}'.format(k)].plot(ttphase, eclphase_draws[l], color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
+
+                    ax['c{0}'.format(k)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(k)].transAxes)
+
+                    ax['c{0}'.format(k)].sharey(ax['a{0}'.format(k)])
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
+
+                    ax['c{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+                    for i in range(len(self.lcnames)):
+
+                        if self.filters[i] != filt:
+                            continue
+
+                        ax['d{0}'.format(k)].errorbar(allte[i][ke], allreside[i][ke], yerr = allferre[i][ke], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                    ax['d{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
+
+                    ax['d{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['d{0}'.format(k)].transAxes)
+
+                    ax['d{0}'.format(k)].sharey(ax['b{0}'.format(k)])
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
+
+                    ax['d{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+            
+            ax['a0'].set_xlim(-12,12)
+            ax['a0'].set_title('All '+str(filt), fontsize = 20)
+            ax['b{0}'.format(self.nt-1)].set_xlabel('Time since $T_{C}$ [hours]', fontsize = 20)
+            fig.supylabel('Relative Flux', fontsize = 20)
+
+            for a in ax:
+                ax[a].set_rasterized(True)
+
+            fig.savefig(self.direc+'/Plots/'+name+'/transits_all_{0}.png'.format(filt))
 
             if show_plot:
                 plt.show()
