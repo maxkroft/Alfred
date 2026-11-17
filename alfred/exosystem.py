@@ -1,43 +1,40 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import emcee
+    import zeus
+
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
-import matplotlib.patheffects as pe
-import mplcursors
-import emcee
-import zeus
-import corner
 import batman
-from scipy.stats import linregress, truncnorm
 from celerite2 import GaussianProcess, terms
-from scipy.optimize import minimize
-from astropy.table import Table, vstack
-from astropy.io import fits
 from astropy import units as u
 from astropy import constants
-from astropy.timeseries import LombScargle
-from astropy.time import Time
-from astropy.coordinates import get_body_barycentric
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.ERROR)
-from isochrones import SingleStarModel, get_ichrone
 import pickle
 from tqdm.auto import tqdm
-import os
 import copy
 import shutil
-from multiprocessing import Pool
+import multiprocessing as mp
 import time
 from typing import Literal
 from contextlib import nullcontext
+import math
 
 from alfred._orbit_funcs import _rvModel, _astrometryModel
-from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs, Init_gaia
-from alfred.ld_grids import *
-from alfred.priors import *
+from alfred.priors import AllPriors
 from alfred import is_notebook
 
-matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 np.set_printoptions(legacy='1.25')
 
 miniexs = None
@@ -81,6 +78,10 @@ class ExoSystem:
             init_ttvs (str, optional): Name of the TTV init file. Default is init_ttvs.txt.
         """
 
+        from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_gaia
+        from astropy.table import Table
+        from astropy.io import fits
+        from astropy.time import Time
 
         self.direc = direc
         if self.direc[-1] != '/':
@@ -579,6 +580,7 @@ class ExoSystem:
             conv_check_inter (int, optional): Number of MCMC steps between convergence checks. Default is 100.
         """
 
+        from astropy.table import Table
 
         self.nburn = nburn
         self.nrun = nrun
@@ -658,6 +660,8 @@ class ExoSystem:
 
         if self.fit_star:
 
+            from isochrones import SingleStarModel, get_ichrone
+
             self.fit_ld = False
 
             self.fit_rhostar = False
@@ -678,6 +682,8 @@ class ExoSystem:
             self.starmod = SingleStarModel(self.misti, name = name, **props)
 
             self.ldgrids = {}
+
+            from alfred.ld_grids import load_ld_grid
 
             for filt in np.unique(self.filters):                    
 
@@ -952,6 +958,8 @@ class ExoSystem:
 
         if self.use_priors:
 
+            from astropy.table import vstack
+
             prior_tab = vstack([self.init_priors.table, req_priors])
 
             self.allpriors.init_priors(prior_tab, self.x0, self.fit_ttv) 
@@ -1010,7 +1018,11 @@ class ExoSystem:
 
         else:
 
-            self.setup_miniexs()
+            from scipy.optimize import minimize
+
+            miniobj = MiniExoSystem(self)
+            _init_worker(miniobj)
+
             res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             self.x = {k:v for k,v in zip(self.keys, res.x)}
 
@@ -1065,6 +1077,8 @@ class ExoSystem:
         Do not run this by itself.
         """
 
+        from scipy.optimize import minimize
+
         x0 = {'eep': 355, 'log10(age)': 9.66, 'feh': 0, 'plx': self.plx, 'AV': 0.01}
         keys = list(x0.keys())
 
@@ -1105,13 +1119,18 @@ class ExoSystem:
             show_plot (bool): Whether or not to show the plots.
         """
 
+        from scipy.optimize import minimize
+        import matplotlib.pyplot as plt
+
         print('\nStarting sigma clipping of lightcurves...')
 
         clipped = [0]*len(self.tt)
 
         for i in range(10):
 
-            self.setup_miniexs()
+            miniobj = MiniExoSystem(self)
+            _init_worker(miniobj)
+
             res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             x = {k:v for k,v in zip(self.keys, res.x)}
 
@@ -1413,6 +1432,11 @@ class ExoSystem:
                 with emcee sampler.
         """
 
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
+
         blobs_dtype = [(name, np.float64) for name in self.lin_names]
 
         sampler_kwargs = {'nwalkers': self.nwalk,
@@ -1443,11 +1467,13 @@ class ExoSystem:
             conv_func = check_zeus_conv
             sampler = zeus.EnsembleSampler
 
+        miniobj = MiniExoSystem(self)
+
         if self.cores == 0:
-            self.setup_miniexs()
+            _init_worker(miniobj)
             ctx = nullcontext()
         else:
-            ctx = Pool(processes = self.cores, initializer = self.setup_miniexs)
+            ctx = mp.get_context('spawn').Pool(processes = self.cores, initializer = _init_worker, initargs = (miniobj,))
 
         with ctx as pool:
         
@@ -1526,6 +1552,11 @@ class ExoSystem:
 
         print('\nDetermining optimal number of cores...')
 
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
+
         max_cores = os.cpu_count()
 
         test_cores = list(range(0, max_cores+1, 2))
@@ -1534,6 +1565,9 @@ class ExoSystem:
 
         best_time = np.inf
         opt_cores = 0
+
+        miniobj = MiniExoSystem(self)
+        _init_worker(miniobj)
 
         blobs_dtype = [(name, np.float64) for name in self.lin_names]
 
@@ -1552,39 +1586,48 @@ class ExoSystem:
                                    'verbose': False,
                                    })
 
-        for c in test_cores:
+        t00 = time.perf_counter()
 
-            if c == 0:
-                self.setup_miniexs()
-                ctx = nullcontext()
-            else:
-                ctx = Pool(processes = c, initializer = self.setup_miniexs)
+        pool_ctx = (
+            mp.get_context("spawn").Pool(
+                processes=max_cores, initializer=_init_worker, initargs=(miniobj,)
+            )
+            if max_cores > 1
+            else nullcontext()
+        )
 
-            try:
-                with ctx as pool:
+        with pool_ctx as shared_pool:
 
-                    if c == 0:
-                        sampler_kwargs['pool'] = None
-                    else:
-                        sampler_kwargs['pool'] = pool
+            if shared_pool is not None:
+                shared_pool.map(int, range(max_cores))
 
+            for c in test_cores:
+
+                if c == 0:
+                    sampler_kwargs['pool'] = None
+                else:
+                    sampler_kwargs['pool'] = _SubPool(shared_pool, c)
+
+                try:
                     if self.sampler_type == 'emcee':
                         benchsampler = emcee.EnsembleSampler(**sampler_kwargs)
 
                     elif self.sampler_type == 'zeus':
                         benchsampler = zeus.EnsembleSampler(**sampler_kwargs)
 
+                    state = benchsampler.run_mcmc(pos, 2, progress = False)
+
                     t0 = time.perf_counter()
-                    benchsampler.run_mcmc(pos, 15, progress = False)
+                    benchsampler.run_mcmc(state, 15, progress = False)
                     elapsed = time.perf_counter() - t0
 
-                    if elapsed < best_time:
+                    if elapsed < 0.9 * best_time:
                         best_time = elapsed
                         opt_cores = c
 
-            except Exception as e:
-                print('{0} cores failed benchmarking: {1}'.format(c, e))
-                continue
+                except Exception as e:
+                    print('{0} cores failed benchmarking: {1}'.format(c, e))
+                    continue
 
         if opt_cores == 0:
             print('\nRunning in serial.')
@@ -1592,17 +1635,6 @@ class ExoSystem:
             print('\nRunning in parallel with {0} cores.'.format(opt_cores))
 
         return opt_cores
-    
-
-    def setup_miniexs(self):
-        """Creates a MiniExoSystem object from the current ExoSystem, storing the data and options used in the log likelihood function for fitting.
-        This MiniExoSystem object is made global, allowing the log likelihood function to access it, and avoiding pickling all of the data during
-        parallel MCMC sampling.
-        """
-
-        global miniexs
-
-        miniexs = MiniExoSystem(self)
 
 
     def save_samples(self, name):
@@ -1648,11 +1680,18 @@ class ExoSystem:
                 fully explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
         """
 
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
+
+        miniobj = MiniExoSystem(self)
+
         if self.cores == 0:
-            self.setup_miniexs()
+            _init_worker(miniobj)
             ctx = nullcontext()
         else:
-            ctx = Pool(processes = self.cores, initializer = self.setup_miniexs)
+            ctx = mp.get_context('spawn').Pool(processes = self.cores, initializer = _init_worker, initargs = (miniobj,))
 
         nprev = len(self.samples)
 
@@ -1770,6 +1809,8 @@ class ExoSystem:
         Args:
             name (str): Name of the run. Sets the names of the output files from this function.
         """
+
+        from astropy.table import Table
 
         self.res = {}
 
@@ -2338,6 +2379,8 @@ class ExoSystem:
             name (str): Name of the previous run to load in.
         """
 
+        from astropy.table import Table
+
         self.restab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
 
         
@@ -2481,6 +2524,8 @@ class ExoSystem:
             name (str): Name of the Init_ttvs file.
         """
 
+        from alfred.init_class import Init_ttvs
+
         if not os.path.exists(self.direc+'/'+name):
 
             tab = Init_ttvs(self.direc, name = name).create().table
@@ -2541,6 +2586,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.patheffects as pe
+        import matplotlib.pyplot as plt
 
         num1, num2 = 0, 0
         vargrid = []
@@ -2638,6 +2685,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         n = 0
         for x in self.ttvi:
             n = max(n,len(self.ttvi[x]))
@@ -2700,6 +2749,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
         if np.sum(self.detrend) == 1:
@@ -2751,6 +2802,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         fig, ax = plt.subplots(5, figsize = (7, 12), sharex = True, layout = 'constrained')
 
         for i, z in enumerate(['eep','log10(age)','feh','plx','AV']):
@@ -2780,6 +2833,10 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is False.
         """
+
+        import matplotlib.patheffects as pe
+        import matplotlib.pyplot as plt
+
          
         num1, num2 = min(len(self.parnames),10), (len(self.parnames)-1)//10 + 1
 
@@ -2825,6 +2882,9 @@ class ExoSystem:
            
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
+        import corner
 
         for i in range(self.n):
 
@@ -2883,6 +2943,9 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
+        import corner
 
         labels = []
 
@@ -2945,6 +3008,9 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is False.
         """
 
+        import matplotlib.pyplot as plt
+        import corner
+
         keys = list(self.res.keys())
         keys.remove('log_like')
 
@@ -3005,19 +3071,11 @@ class ExoSystem:
 
             self.ldgrids = {}
 
+            from alfred.ld_grids import load_ld_grid
+
             for filt in np.unique(self.filters):
 
-                try:
-                    grid = pickle.load(open(os.path.dirname(os.path.realpath(__file__))+'/ld_grids/{0}_grid.p'.format(filt), 'rb'))
-
-                except:
-                    print('No limb darkening grid available for filter {0}.'.format(filt))
-                    print('Please use one of the following filters with limb darkening grids available:\n{0}'.format(ld_grid_list))
-                    print('Or run generate_ld_grid to create a new grid using a valid svo filter name and nickname {0}.'.format(filt))
-                    return
-
-                interpu1 = LinearNDInterpolator(grid['coords'], grid['u1'])
-                interpu2 = LinearNDInterpolator(grid['coords'], grid['u2'])
+                interpu1, interpu2 = load_ld_grid(filt)
 
                 self.ldgrids[filt] = [interpu1, interpu2]
 
@@ -3353,6 +3411,8 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
         
         for i in range(len(self.lcnames)):
 
@@ -3450,6 +3510,8 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
 
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
@@ -3794,6 +3856,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         mos = [['a']*2, ['a']*2, ['b']*2]
         if self.nr == 1:
             mos += [['c0']*2, ['c0']*2, ['d0']*2]
@@ -3953,6 +4017,9 @@ class ExoSystem:
         Args:
             name (str): Name of the run. Sets the name of the output pickle file to name_gaiam.p.
         """
+
+        from astropy.time import Time
+        from astropy.coordinates import get_body_barycentric
 
         print('\nGenerating Gaia astrometry models for plots.')
 
@@ -4200,6 +4267,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14,8), layout = 'constrained', sharex = True)
 
         gm = self._gaiam['gm']
@@ -4242,6 +4311,8 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
         
         fig, ax = plt.subplots(1, 2, figsize = (14,8), layout = 'constrained')
 
@@ -4404,6 +4475,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14, 12), layout = 'constrained', sharex = True)
 
         ax['a'].errorbar(self.magwls, self.magfit, xerr = self.magwidths/2, yerr = self.magfiterr, fmt = '.r', label = 'Fit')
@@ -4438,6 +4511,8 @@ class ExoSystem:
            
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
 
         self.initialize_ttvs(name = self.init_ttvs_name)
 
@@ -4503,6 +4578,9 @@ class ExoSystem:
             parname (str): The name of the parameter whose chains will be plotted. See the parameters that were fit in this run with
                 ExoSystem.parnames.
         """
+
+        import mplcursors
+        import matplotlib.pyplot as plt
 
         k = self.parnames[parname]
 
@@ -4730,7 +4808,14 @@ class ExoSystem:
         it is converged. This function is for after the fit is finished.
         """
 
+        from astropy.table import Table
+
         print('\nIntegrated Autorcorrelation Times:')
+
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
 
         if self.sampler_type == 'emcee':
 
@@ -4767,6 +4852,9 @@ class ExoSystem:
             ArrayLike: The frequency grid, the periodogram power at each frequency, and the Lomb-Scargle object as a tuple. Allows you to calculate the maxmimum power
             frequency, or make other plots.
         """
+
+        import matplotlib.pyplot as plt
+        from astropy.timeseries import LombScargle
 
         y = self.res.copy()
 
@@ -4843,6 +4931,29 @@ class MiniExoSystem:
             val = getattr(exs, att, None)
             if val is not None:
                 setattr(self, att, val)
+
+
+def _init_worker(miniobj: MiniExoSystem):
+    """Function for initializing workers for multiprocessing. Takes a MiniExosystem object and makes it global, allowing the log likelihood
+    function to access it, and avoiding pickling everything during parallel MCMC sampling.
+    """
+
+    global miniexs
+    miniexs = miniobj
+
+
+class _SubPool:
+    """Limits existing multiprocessing pool to use a specific number of works via chunking. Useful in speeding up find opt cores.
+    """
+
+    def __init__(self, pool, ncores):
+        self.pool = pool
+        self.ncores = ncores
+
+    def map(self, func, iterable):
+        items = list(iterable)
+        chunksize = max(1, math.ceil(len(items) / self.ncores))
+        return self.pool.map(func, items, chunksize=chunksize)
 
 
 
@@ -5068,6 +5179,8 @@ def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64]) -> np.t
         ndarray: Array of period and Tc.
     """
 
+    from scipy.stats import linregress
+
     tts = [par['TT {0} {1}'.format(i, j+1)] for j in range(len(ttvi))]
 
     res = linregress(ttvi, tts)
@@ -5229,6 +5342,7 @@ def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, b
         tuple[bool, float]: Returns whether or not the chains have converged, as well as the maximum integrated autocorrelation time of the chains (to
             be passed into the next check as last_tau).
     """
+    import emcee
 
     cleanlen = it-burnin
 
@@ -5269,6 +5383,7 @@ def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, bur
         tuple[bool, float]: Returns whether or not the chains have converged, as well as the maximum integrated autocorrelation time of the chains (to
             be passed into the next check as last_tau).
     """
+    import zeus
 
     cleanlen = it-burnin
 
@@ -5706,3 +5821,9 @@ def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
         return -np.inf
     
     return starlike
+
+
+
+
+if __name__ == "__main__":
+    pass

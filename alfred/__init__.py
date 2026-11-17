@@ -5,27 +5,40 @@ __version__ = '1.2.1'
 ld_grid_dir = os.path.dirname(os.path.realpath(__file__))+'/ld_grids/'
 data_dir = os.path.dirname(os.path.realpath(__file__))+'/example_data/'
 
-try:
-    import exoctk.limb_darkening
-    exoctk_inst = True
-except:
-    exoctk_inst = False
+import importlib.util
 
+exoctk_inst = importlib.util.find_spec("exoctk") is not None
 
-try:
-    from IPython import get_ipython
-    shell = get_ipython().__class__.__name__
-    
-    if shell == 'ZMQInteractiveShell':
-        is_notebook = True   # Jupyter notebook or qtconsole
-    elif shell == 'TerminalInteractiveShell':
-        is_notebook = False  # Terminal running IPython
-    else:
-        is_notebook = False  # Other IDEs / standard Python interpreter
-except (NameError, ImportError):
-    is_notebook = False      # IPython not installed or standard Python interpre
+import sys
+
+is_notebook = False
+if "IPython" in sys.modules:
+    shell = sys.modules["IPython"].get_ipython().__class__.__name__
+    is_notebook = shell == "ZMQInteractiveShell"
 
 
 from alfred.exosystem import ExoSystem
-from alfred.init_class import Init_lcs, Init_ld, Init_planets, Init_priors, Init_rv, Init_star, Init_ttvs, Init_gaia, create_folder
-from alfred.ld_grids import generate_ld_grid, calc_ld
+
+_LAZY_IMPORTS = {
+    "Init_lcs": "alfred.init_class",
+    "Init_ld": "alfred.init_class",
+    "Init_planets": "alfred.init_class",
+    "Init_priors": "alfred.init_class",
+    "Init_rv": "alfred.init_class",
+    "Init_star": "alfred.init_class",
+    "Init_ttvs": "alfred.init_class",
+    "Init_gaia": "alfred.init_class",
+    "create_folder": "alfred.init_class",
+    "generate_ld_grid": "alfred.ld_grids",
+    "calc_ld": "alfred.ld_grids",
+}
+
+def __getattr__(name):
+    if name in _LAZY_IMPORTS:
+        import importlib
+
+        module = importlib.import_module(_LAZY_IMPORTS[name])
+        val = getattr(module, name)
+        globals()[name] = val
+        return val
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

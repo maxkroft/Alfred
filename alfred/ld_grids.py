@@ -1,4 +1,3 @@
-from svo_filters import svo
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator
 import pickle
@@ -28,6 +27,8 @@ def generate_ld_grid(filter: str, filter_nickname: str):
     if not exoctk_inst:
         print('Cannot generate new limb darkening grids without installing exoctk and its data. See optional installation instructions in the docs.')
         return
+
+    from svo_filters import svo
 
     ldc = ldf.LDC()
 

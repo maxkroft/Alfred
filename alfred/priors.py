@@ -1,9 +1,152 @@
-import numpy as np
-from astropy.table import Table
-from isochrones import SingleStarModel
-from isochrones.priors import FlatPrior, GaussianPrior
-from scipy.optimize import minimize_scalar
+from __future__ import annotations
 
+import numpy as np
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astropy.table import Table
+
+class GaussianPrior:
+    """Gaussian prior class. Returns the log of the Gaussian prior value for a given trial.
+    """
+
+    def __init__(self, mean: float, std: float):
+        """Initializes a GaussianPrior object with a mean and standard deviation.
+
+        Args:
+            mean (float): The mean of the Gaussian distribution.
+            std (float): The standard deviation of the Gaussian distribution.
+        """
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the Gaussian prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the Gaussian prior given x.
+        """
+        return - 0.5 * ((x - self.mean) / self.std)**2 - np.log(np.sqrt(2 * np.pi) * self.std)
+
+
+class UniformPrior:
+    """Uniform prior class. Returns negative infinity if the given trial value is out of the bounds, otherwise the log of the normalized
+    uniform prior value.
+    """
+
+    def __init__(self, lower: float, upper: float):
+        """Initializes a UniformPrior object with a lower and upper bound.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
+        """
+        self.lower = lower
+        self.upper = upper
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the uniform prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the uniform prior given x.
+        """
+        if np.isscalar(x):
+            return -np.log(self.upper-self.lower) if self.lower <= x <= self.upper else -np.inf
+
+        else:
+            return np.where((x >= self.lower) & (x <= self.upper), -np.log(self.upper-self.lower), -np.inf)
+
+
+class LogUniformPrior:
+    """Log uniform prior class. Variable must be positive definite. Returns negative infinity if the given trial value is out of the bounds, 
+    otherwise the log of the normalized log uniform prior. Does not work if the lower bound is 0!!! In that case, use a modified Jeffrey's prior.
+    """
+
+    def __init__(self, lower: float, upper: float):
+        """Initializes a LogUniformPrior object with a lower and upper bound.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
+        """
+        self.lower = lower
+        self.upper = upper
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the log uniform prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the log uniform prior given x.
+        """
+        if np.isscalar(x):
+            return -np.log(x) - np.log(np.log(self.upper/self.lower)) if self.lower <= x <= self.upper else -np.inf
+
+        else:
+            return np.where((x >= self.lower) & (x <= self.upper), -np.log(x) - np.log(np.log(self.upper/self.lower)), -np.inf)
+
+
+class ModifiedJeffreysPrior:
+    """Modified Jeffrey's prior class. Variable must be positive definite. Has implicit lower bound of 0. Returns negative infinity if the given trial
+    value is out of the bounds, otherwise the log of the normalized modified Jeffrey's prior. The modified Jeffrey's prior is log uniform above the
+    knee and becomes uniform below the knee value.
+    """
+
+    def __init__(self, upper: float, knee: float):
+        """Initializes a LogUniformPrior object with a lower and upper bound.
+
+        Args:
+            upper (float): The upper boundary.
+            knee (float): Value at which the prior transitions from log uniform to uniform.
+        """
+        self.upper = upper
+        self.knee = knee
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the modified Jeffrey's prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the modified Jeffrey's prior given x.
+        """
+        if np.isscalar(x):
+            return -np.log(x+self.knee) - np.log(np.log((self.knee+self.upper)/self.knee)) if 0 <= x <= self.upper else -np.inf
+
+        else:
+            return np.where((x >= 0) & (x <= self.upper), -np.log(x+self.knee) - np.log(np.log((self.knee+self.upper)/self.knee)), -np.inf)
+
+
+class UnitCirclePrior:
+    """Unit circle prior class. Flattens out the prior space when sampling an angle with cos(angle) and sin(angle). This is automatically
+    applied when sampling omega or w this way. The assumed input on this prior is cos^2(angle) + sin^2(angle). This is generally hidden from
+    users and is not included in the init priors GUI.
+    """
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the unit circle prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the unit circle prior given x.
+        """
+        if np.isscalar(x):
+                return -0.5 * np.log(x) if x <= 1 else -np.inf
+
+        else:
+            return np.where(x <= 1, -0.5 * np.log(x), -np.inf)
+    
 
 class Priors:
     """Class for holding prior functions for a specific variable and applying them.
@@ -20,98 +163,59 @@ class Priors:
 
 
     def add_gaussian_prior(self, mean: float, std: float):
-        """Adds a Gaussian prior function to the list of priors with the given parameters. The prior function returns the log of the prior value for
-        a given trial value to be added to the log likelihood during fitting.
+        """Adds a Gaussian prior function to the list of priors with the given mean and standard deviation.
 
         Args:
             mean (float): The mean of the Gaussian distribution.
             std (float): The standard deviation of the Gaussian distribution.
         """
-
-        self.lbound = max(self.lbound, mean-10*std)
-        self.ubound = min(self.ubound, mean+10*std)
-
-        def gaussian_prior(x):
-
-            return - 0.5 * ((x - mean) / std)**2 - np.log( np.sqrt(2 * np.pi) * std)
         
-        self.prior_funcs.append(gaussian_prior)
+        self.prior_funcs.append(GaussianPrior(mean, std))
 
     
     def add_uniform_prior(self, lower: float, upper: float):
-        """Adds a uniform prior function to the list of priors with the given bounds. The prior function returns negative infinity if the given trial
-        value is out of the bounds, otherwise 0. Updates the lower and upper bounds of the Priors object.
+        """Adds a uniform prior function to the list of priors with the given bounds.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
         """
 
         self.lbound = max(self.lbound, lower)
         self.ubound = min(self.ubound, upper)
-
-        def uniform_prior(x):
-
-            if np.isscalar(x):
-                return -np.log(upper-lower) if lower <= x <= upper else -np.inf
-
-            else:
-                return np.where((x >= lower) & (x <= upper), -np.log(upper-lower), -np.inf)
         
-        self.prior_funcs.append(uniform_prior)
+        self.prior_funcs.append(UniformPrior(lower, upper))
 
 
     def add_log_uniform_prior(self, lower: float, upper: float):
-        """Adds a log uniform prior function to the list of priors with the given bounds. Variable must be positive definite. The prior function
-        returns negative infinity if the given trial value is out of the bounds, otherwise the normalized log uniform prior. Does not work if the
-        lower bound is 0!!! In that case, use a modified Jeffrey's prior. Updates the lower and upper bounds of the Priors object.
+        """Adds a log uniform prior function to the list of priors with the given bounds.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
         """
 
         self.lbound = max(self.lbound, lower)
         self.ubound = min(self.ubound, upper)
 
-        def log_uniform_prior(x):
-
-            if np.isscalar(x):
-                return -np.log(x) - np.log(np.log(upper/lower)) if lower <= x <= upper else -np.inf
-
-            else:
-                return np.where((x >= lower) & (x <= upper), -np.log(x) - np.log(np.log(upper/lower)), -np.inf)
-
-        self.prior_funcs.append(log_uniform_prior)
+        self.prior_funcs.append(LogUniformPrior(lower, upper))
 
     
     def add_modified_jeffreys_prior(self, upper: float, knee: float):
-        """Adds a modified Jeffrey's prior function to the list of priors with the given bounds. Variable must be positive definite. Implicit lower
-        bound of 0. The prior function returns negative infinity if the given trial value is out of the bounds, otherwise the normalized modified
-        Jeffrey's prior. The modified Jeffrey's prior becomes log uniform below the knee value. Updates the lower and upper bounds of the Priors object.
+        """Adds a modified Jeffrey's prior function to the list of priors with the given upper bound and knee value.
         """
 
         self.lbound = max(self.lbound, 0)
         self.ubound = min(self.ubound, upper)
 
-        def modified_jeffreys_prior(x):
-
-            if np.isscalar(x):
-                return -np.log(x+knee) - np.log(np.log((knee+upper)/knee)) if 0 <= x <= upper else -np.inf
-
-            else:
-                return np.where((x >= 0) & (x <= upper), -np.log(x+knee) - np.log(np.log((knee+upper)/knee)), -np.inf)
-
-        self.prior_funcs.append(modified_jeffreys_prior)
+        self.prior_funcs.append(ModifiedJeffreysPrior(upper, knee))
 
 
     def add_unit_circle_prior(self):
-        """Adds a unit circle prior to flatten out the prior space when sampling an angle with cos(angle) and sin(angle). This is automatically
-        applied when sampling omega or w this way. The assumed input on this prior is cos^2(angle) + sin^2(angle). This is generally hidden from
-        users and is not included in the init priors GUI.
+        """Adds a unit circle prior function to the list of priors.
         """
 
-        def unit_circle_prior(x):
-
-            if np.isscalar(x):
-                return -0.5 * np.log(x) if x <= 1 else -np.inf
-
-            else:
-                return np.where(x <= 1, -0.5 * np.log(x), -np.inf)
-
-        self.prior_funcs.append(unit_circle_prior)
+        self.prior_funcs.append(UnitCirclePrior())
 
 
     def apply_priors(self, x: np.typing.ArrayLike) -> np.typing.ArrayLike:
@@ -149,9 +253,11 @@ class Priors:
 
     def sample(self, n: int):
 
+        from scipy.optimize import minimize_scalar
+
         xmin, xmax = self.bounds()
 
-        res = minimize_scalar(lambda x: -self.apply_priors(x), bounds = (xmin, xmax) if np.all(np.isfinite([xmin, xmax])) else None)
+        res = minimize_scalar(lambda x: -self.apply_priors(x), bounds = (xmin, xmax) if np.any(np.isfinite([xmin, xmax])) else None)
         max_log_prob = -res.fun
 
         accepted = []
