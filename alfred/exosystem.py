@@ -2634,17 +2634,7 @@ class ExoSystem:
 
             for filt in np.unique(self.filters):
 
-                try:
-                    grid = pickle.load(open(ld_grid_path(filt), 'rb'))
-
-                except:
-                    print('No limb darkening grid available for filter {0}.'.format(filt))
-                    print('Please use one of the following filters with limb darkening grids available:\n{0}'.format(ld_grid_list))
-                    print('Or run generate_ld_grid to create a new grid using a valid svo filter name and nickname {0}.'.format(filt))
-                    return
-
-                interpu1 = LinearNDInterpolator(grid['coords'], grid['u1'])
-                interpu2 = LinearNDInterpolator(grid['coords'], grid['u2'])
+                interpu1, interpu2 = load_ld_grid(filt)
 
                 self.ldgrids[filt] = [interpu1, interpu2]
 
