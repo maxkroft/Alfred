@@ -1,44 +1,60 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import emcee
+    import zeus
+
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
-import matplotlib.patheffects as pe
-import mplcursors
-import emcee
-import zeus
-import corner
 import batman
-from scipy.stats import linregress, truncnorm
 from celerite2 import GaussianProcess, terms
-from scipy.optimize import minimize
-from astropy.table import Table, vstack
-from astropy.io import fits
 from astropy import units as u
 from astropy import constants
-from astropy.timeseries import LombScargle
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.ERROR)
-from isochrones import SingleStarModel, get_ichrone
 import pickle
 from tqdm.auto import tqdm
-import os
 import copy
 import shutil
-from multiprocessing import Pool
+import multiprocessing as mp
 import time
 from typing import Literal
 from contextlib import nullcontext
+import math
 
-from alfred._rv_func import _rvModel
-from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_ttvs
-from alfred.ld_grids import *
-from alfred.priors import *
+from alfred._orbit_funcs import _rvModel, _astrometryModel
+from alfred.priors import AllPriors
 from alfred import is_notebook
 
-matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 np.set_printoptions(legacy='1.25')
 
 miniexs = None
+
+
+ns_to_d = (1*u.ns).to(u.d).value
+msunrsun3_to_gcm3 = (1*u.Msun/u.Rsun**3).to(u.g/u.cm**3).value
+earthm_to_msun = (1*u.earthMass).to(u.Msun).value
+d_to_yr = (1*u.d).to(u.yr).value
+au_to_rsun = (1*u.AU).to(u.Rsun).value
+gcm3rsun3_to_msun = (1*u.g/u.cm**3*u.Rsun**3).to(u.Msun).value
+g_to_msun = (1*u.g).to(u.Msun).value
+au_to_cm = (1*u.AU).to(u.cm).value
+rsun_to_earthr = (1*u.Rsun).to(u.earthRad).value
+msun_to_earthm = (1*u.Msun).to(u.earthMass).value
+earthmearthr3_to_gcm3 = (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
+d_to_hr = (1*u.d).to(u.hr).value
+d_to_min = (1*u.d).to(u.min).value
+c_ms = constants.c.to(u.m/u.s).value
+rsunsm_to_d = (1*u.Rsun/u.m*u.s).to(u.d).value
 
 
 class ExoSystem:
@@ -46,7 +62,8 @@ class ExoSystem:
     """
 
     def __init__(self, direc: str, init_planets = 'init_planets.txt', init_star = 'init_star.txt', init_lcs = 'init_lcs.txt',
-                 init_rv = 'init_rv.txt', init_ld = 'init_ld.txt', init_priors = 'init_priors.txt', init_ttvs = 'init_ttvs.txt'):
+                 init_rv = 'init_rv.txt', init_gaia = 'init_gaia.txt', init_ld = 'init_ld.txt', init_priors = 'init_priors.txt',
+                 init_ttvs = 'init_ttvs.txt'):
         """Initialize an ExoSystem object with a directory and init files. The init files must all be created using alfred.
 
         Args:
@@ -55,11 +72,16 @@ class ExoSystem:
             init_star (str, optional): Name of the star parameter init file. Default is init_star.txt.
             init_lcs (str, optional): Name of the light curve data init file. Default is init_lcs.txt.
             init_rv (str, optional): Name of the RV data init file. Default is init_rv.txt.
+            init_gaia (str, optional): Name of the Gaia data init file. Default is init_gaia.txt.
             init_ld (str, optional): Name of the limb darkening parameter init file. Default is init_ld.txt.
             init_priors (str, optional): Name of the priors init file. Default is init_priors.txt.
             init_ttvs (str, optional): Name of the TTV init file. Default is init_ttvs.txt.
         """
 
+        from alfred.init_class import Init_lcs, Init_rv, Init_ld, Init_star, Init_planets, Init_priors, Init_gaia
+        from astropy.table import Table
+        from astropy.io import fits
+        from astropy.time import Time
 
         self.direc = direc
         if self.direc[-1] != '/':
@@ -68,6 +90,7 @@ class ExoSystem:
         self.init_star = Init_star(self.direc, init_star).from_file()
         self.init_lcs = Init_lcs(self.direc, init_lcs).from_file()
         self.init_rv = Init_rv(self.direc, init_rv).from_file()
+        self.init_gaia = Init_gaia(self.direc, init_gaia).from_file()
         self.init_ld = Init_ld(self.direc, init_ld).from_file()
 
         if os.path.exists(self.direc+'/'+init_priors):
@@ -81,6 +104,7 @@ class ExoSystem:
         tab_star = self.init_star.table
         tab_lcs = self.init_lcs.table
         tab_rv = self.init_rv.table
+        tab_gaia = self.init_gaia.table
         tab_ld = self.init_ld.table
 
 
@@ -95,6 +119,8 @@ class ExoSystem:
         self.is_rv = np.array(tab_planets['RV Signal'])
         self.nr = int(np.sum(self.is_rv))
 
+        self.is_astro = np.array(tab_planets['Fit Gaia'])
+
         self.fit_ttv = np.array(tab_planets['Fit TTVs'])
         self.nttv = int(np.sum(self.fit_ttv))
 
@@ -108,13 +134,13 @@ class ExoSystem:
 
         self.tc = np.array(tab_planets['Tc'])
 
-        self.ror = np.array(tab_planets['Rp/Rs'])[self.is_transit]
+        self.ror = np.array(tab_planets['Rp/Rs'])
 
-        self.ar = np.array(tab_planets['a/Rs'])[self.is_transit]
+        self.ar = np.array(tab_planets['a/Rs'])
 
-        self.cosi = np.array(tab_planets['cos(i)'])[self.is_transit]
+        self.inc = np.array(tab_planets['i'])*np.pi/180
 
-        self.k = np.array(tab_planets['K'])[self.is_rv]
+        self.k = np.array(tab_planets['K'])
 
         self.secosw = np.array(tab_planets['sqrt(e)cos(w)'])
 
@@ -122,8 +148,10 @@ class ExoSystem:
 
         self.fp = np.array(tab_planets['fp'])
 
+        self.q = np.array(tab_planets['Mp/Ms'])
 
-        self.transitsortorder = np.argsort(self.p[self.is_transit])
+        self.omega = np.array(tab_planets['omega'])
+
 
 
         #stellar params
@@ -143,8 +171,8 @@ class ExoSystem:
         self.feh = tab_star['Value'][4]
         self.feherr = tab_star['Error'][4]
 
-        self.plax = tab_star['Value'][5]
-        self.plaxerr = tab_star['Error'][5]
+        self.plx = tab_star['Value'][5]
+        self.plxerr = tab_star['Error'][5]
 
         #photometry
 
@@ -372,10 +400,87 @@ class ExoSystem:
             self.tr_phase = np.linspace(-0.5, 0.5, 1000)
 
 
-    def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_star: bool, nburn: int | float, nrun: int,
+        #Gaia file
+
+        self.gaia_err_scale = np.array(tab_gaia['Err Scale'][0])
+
+        fname = tab_gaia['File'][0]
+
+        if not os.path.isfile(self.direc+'/'+fname) and fname != '':
+            print('Gaia file {0} not found.'.format(fname))
+
+        elif fname != '':
+
+            if tab_gaia['Format'][0] == 'DR4':
+
+                gdata = Table.read(self.direc+fname)
+
+                self.tg_ref = 2457936.875-2450000
+                
+                i = np.where(gdata['source_id'] == tab_gaia['Source ID'][0])[0]
+                gdata = gdata[i]
+
+                self.ra = gdata['ra0'][0]
+                self.dec = gdata['dec0'][0]
+
+                self.tg = []
+                self.gal = []
+                self.galerr = []
+                self.psi = []
+                self.plxf = []
+
+                for i in range(len(gdata)):
+
+                    j = ~gdata['centroid_pos_al'][i].mask & (gdata['ccd_proc_flags'][i] == 0)
+
+                    self.tg.append(gdata['obs_time_tcb'][i][j] + gdata['obs_time_bary_corr'][i])
+                    self.gal.append(gdata['centroid_pos_al'][i][j])
+                    self.galerr.append(gdata['centroid_pos_error_al'][i][j])
+                    self.psi.append(gdata['scan_pos_angle'][i][j]*np.pi/180)
+                    self.plxf.append([gdata['parallax_factor_al'][i]]*np.sum(j))
+
+                self.tg = np.concatenate(self.tg).data
+                self.gal = np.concatenate(self.gal).data
+                self.galerr = np.concatenate(self.galerr).data * self.gaia_err_scale
+                self.psi = np.concatenate(self.psi).data
+                self.plxf = np.concatenate(self.plxf)
+
+                i = np.argsort(self.tg)
+                self.tg = self.tg[i]
+                self.gal = self.gal[i]
+                self.galerr = self.galerr[i]
+                self.psi = self.psi[i]
+                self.plxf = self.plxf[i]
+
+                time = Time(2455197.5+self.tg*ns_to_d, format = 'jd', scale = 'tcb')
+                self.tg = time.tdb.value-2450000
+
+            else:
+
+                try:
+                    gdata = Table.read(self.direc + fname)
+                except:
+                    rvdata = Table.read(self.direc + fname, format = 'ascii')
+
+                gdata.sort(tab_gaia['Time Col'][0])
+
+                self.tg = gdata[tab_gaia['Time Col'][0]] + tab_gaia['Time Offset'][0] - 2450000
+                self.gal = gdata[tab_gaia['AL Col'][0]]
+                self.galerr = gdata[tab_gaia['Err Col'][0]]
+                self.psi = gdata[tab_gaia['Psi Col'][0]]*np.pi/180
+                self.plxf = gdata[tab_gaia['Plx Fac Col'][0]]
+
+                self.ra = tab_gaia['RA'][0]
+                self.dec = tab_gaia['Dec'][0]
+                self.tg_ref = tab_gaia['Ref Time'][0] - 2450000
+
+                
+
+    def fit(self, name: str, fit_transit: bool, fit_rv: bool, fit_gaia: bool, fit_star: bool, nburn: int | float, nrun: int,
             parallel: bool | int | Literal['auto'] = False, sampler_type: Literal['emcee','zeus'] = 'emcee', min_nrun: int = 500, ntau: int = 50,
-            dtau: float = 0.01, nwalk: int = 0, fit_ld = False, use_priors = False, rv_bkg_order: int = 0, star_run: str = None, save_samples = False,
-            sigma_clip: float = 5, lc_supersample_size: int = 600, show_plots = True, skip_state_check = False, conv_check_inter: int = 100) -> None:
+            dtau: float = 0.01, nwalk: int = 0, use_priors = False, fit_ld = False, fit_rhostar = False, sigma_clip: float = 5,
+            lc_supersample_size: int = 600, rv_bkg_order: int = 0, star_run: str = None, save_samples = False, show_plots = True,
+            skip_state_check = False, conv_check_inter: int = 100) -> None:
         """Fit the light curve, RV, and/or stellar data for this ExoSystem using MCMC.
         
         Parameter optimization is done with scipy minimize before running MCMC. Additionally, when fitting transits to the light curves,
@@ -400,6 +505,8 @@ class ExoSystem:
             fit_transit (bool): Whether or not to fit transits to the light curve data.
             
             fit_rv (bool): Whether or not to fit a model to the RV data.
+
+            fit_gaia (bool): Whether or not to fit a model to Gaia epoch astrometry.
             
             fit_star (bool): Whether or not to fit stellar parameters. Can be fit on their own, or if transit data is also being fit
                 (with or without RV data as well). Cannot be fit with just RV data.
@@ -428,12 +535,31 @@ class ExoSystem:
 
             nwalk (int, optional): Number of walkers to use for the MCMC. This needs to be at least 2 times the number of free parameters. If nwalk is
                 less than that value, or if nwalk isn't provided, nwalk will be set to exactly 2 times the number of free parameters.
-            
-            fit_ld (bool, optional): Whether or not to fit quadratic limb darkening coefficients as free parameters. Will be overriden to False if
-                fit_star is True, as limb darkening coefficients are generated at each step in that case. Default is False.
-            
+
             use_priors (bool, optional): Whether or not to use user specified priors from the init_priors file specified during ExoSystem
                 initialization. Default is False.
+            
+            fit_ld (bool, optional): Whether or not to fit quadratic limb darkening coefficients as free parameters. Will be overridden to False if
+                fit_star is True, as limb darkening coefficients are generated at each step in that case. Default is False.
+
+            fit_rhostar(bool, optional): Whether or not to fit for a single log(rhostar) parameter rather than individual log(a/rs) values for each
+                planet during a transit fit. This is automatically set to True when fit_gaia is also True. Will be overridden to False if fit_star is True,
+                as it will be generated from the MIST models. Default is False.
+
+            sigma_clip (float, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
+                sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
+                that probably shouldn't be, increase this parameter and run it again. To turn off sigma clipping set this parameter to 0. Default is 5.
+
+            lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
+                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
+                
+                For example, if a data set has an exposure time of 1800 seconds and this parameter is set to 600 seconds, each point in the data
+                set will be modeled as the average of three points with an exposure time of 600 seconds.
+                
+                Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the cost of
+                slowing down the fit.
+                
+                Default is 600 seconds.
             
             rv_bkg_order (int, optional): Polynomial order for the background trend fit to the RV data. Can be 0 (for a flat line), 1 (for a slope),
                 or 2 (for a quadratic). Default is 0.
@@ -446,21 +572,6 @@ class ExoSystem:
                 if you expect to want to remove problematic walkers that wandered off from the final results. Most of the time this isn't necessary,
                 and these take up additional storage. Default is False.
             
-            sigma_clip (float, optional): Sets how strict the sigma clipping is. During each round, in each light curve, points farther than
-                sigma_clip times the root median squared of the residual are masked out. If you see in the plots that points are being masked out
-                that probably shouldn't be, increase this parameter and run it again. To turn off sigma clipping set this parameter to 0. Default is 5.
-            
-            lc_supersample_size (int, optional): Sets the exposure time, in seconds, to supersample the transit light curves to. For each data set,
-                the number of supersamples will be that data set's exposure time divided by this value, rounded to the nearest integer.
-                
-                For example, if a data set has an exposure time of 1800 seconds and this parameter is set to 600 seconds, each point in the data
-                set will be modeled as the average of three points with an exposure time of 600 seconds.
-                
-                Decreasing this parameter will increase the number of supersamples, potentially improving model accuracy, but at the cost of
-                slowing down the fit.
-                
-                Default is 600 seconds.
-            
             show_plots (bool, optional): Whether or not to show plots at the end of the run. Plots are saved regardless. Default is True.
 
             skip_state_check (bool, optional): Passed only to the emcee sampler. Whether or not to skip checking whether the initial parameters can
@@ -469,6 +580,7 @@ class ExoSystem:
             conv_check_inter (int, optional): Number of MCMC steps between convergence checks. Default is 100.
         """
 
+        from astropy.table import Table
 
         self.nburn = nburn
         self.nrun = nrun
@@ -479,17 +591,32 @@ class ExoSystem:
         self.rv_bkg_order = rv_bkg_order
         self.sigma_clip = sigma_clip
         self.fit_ld = fit_ld
+        self.fit_rhostar = fit_rhostar
         self.fit_transit = fit_transit
         self.fit_rv = fit_rv
+        self.fit_gaia = fit_gaia
         self.fit_star = fit_star
         self.parallel = parallel
         self.sampler_type = sampler_type
-        self.fit_planets = self.fit_transit or self.fit_rv
         self.lc_supersample_size = lc_supersample_size
         self.conv_check_inter = conv_check_inter
 
 
-        self.delete_run(name)
+        if self.fit_transit and not np.any(self.is_transit):
+            self.fit_transit = False
+            print('No transiting planets found.')
+
+        if self.fit_rv and not np.any(self.is_rv):
+            self.fit_rv = False
+            print('No radial velocity planets found.')
+
+        if self.fit_gaia and not np.any(self.is_astro):
+            self.fit_gaia = False
+            print('No Gaia astrometric planets found.')
+
+        self.fit_planets = self.fit_transit or self.fit_rv or self.fit_gaia
+        self.is_fit = (self.fit_transit & self.is_transit) | (self.fit_rv & self.is_rv) | (self.fit_gaia & self.is_astro)
+
 
         if isinstance(self.nburn, float) and not 0 <= self.nburn < 1:
 
@@ -500,34 +627,48 @@ class ExoSystem:
             print('Invalid RV background polynomial order. Must be 0, 1, or 2.')
             return None
 
-        if not fit_transit and not fit_rv and not fit_star:
+        if not fit_transit and not fit_rv and not fit_star and not fit_gaia:
             print('You need to fit something!')
             return None
         
-        if not fit_transit and fit_rv and fit_star:
-            print('To fit stellar parameters simultaneously with planet parameters, please use transit data (set fit_transit to True).')
+        if not fit_transit and not fit_gaia and fit_rv and fit_star:
+            print('To fit stellar parameters simultaneously with planet parameters, please use transit data and/or Gaia epoch astrometry.')
             return None
-        
-        if not os.path.isdir(self.direc+'Plots/'+name):
-            os.mkdir(self.direc+'Plots/'+name)
         
         self.use_priors = use_priors
         if self.init_priors is None and use_priors:
             print('No init_priors file found. Check the name in the system initialization, or run Init_priors().create(). Running with no priors.')
             self.use_priors = False
+
+
+        self.delete_run(name)
+
+        if not os.path.isdir(self.direc+'Plots/'+name):
+            os.mkdir(self.direc+'/Plots/'+name)
         
         
         if self.fit_transit:
             self.supersamples = np.array([max(1,int(x/self.lc_supersample_size)) for x in self.exptimes*24*60*60])
 
 
+        if self.fit_gaia and self.fit_transit:
+            self.fit_rhostar = True
+
+        elif not self.fit_transit:
+            self.fit_rhostar = False
+
+
         if self.fit_star:
+
+            from isochrones import SingleStarModel, get_ichrone
 
             self.fit_ld = False
 
+            self.fit_rhostar = False
+
             self.misti = get_ichrone('mist', bands = list(self.magbands))
 
-            props = {'parallax': (self.plax, self.plaxerr), 'Teff': (self.Ts, self.Tserr)}
+            props = {'parallax': (self.plx, self.plxerr), 'Teff': (self.Ts, self.Tserr)}
 
             if not np.isnan(self.logg):
                 props['logg'] = (self.logg, self.loggerr)
@@ -540,10 +681,9 @@ class ExoSystem:
 
             self.starmod = SingleStarModel(self.misti, name = name, **props)
 
-            if self.use_priors:
-                self.starmod = setup_star_priors(self.init_priors.table, self.starmod)
-
             self.ldgrids = {}
+
+            from alfred.ld_grids import load_ld_grid
 
             for filt in np.unique(self.filters):                    
 
@@ -561,11 +701,25 @@ class ExoSystem:
 
         if self.fit_planets:
 
+            if self.fit_rhostar:
+
+                self.x0['log(rhostar)'] = np.log(self.ms/(4/3*np.pi*self.rs**3)*msunrsun3_to_gcm3)
+
+            if not self.fit_star and self.fit_gaia:
+
+                self.x0['plx'] = self.plx
+
+                if self.fit_transit:
+
+                    self.x0['rstar'] = self.rs
+
+                else:
+
+                    self.x0['mstar'] = self.ms
+
             for i in range(self.n):
 
                 if self.is_transit[i] and self.fit_transit:
-
-                    j = np.sum(self.is_transit[:i])
 
                     if self.fit_ttv[i]:
 
@@ -578,27 +732,45 @@ class ExoSystem:
                         self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
                         self.x0['Tc {0}'.format(i+1)] = self.tc[i]
 
-                    self.x0['ror {0}'.format(i+1)] = self.ror[j]
-                    if not self.fit_star:
-                        self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[j])
-                    self.x0['cos(i) {0}'.format(i+1)] = self.cosi[i]
+                    self.x0['ror {0}'.format(i+1)] = self.ror[i]
+
+                    if not self.fit_rhostar:
+
+                        self.x0['log(a/rs) {0}'.format(i+1)] = np.log(self.ar[i])                    
+
+                    self.x0['cos(i) {0}'.format(i+1)] = np.cos(self.inc[i])
 
                     if self.is_eclipse[i]:
 
                         self.x0['fp {0}'.format(i+1)] = self.fp[i]
+
+                    if self.is_astro[i] and self.fit_gaia:
+
+                        self.x0['comega {0}'.format(i+1)] = np.cos(self.omega[i])
+                        self.x0['somega {0}'.format(i+1)] = np.sin(self.omega[i])
+
+                elif self.is_astro[i] and self.fit_gaia:
+                
+                    self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
+                    self.x0['Tc {0}'.format(i+1)] = self.tc[i]
+
+                    self.x0['sico {0}'.format(i+1)] = np.sin(self.inc[i]/2)*np.cos(self.omega[i])
+                    self.x0['siso {0}'.format(i+1)] = np.sin(self.inc[i]/2)*np.sin(self.omega[i])
 
                 elif self.is_rv[i] and self.fit_rv:
 
                     self.x0['log(P) {0}'.format(i+1)] = np.log(self.p[i])
                     self.x0['Tc {0}'.format(i+1)] = self.tc[i]
 
-                if self.is_rv[i] and self.fit_rv:
+                if self.is_astro[i] and self.fit_gaia:
 
-                    j = np.sum(self.is_rv[:i])
+                    self.x0['log(q) {0}'.format(i+1)] = np.log(self.q[i])
 
-                    self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[j])
+                elif self.is_rv[i] and self.fit_rv:
 
-                if self.fit_ecc[i]:
+                    self.x0['log(K) {0}'.format(i+1)] = np.log(self.k[i])
+
+                if self.fit_ecc[i] and self.is_fit[i]:
 
                     self.x0['secw {0}'.format(i+1)] = self.secosw[i]
                     self.x0['sesw {0}'.format(i+1)] = self.sesinw[i]
@@ -617,7 +789,7 @@ class ExoSystem:
                     self.x0['eep'] = np.median(self.res['eep'])
                     self.x0['log10(age)'] = np.median(self.res['log10(age)'])
                     self.x0['feh'] = np.median(self.res['feh'])
-                    self.x0['distance'] = np.median(self.res['distance'])
+                    self.x0['plx'] = np.median(self.res['plx'])
                     self.x0['AV'] = np.median(self.res['AV'])
 
                 except:
@@ -638,7 +810,7 @@ class ExoSystem:
                 self.x0['eep'] = x['eep']
                 self.x0['log10(age)'] = x['log10(age)']
                 self.x0['feh'] = x['feh']
-                self.x0['distance'] = x['distance']
+                self.x0['plx'] = x['plx']
                 self.x0['AV'] = x['AV']
 
         elif self.fit_star:
@@ -646,7 +818,7 @@ class ExoSystem:
             self.x0['eep'] = 355
             self.x0['log10(age)'] = 9.66
             self.x0['feh'] = 0
-            self.x0['distance'] = 1000/self.plax
+            self.x0['plx'] = self.plx
             self.x0['AV'] = 0.01
 
 
@@ -674,44 +846,70 @@ class ExoSystem:
                     self.x0['u1 {0}'.format(filt)] = self.ld[filt][0]
                     self.x0['u2 {0}'.format(filt)] = self.ld[filt][1]
 
+
+        self.lin_names = []
+
+        if self.fit_transit:
+
+            for i in range(self.n):
+                if self.is_transit[i] and self.fit_ttv[i]:
+                    self.lin_names.append('P {0}'.format(i+1))
+                    self.lin_names.append('Tc {0}'.format(i+1))
+
         if self.fit_rv:
-            
-            self.x0['gamma'] = np.mean(self.rv[self.which_rv == 0])
+
+            self.lin_names.append('gamma')
             if self.rv_bkg_order > 0:
-                self.x0['gamma_dot'] = 0
+                self.lin_names.append('gamma_dot')
             if self.rv_bkg_order > 1:
-                self.x0['gamma_ddot'] = 0
+                self.lin_names.append('gamma_ddot')
 
-            for i in np.unique(self.which_rv)[1:]:
-                self.x0['rv_offset {0}'.format(self.rvnames[i])] = np.mean(self.rv[self.which_rv == i]) - self.x0['gamma']
+            for i in range(1,len(self.rvnames)):
+                self.lin_names.append('rv_offset {0}'.format(self.rvnames[i]))
 
+        if self.fit_gaia:
 
-        req_priors = Table(rows = [
-            ['e x', 'U', 0, 0.9],
-            ['w x', 'U', -np.pi, np.pi],
-            ['cos(i) x', 'U', 0, 1],
-            ['u1 x', 'U', 0, 1],
-            ['u2 x', 'U', 0, 1]
-        ], names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'])
+            self.lin_names.append('ra*_offset')
+            self.lin_names.append('dec_offset')
+            self.lin_names.append('pmra*')
+            self.lin_names.append('pmdec')
+
         
+        self.allpriors = AllPriors()
 
         if self.use_priors:
 
-            prior_tab = vstack([self.init_priors.table, req_priors])
+            self.allpriors.init_fixed(self.init_priors.table, self.x0)
 
-            self.allpriors = AllPriors(prior_tab, self.x0, self.fit_ttv)
-            
+            self.allpriors.init_fixed(self.init_priors.table, {ln: 0 for ln in self.lin_names})
+
             self.fixed = self.allpriors.fixed.copy()
 
             for i in range(self.n):
 
-                if 'e {0}'.format(i+1) in self.fixed or 'w {0}'.format(i+1) in self.fixed:
+                if 'se {0}'.format(i+1) in self.fixed or 'cw {0}'.format(i+1) in self.fixed or 'sw {0}'.format(i+1) in self.fixed:
 
                     self.x0.pop('secw {0}'.format(i+1))
                     self.x0.pop('sesw {0}'.format(i+1))
 
-                    self.x0['e {0}'.format(i+1)] = 0.01
-                    self.x0['w {0}'.format(i+1)] = np.pi/2
+                    e = self.secosw[i]**2 + self.sesinw[i]**2
+
+                    self.x0['se {0}'.format(i+1)] = np.sqrt(e)
+                    self.x0['cw {0}'.format(i+1)] = self.secosw[i] / np.sqrt(e)
+                    self.x0['sw {0}'.format(i+1)] = self.sesinw[i] / np.sqrt(e)
+
+                if ('cos(i) {0}'.format(i+1) in self.fixed or 'comega {0}' in self.fixed or 'somega {0}'.format(i+1) in self.fixed) and 'sico {0}'.format(i+1) in self.x0:
+
+                    self.x0.pop('sico {0}'.format(i+1))
+                    self.x0.pop('siso {0}'.format(i+1))
+
+                    self.x0['cos(i) {0}'.format(i+1)] = np.cos(self.inc[i])
+                    self.x0['comega {0}'.format(i+1)] = np.cos(self.omega)
+                    self.x0['somega {0}'.format(i+1)] = np.sin(self.omega)
+
+                if 'log(rhostar)' in self.fixed and 'log(a/rs) {0}'.format(i+1) in self.x0:
+
+                    self.x0.pop('log(a/rs) {0}'.format(i+1))
 
             for f in self.fixed:
 
@@ -719,11 +917,77 @@ class ExoSystem:
 
                     self.x0.pop(f)
 
+                if f in self.lin_names:
+
+                    self.lin_names.remove(f)
+
+
+        req_priors = Table(rows = [
+            ['e x', 'U', 0, 0.9],
+            ['u1 x', 'U', 0, 1],
+            ['u2 x', 'U', 0, 1],
+            ['feh', 'U', -0.5, 0.5],
+            ['AV', 'U', 0, np.inf]
+        ], names = ['Variable', 'Prior Type', 'Param 1', 'Param 2'])
+
+        if self.fit_transit and not self.fit_gaia:
+            req_priors.add_row(['cos(i) x', 'U', 0, 1])
+
+        elif not self.fit_transit and self.fit_gaia:
+            req_priors.add_row(['cos(i) x', 'U', -1, 1])
+
+        elif self.fit_transit and self.fit_gaia:
+
+            for i in range(self.n):
+
+                if self.is_astro[i]:
+                    req_priors.add_row(['cos(i) {0}'.format(i+1), 'U', -1, 1])
+
+                elif self.is_transit[i]:
+                    req_priors.add_row(['cos(i) {0}'.format(i+1), 'U', 0, 1])
+
+        for i in range(self.n):
+
+            if 'cw {0}'.format(i+1) in self.x0 or 'sw {0}'.format(i+1) in self.x0:
+                req_priors.add_row['rsq_w {0}'.format(i+1), 'UC', np.nan, np.nan]
+
+            if 'comega {0}'.format(i+1) in self.x0 or 'somega {0}'.format(i+1) in self.x0:
+                req_priors.add_row(['rsq_omega {0}'.format(i+1), 'UC', np.nan, np.nan])
+
+        
+
+        if self.use_priors:
+
+            from astropy.table import vstack
+
+            prior_tab = vstack([self.init_priors.table, req_priors])
+
+            self.allpriors.init_priors(prior_tab, self.x0, self.fit_ttv) 
+
+            self.allpriors.init_priors(prior_tab, {ln: 0 for ln in self.lin_names}, self.fit_ttv)           
+
         else:
 
-            self.allpriors = AllPriors(req_priors, self.x0, self.fit_ttv)
+            self.allpriors = AllPriors()
+
+            self.allpriors.init_priors(req_priors, self.x0, self.fit_ttv)
 
             self.fixed = {}
+        
+
+        if self.fit_gaia and not self.fit_star:
+
+            if self.fit_transit:
+
+                if 'rstar' not in self.allpriors.prior_dict:
+
+                    print('It is highly recommended to place an informative prior on rstar with astrometry+transit fits.')
+
+            else:
+
+                if 'mstar' not in self.allpriors.prior_dict:
+
+                    print('It is highly recommended to place an informative prior on mstar with astrometry fits.')
 
 
         self.keys = list(self.x0.keys())
@@ -754,8 +1018,12 @@ class ExoSystem:
 
         else:
 
-            self.setup_miniexs()
-            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
+            from scipy.optimize import minimize
+
+            miniobj = MiniExoSystem(self)
+            _init_worker(miniobj)
+
+            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             self.x = {k:v for k,v in zip(self.keys, res.x)}
 
 
@@ -809,12 +1077,16 @@ class ExoSystem:
         Do not run this by itself.
         """
 
-        x0 = {'eep': 355, 'log10(age)': 9.66, 'feh': 0, 'distance': 1000/self.plax, 'AV': 0.01}
+        from scipy.optimize import minimize
+
+        x0 = {'eep': 355, 'log10(age)': 9.66, 'feh': 0, 'plx': self.plx, 'AV': 0.01}
         keys = list(x0.keys())
 
         if self.use_priors:
 
-            self.allpriors = AllPriors(self.init_priors.table, x0, self.fit_ttv)
+            self.allpriors = AllPriors()
+
+            self.allpriors.init_fixed(self.init_priors.table, x0)
 
             self.fixed = self.allpriors.fixed.copy()
 
@@ -823,6 +1095,8 @@ class ExoSystem:
                 if f in self.x0:
 
                     self.x0.pop(f)
+
+            self.allpriors.init_priors(self.init_priors.table, x0, np.empty(0))
 
         res = minimize(lambda x, *args: -1 * log_like_staronly({k:v for k,v in zip(keys, x)}, *args), [x0[k] for k in keys], method = 'Nelder-Mead', args = (self,))
         x = {k:v for k,v in zip(keys, res.x)}
@@ -845,14 +1119,19 @@ class ExoSystem:
             show_plot (bool): Whether or not to show the plots.
         """
 
-        print('\nStarting sigma clipping of lightcurves.')
+        from scipy.optimize import minimize
+        import matplotlib.pyplot as plt
+
+        print('\nStarting sigma clipping of lightcurves...')
 
         clipped = [0]*len(self.tt)
 
         for i in range(10):
 
-            self.setup_miniexs()
-            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args), [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
+            miniobj = MiniExoSystem(self)
+            _init_worker(miniobj)
+
+            res = minimize(lambda x, *args: -1 * log_like({k:v for k,v in zip(self.keys, x)}, *args)[0], [self.x0[k] for k in self.keys], method = 'Nelder-Mead')
             x = {k:v for k,v in zip(self.keys, res.x)}
 
             if not os.path.isdir(self.direc+'Plots/'+name+'/sigma_clip'):
@@ -864,10 +1143,10 @@ class ExoSystem:
 
                 for j in range(self.n):
 
-                    if 'e {0}'.format(j+1) in y:
+                    if 'se {0}'.format(j+1) in y:
 
-                        y['secw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.cos(y['w {0}'.format(j+1)])
-                        y['sesw {0}'.format(j+1)] = np.sqrt(y['e {0}'.format(j+1)]) * np.sin(y['w {0}'.format(j+1)])
+                        y['secw {0}'.format(j+1)] = y['se {0}'.format(j+1)] * y['cw {0}'.format(j+1)]
+                        y['sesw {0}'.format(j+1)] = y['se {0}'.format(j+1)] * y['sw {0}'.format(j+1)]
 
             else:
 
@@ -875,24 +1154,30 @@ class ExoSystem:
 
             if self.fit_star:
 
-                rstar, mstar, Tstar, loggstar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg'])
+                rstar, mstar, Tstar, loggstar, rhostar = self.misti.interp_value([y['eep'],y['log10(age)'],y['feh']],['radius','mass','Teff','logg','density'])
 
-                arlist = []
+                y['rstar'] = rstar
+                y['log(rhostar)'] = np.log(rhostar)
+
                 for j in range(self.n):
 
                     if not self.is_transit[j]:
-                        arlist.append(np.nan)
                         continue
 
                     if self.fit_ttv[j]:
 
-                        p = get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = 1)[0]
+                        p = get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)])[0]
 
                     else:
 
                         p = np.exp(y['log(P) {0}'.format(j+1)])
 
-                    if self.is_rv[j] and self.fit_rv:
+                    if self.is_astro[j] and self.fit_gaia:
+
+                        q = np.exp(y['log(q) {0}'.format(j+1)])
+                        mp = q * mstar
+
+                    elif self.is_rv[j] and self.fit_rv:
 
                         e = 0
                         if self.fit_ecc[j]:
@@ -904,9 +1189,9 @@ class ExoSystem:
 
                         mp = 0
 
-                    ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+                    ar = ((mstar + mp*earthm_to_msun) * (p*d_to_yr)**2)**(1/3) * au_to_rsun / rstar
 
-                    arlist.append(ar)
+                    y['log(a/rs) {0}'.format(i+1)] = np.log(ar)
 
             pars = []
             for j in range(self.n):
@@ -916,11 +1201,12 @@ class ExoSystem:
 
                 if self.fit_ttv[j]:
 
-                    pars.append(get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)], ar = arlist[j] if self.fit_star else None))
+                    ttvpar = get_ttv_params(y, j+1, self.ttvi['{0}'.format(j+1)])
 
-                else:
+                    y['log(P) {0}'.format(j+1)] = np.log(ttvpar[0])
+                    y['Tc {0}'.format(j+1)] = ttvpar[1]
 
-                    pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None))
+                pars.append(get_transit_params(y, j+1))
 
 
             lastclipped = [0]*len(self.tt)
@@ -975,20 +1261,25 @@ class ExoSystem:
 
                         if self.is_eclipse[k]:
 
-                            mp = 0
-                            ms = mstar if self.fit_star else self.ms
+                            ms = y['mstar'] if 'mstar' in y else self.ms
+                            rs = y['rstar'] if 'rstar' in y else self.rs
+                            q = 0
 
-                            if self.is_rv[k] and self.fit_rv:
-                            
+                            if self.is_astro[k] and self.fit_gaia:
+
+                                q = np.exp(y['log(q) {0}'.format(k+1)])
+
+                            elif self.is_rv[k] and self.fit_rv:
+
                                 e = 0
                                 if self.fit_ecc[k]:
                                     e = y['secw {0}'.format(k+1)]**2 + y['sesw {0}'.format(k+1)]**2
-        
-                                mp = calc_m_from_k(p, np.exp(y['log(K) {0}'.format(k+1)]), e, np.arccos(y['cos(i) {0}'.format(k+1)]), ms)
+                                
+                                mp = calc_m_from_k(np.exp(y['log(P) {0}'.format(k+1)]), np.exp(y['log(K) {0}'.format(k+1)]), e, np.arccos(y['cos(i) {0}'.format(k+1)]), ms)
 
-                            q = mp/ms
+                                q = mp/ms
 
-                            fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j], eclipse = True, fp = y['fp {0}'.format(k+1)], rstar = rstar if self.fit_star else self.rs, q = q)
+                            fm += lightCurve(pars[l], self.tt[j], ld, self.exptimes[j], self.supersamples[j], eclipse = True, fp = y['fp {0}'.format(k+1)], rstar = rs, q = q)
 
                         else:
 
@@ -1078,166 +1369,55 @@ class ExoSystem:
 
         self.parnames = {}
 
-        pos = []
+        pos = np.empty((len(self.keys),0))
 
         for i, k in enumerate(self.keys):
 
             self.parnames[k] = i
 
-            if 'log(P)' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.0001, (np.exp(ub)-np.exp(self.x[k]))/0.0001, loc = np.exp(self.x[k]), scale = 0.0001, size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.0001, self.nwalk)))
+        while pos.shape[1] < self.nwalk:
 
-            if 'Tc' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.0001, (ub-self.x[k])/0.0001, loc = self.x[k], scale = 0.0001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.0001, self.nwalk))
+            trial = np.zeros((len(self.keys),2*self.nwalk))
 
-            if 'TT' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.0001, (ub-self.x[k])/0.0001, loc = self.x[k], scale = 0.0001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.0001, self.nwalk))
+            for k in self.parnames:
 
-            if 'ror' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/(0.1*self.x[k]), (ub-self.x[k])/(0.1*self.x[k]), loc = self.x[k], scale = 0.1*self.x[k], size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.1*self.x[k], self.nwalk))
+                k0 = k.split()[0]
 
-            if 'fp' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/(0.1*self.x[k]), (ub-self.x[k])/(0.1*self.x[k]), loc = self.x[k], scale = 0.1*self.x[k], size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.1*self.x[k], self.nwalk))
+                if k0 == 'log(P)':
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.0001, 2*self.nwalk))
 
-            if 'log(a/rs)' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.1, (np.exp(ub)-np.exp(self.x[k]))/0.1, loc = np.exp(self.x[k]), scale = 0.1, size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.1, self.nwalk)))
+                if k0 in ['Tc','TT']:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.0001, 2*self.nwalk)
 
-            if 'cos(i)' in k:
-                lb, ub = 0, 1
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+                if k0 in ['ror','fp','rstar','mstar']:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.1*self.x[k], 2*self.nwalk)
 
-            if 'log(K)' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/0.01, (np.exp(ub)-np.exp(self.x[k]))/0.01, loc = np.exp(self.x[k]), scale = 0.01, size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01, self.nwalk)))
+                if k0 in ['log(a/rs)','log(rhostar)','log(K)','log(q)']:
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
 
-            if 'secw' in k or 'sesw' in k:
-                lb, ub = -1, 1
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
+                if k0 in ['cos(i)','se']:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
 
-            if k.split()[0] == 'e':
-                lb, ub = 0, 0.9
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
+                if k0 in ['secw','sesw','comega','somega','sico','siso','cw','sw','u1','u2','feh','AV']:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.01, 2*self.nwalk)
 
-            if k.split()[0] == 'w':
-                lb, ub = -np.pi, np.pi
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-self.x[k])/1, (ub-self.x[k])/1, loc = self.x[k], scale = 1, size = self.nwalk))
+                if '_gp' in k:
+                    trial[self.parnames[k]] = np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), 2*self.nwalk))
 
-            if 'F0' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
+                if k == 'eep':
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.1, 2*self.nwalk)
 
-            if k == 'gamma':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.1, (ub-self.x[k])/0.1, loc = self.x[k], scale = 0.1, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
+                if k == 'log10(age)':
+                    trial[self.parnames[k]] = np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, 2*self.nwalk))
 
-            if k == 'gamma_dot':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.01, self.nwalk))
+                if k0 in ['plx','F0']:
+                    trial[self.parnames[k]] = np.random.normal(self.x[k], 0.001, 2*self.nwalk)
 
-            if k == 'gamma_ddot':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.001, (ub-self.x[k])/0.001, loc = self.x[k], scale = 0.001, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.001, self.nwalk))
+            lp = self.allpriors.apply({k: trial[self.parnames[k]] for k in self.parnames} | self.fixed)
+            valid = np.isfinite(lp) & np.all(np.isfinite(trial), axis = 0)
+            pos = np.append(pos, trial[:,valid], axis = 1)
 
-            if '_gp' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log(truncnorm.rvs((np.exp(lb)-np.exp(self.x[k]))/(0.01*np.exp(self.x[k])), (np.exp(ub)-np.exp(self.x[k]))/(0.01*np.exp(self.x[k])), loc = np.exp(self.x[k]), scale = 0.01*np.exp(self.x[k]), size = self.nwalk)))
-                else:
-                    pos.append(np.log(np.random.normal(np.exp(self.x[k]), 0.01*np.exp(self.x[k]), self.nwalk)))
-
-            if 'rv_offset' in k:
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(truncnorm.rvs((lb-self.x[k])/0.1, (ub-self.x[k])/0.1, loc = self.x[k], scale = 0.1, size = self.nwalk))
-                else:
-                    pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
-
-            if k in ['u1','u2']:
-                lb, ub = 0, 1
-                if self.use_priors:
-                    lb2, ub2 = self.allpriors.get_bounds(k)
-                    lb = max(lb, lb2)
-                    ub = min(ub, ub2)
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
-
-            if k == 'eep':
-                pos.append(np.random.normal(self.x[k], 0.1, self.nwalk))
-
-            if k == 'log10(age)':
-                if self.use_priors:
-                    lb, ub = self.allpriors.get_bounds(k)
-                    pos.append(np.log10(truncnorm.rvs((10**lb-10**self.x[k])/(10**self.x[k]/100), (10**ub-10**self.x[k])/(10**self.x[k]/100), loc = 10**self.x[k], scale = 10**self.x[k]/100, size = self.nwalk)))
-                else:
-                    pos.append(np.log10(np.random.normal(10**self.x[k], 10**self.x[k]/100, self.nwalk)))
-
-            if k == 'feh':
-                lb, ub = -0.5, 0.5
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
-
-            if k == 'distance':
-                pos.append(np.random.normal(self.x[k], 1, self.nwalk))
-
-            if k == 'AV':
-                lb, ub = 0, np.inf
-                pos.append(truncnorm.rvs((lb-self.x[k])/0.01, (ub-self.x[k])/0.01, loc = self.x[k], scale = 0.01, size = self.nwalk))
-
-
-        pos = np.transpose(np.array(pos))
+        pos = pos.T[:self.nwalk]
 
         return pos
 
@@ -1252,8 +1432,16 @@ class ExoSystem:
                 with emcee sampler.
         """
 
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
+
+        blobs_dtype = [(name, np.float64) for name in self.lin_names]
+
         sampler_kwargs = {'nwalkers': self.nwalk,
                           'ndim': len(self.x),
+                          'blobs_dtype': blobs_dtype,
                           }
 
         if self.sampler_type == 'emcee':
@@ -1279,11 +1467,15 @@ class ExoSystem:
             conv_func = check_zeus_conv
             sampler = zeus.EnsembleSampler
 
+        miniobj = MiniExoSystem(self)
+
         if self.cores == 0:
-            self.setup_miniexs()
+            _init_worker(miniobj)
             ctx = nullcontext()
         else:
-            ctx = Pool(processes = self.cores, initializer = self.setup_miniexs)
+            ctx = mp.get_context('spawn').Pool(processes = self.cores, initializer = _init_worker, initargs = (miniobj,))
+
+        log_like({z: pos[0][self.parnames[z]] for z in self.parnames}) #initializes things and seems to suppress red-blue warnings
 
         with ctx as pool:
         
@@ -1344,6 +1536,10 @@ class ExoSystem:
 
             self.log_likes = self.sampler.get_log_prob(discard = int(burnfrac*it))
 
+            self.lin_par = self.sampler.get_blobs(discard = int(burnfrac*it))
+            if self.lin_par is not None:
+                self.lin_par = self.lin_par[:self.samples.shape[0]]
+
 
     def find_opt_cores(self, pos: np.typing.NDArray) -> int:
         """Finds the optimal number of cores to run in parallel for best performance (or whether to use serial instead) by running short, 15-step
@@ -1356,6 +1552,13 @@ class ExoSystem:
             int: The optimal number of cores to use, with 0 for serial.
         """
 
+        print('\nDetermining optimal number of cores...')
+
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
+
         max_cores = os.cpu_count()
 
         test_cores = list(range(0, max_cores+1, 2))
@@ -1365,8 +1568,15 @@ class ExoSystem:
         best_time = np.inf
         opt_cores = 0
 
+        miniobj = MiniExoSystem(self)
+        _init_worker(miniobj)
+        log_like({z: pos[0][self.parnames[z]] for z in self.parnames}) #initializes things and seems to suppress red-blue warnings
+
+        blobs_dtype = [(name, np.float64) for name in self.lin_names]
+
         sampler_kwargs = {'nwalkers': self.nwalk,
                          'ndim': len(self.x),
+                         'blobs_dtype': blobs_dtype,
                          }
 
         if self.sampler_type == 'emcee':
@@ -1379,39 +1589,50 @@ class ExoSystem:
                                    'verbose': False,
                                    })
 
-        for c in test_cores:
+        pool_ctx = (
+            mp.get_context("spawn").Pool(
+                processes=max_cores, initializer=_init_worker, initargs=(miniobj,)
+            )
+            if max_cores > 1
+            else nullcontext()
+        )
 
-            if c == 0:
-                self.setup_miniexs()
-                ctx = nullcontext()
-            else:
-                ctx = Pool(processes = c, initializer = self.setup_miniexs)
+        with pool_ctx as shared_pool:
 
-            try:
-                with ctx as pool:
+            if shared_pool is not None:
+                warmup_kwargs = dict(sampler_kwargs, pool=shared_pool)
+                if self.sampler_type == "emcee":
+                    emcee.EnsembleSampler(**warmup_kwargs).run_mcmc(pos, 2, progress=False)
+                elif self.sampler_type == "zeus":
+                    zeus.EnsembleSampler(**warmup_kwargs).run_mcmc(pos, 2, progress=False)
 
-                    if c == 0:
-                        sampler_kwargs['pool'] = None
-                    else:
-                        sampler_kwargs['pool'] = pool
+            for c in test_cores:
 
+                if c == 0:
+                    sampler_kwargs['pool'] = None
+                else:
+                    sampler_kwargs['pool'] = _SubPool(shared_pool, c)
+
+                try:
                     if self.sampler_type == 'emcee':
                         benchsampler = emcee.EnsembleSampler(**sampler_kwargs)
 
                     elif self.sampler_type == 'zeus':
                         benchsampler = zeus.EnsembleSampler(**sampler_kwargs)
 
+                    state = benchsampler.run_mcmc(pos, 2, progress = False)
+
                     t0 = time.perf_counter()
-                    benchsampler.run_mcmc(pos, 15, progress = False)
+                    benchsampler.run_mcmc(state, 15, progress = False)
                     elapsed = time.perf_counter() - t0
 
-                    if elapsed < best_time:
+                    if elapsed < 0.9 * best_time:
                         best_time = elapsed
                         opt_cores = c
 
-            except Exception as e:
-                print('{0} cores failed benchmarking: {1}'.format(c, e))
-                continue
+                except Exception as e:
+                    print('{0} cores failed benchmarking: {1}'.format(c, e))
+                    continue
 
         if opt_cores == 0:
             print('\nRunning in serial.')
@@ -1419,17 +1640,6 @@ class ExoSystem:
             print('\nRunning in parallel with {0} cores.'.format(opt_cores))
 
         return opt_cores
-    
-
-    def setup_miniexs(self):
-        """Creates a MiniExoSystem object from the current ExoSystem, storing the data and options used in the log likelihood function for fitting.
-        This MiniExoSystem object is made global, allowing the log likelihood function to access it, and avoiding pickling all of the data during
-        parallel MCMC sampling.
-        """
-
-        global miniexs
-
-        miniexs = MiniExoSystem(self)
 
 
     def save_samples(self, name):
@@ -1441,7 +1651,7 @@ class ExoSystem:
             name (str): Name of the run. Sets the name of the pickle file to name_samples.p.
         """
 
-        z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes}
+        z = {'parnames': self.parnames, 'samples': self.samples, 'log_like': self.log_likes, 'lin_par': self.lin_par}
 
         pickle.dump(z, open(self.direc+'Output/'+name+'_samples.p', 'wb'))
 
@@ -1475,13 +1685,24 @@ class ExoSystem:
                 fully explore the space. Only set to True if you keep getting initial state check errors after burn in. Default is False.
         """
 
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
+
+        miniobj = MiniExoSystem(self)
+
         if self.cores == 0:
-            self.setup_miniexs()
+            _init_worker(miniobj)
             ctx = nullcontext()
         else:
-            ctx = Pool(processes = self.cores, initializer = self.setup_miniexs)
+            ctx = mp.get_context('spawn').Pool(processes = self.cores, initializer = _init_worker, initargs = (miniobj,))
 
         nprev = len(self.samples)
+
+        state = self.samples[-1]
+
+        log_like({z: state[0][self.parnames[z]] for z in self.parnames}) #initializes things and seems to suppress red-blue warnings
 
         burnin = 0
         if isinstance(self.nburn, float):
@@ -1503,8 +1724,6 @@ class ExoSystem:
                 self.sampler.pool = pool
 
             print('\nRunning MCMC sampling.')
-
-            state = self.samples[-1]
 
             if not check_converge:
 
@@ -1598,11 +1817,18 @@ class ExoSystem:
             name (str): Name of the run. Sets the names of the output files from this function.
         """
 
+        from astropy.table import Table
+
         self.res = {}
 
         for k, v in self.parnames.items():
 
             self.res[k] = self.flat_samples[:,v]
+
+        for i in range(len(self.lin_names)):
+
+            linpar = self.lin_par[self.lin_names[i]]
+            self.res[self.lin_names[i]] = np.reshape(linpar, (linpar.shape[0]*linpar.shape[1]))
 
         self.res['log_like'] = self.flat_log_likes
 
@@ -1610,13 +1836,21 @@ class ExoSystem:
 
         self.dres = {}
 
+        if self.use_priors:
+        
+            y = self.res | self.fixed
+
+        else:
+        
+            y = self.res.copy()
+
         n = len(self.res['log_like'])
 
         if self.fit_star:
 
             self.starmod._derived_samples = self.misti(*[self.res[x] if x in self.res else [self.fixed[x]]*n for x in ['eep','log10(age)','feh','distance','AV']])
-            self.starmod._derived_samples["parallax"] = 1000.0 / self.res['distance']
-            self.starmod._derived_samples["distance"] = self.res['distance']
+            self.starmod._derived_samples["parallax"] = self.res['plx']
+            self.starmod._derived_samples["distance"] = 1000/self.res['plx']
             self.starmod._derived_samples["AV"] = self.res['AV']
 
             self.dres['rstar'] = self.starmod._derived_samples['radius']
@@ -1627,6 +1861,12 @@ class ExoSystem:
             self.dres['loggstar'] = self.starmod._derived_samples['logg']
             self.dres['Lstar'] = 10**self.starmod._derived_samples['logL']
             self.dres['Mbolstar'] = self.starmod._derived_samples['Mbol']
+            self.dres['distance'] = self.starmod._derived_samples['distance']
+
+            rstar = self.dres['rstar']
+            mstar = self.dres['mstar']
+            rhostar = self.dres['rhostar']
+            T = self.dres['Tstar']
 
             interp_input = np.array([self.dres['Tstar'], self.dres['loggstar'], self.res['feh']]).T
 
@@ -1638,8 +1878,31 @@ class ExoSystem:
         else:
 
             T = np.random.normal(self.Ts, self.Tserr, n)
-            rstar = np.random.normal(self.rs, self.rserr, n)
-            mstar = np.random.normal(self.ms, self.mserr, n)
+            self.dres['Tstar'] = T
+
+            if 'plx' in y:
+                self.dres['distance'] = 1000/y['plx']
+
+            if 'rstar' in y:
+                rstar = y['rstar']
+
+            else:
+                rstar = np.random.normal(self.rs, self.rserr, n)
+                self.dres['rstar'] = rstar
+
+            if 'mstar' in y:
+                mstar = y['mstar']
+
+            elif 'log(rhostar)' in y:
+                rhostar = np.exp(y['log(rhostar)'])
+                self.dres['rhostar'] = rhostar
+
+                mstar = rhostar * 4/3*np.pi * rstar**3 * gcm3rsun3_to_msun
+                self.dres['mstar'] = mstar
+
+            else:
+                mstar = np.random.normal(self.ms, self.mserr, n)
+                self.dres['mstar'] = mstar
 
         hasJ = False
         if 'J' in self.magbands:
@@ -1651,65 +1914,48 @@ class ExoSystem:
 
         if self.fit_planets:
 
-            if self.use_priors:
-
-                y = self.res | self.fixed
-
-                for i in range(self.n):
-
-                    if 'e {0}'.format(i+1) in y:
-
-                        y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
-                        y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
-
-            else:
-
-                y = self.res.copy()
-
             for i in range(self.n):
 
                 if self.is_transit[i] and self.fit_transit:
 
                     if self.fit_ttv[i]:
 
-                        ttvi = np.array([self.ttvi['{0}'.format(i+1)]]).T
-                        tts = np.array([y['TT {0} {1}'.format(i, j+1)] for j in range(ttvi.shape[0])])
-                        
-                        res = linregress(ttvi, tts)
-                        p = res.slope
-                        tc = res.intercept
-
-                        self.dres['P {0}'.format(i+1)] = p
-                        self.dres['Tc {0}'.format(i+1)] = tc
+                        p = y['P {0}'.format(i+1)]
 
                     else:
 
                         p = np.exp(y['log(P) {0}'.format(i+1)])
                         self.dres['P {0}'.format(i+1)] = p
 
-                    rp = y['ror {0}'.format(i+1)] * rstar * (1*u.Rsun).to(u.earthRad).value
+                    rp = y['ror {0}'.format(i+1)] * rstar * rsun_to_earthr
                     self.dres['Rp {0}'.format(i+1)] = rp
 
-                    if not self.fit_star:
-
+                    if not self.fit_star and not self.fit_rhostar:
                         ars = np.exp(y['log(a/rs) {0}'.format(i+1)])
                         self.dres['a/rs {0}'.format(i+1)] = ars
 
-                        a = ars * rstar * (1*u.Rsun).to(u.AU).value
+                        a = ars * rstar / au_to_rsun
+                        self.dres['a {0}'.format(i+1)] = a
+
+                    elif not (self.is_rv[i] and self.fit_rv) and not (self.is_astro[i] and self.fit_gaia):
+                        ars = (rhostar * p**2 / 0.018916375)**(1/3)
+                        self.dres['a/rs {0}'.format(i+1)] = ars
+
+                        a = ars * rstar / au_to_rsun
                         self.dres['a {0}'.format(i+1)] = a
 
                     inc = np.arccos(y['cos(i) {0}'.format(i+1)]) * 180/np.pi
                     self.dres['i {0}'.format(i+1)] = inc
 
 
-                elif self.is_rv[i] and self.fit_rv:
+                elif (self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia):
 
                     p = np.exp(y['log(P) {0}'.format(i+1)])
                     self.dres['P {0}'.format(i+1)] = p
 
-                if self.fit_ecc[i]:
+                if self.fit_ecc[i] and self.is_fit[i]:
 
-                    if 'e {0}'.format(i+1) not in y:
+                    if 'se {0}'.format(i+1) not in y:
 
                         e = y['secw {0}'.format(i+1)]**2 + y['sesw {0}'.format(i+1)]**2
                         self.dres['e {0}'.format(i+1)] = e
@@ -1719,43 +1965,91 @@ class ExoSystem:
 
                     else:
 
-                        e = y['e {0}'.format(i+1)]
-                        w = y['w {0}'.format(i+1)]
+                        e = y['se {0}'.format(i+1)]**2
+                        self.dres['e {0}'.format(i+1)] = e
+                        w = np.arctan2(y['sw {0}'.format(i+1)], y['cw {0}'.format(i+1)])
+                        self.dres['w {0}'.format(i+1)] = w
 
                 else:
 
                     e = 0
                     w = np.pi/2
 
+                if self.is_fit[i]:
+                    fc = np.pi/2 - w
+                    Ec = np.arctan2(np.sqrt(1-e**2) * np.sin(fc), e + np.cos(fc))
+                    tc = y['Tc {0}'.format(i+1)]
+                    tp = tc - p/(2*np.pi) * (Ec - e * np.sin(Ec))
+                    self.dres['Tp {0}'.format(i+1)] = tp
+
                 mp = 0
 
-                if self.is_rv[i] and self.fit_rv:
+                if self.is_astro[i] and self.fit_gaia:
+
+                    q = np.exp(y['log(q) {0}'.format(i+1)])
+                    self.dres['q {0}'.format(i+1)] = q
+
+                    mp = q * mstar * msun_to_earthm
+                    self.dres['Mp {0}'.format(i+1)] = mp
+
+                    if self.is_transit[i] and self.fit_transit:
+
+                        rhop = mp / (4/3 * np.pi * rp**3) * earthmearthr3_to_gcm3
+                        self.dres['rhop {0}'.format(i+1)] = rhop
+
+                        omega = np.arctan2(y['somega {0}'.format(i+1)], y['comega {0}'.format(i+1)])
+                        self.dres['omega {0}'.format(i+1)] = omega
+
+                    else:
+
+                        inc = np.arccos(1-2*(y['sico {0}'.format(i+1)]**2 + y['siso {0}'.format(i+1)]**2))*180/np.pi
+                        self.dres['i {0}'.format(i+1)] = inc
+
+                        omega = np.arctan2(y['siso {0}'.format(i+1)], y['sico {0}'.format(i+1)])
+                        self.dres['omega {0}'.format(i+1)] = omega
+
+                    k = 29785.326 * np.sin(inc*np.pi/180) / np.sqrt(1-e**2) * (p*d_to_yr)**(-1/3) * q/(1+q)**(2/3) * mstar**(1/3)
+                    self.dres['K {0}'.format(i+1)] = k
+
+
+                elif self.is_rv[i] and self.fit_rv:
 
                     k = np.exp(y['log(K) {0}'.format(i+1)])
                     self.dres['K {0}'.format(i+1)] = k
 
-                    if self.is_transit[i] and self.fit_transit:
+                    if (self.is_transit[i] and self.fit_transit) or (self.is_astro[i] and self.fit_gaia):
 
-                        mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, inc*np.pi/180, mstar)
+                        mp = calc_m_from_k(p*d_to_yr, k, e, inc*np.pi/180, mstar)
                         self.dres['Mp {0}'.format(i+1)] = mp
 
-                        rhop = mp / (4/3 * np.pi * rp**3) * (1*u.earthMass/u.earthRad**3).to(u.g/u.cm**3).value
-                        self.dres['rhop {0}'.format(i+1)] = rhop
+                        if self.is_transit[i] and self.fit_transit:
+
+                            rhop = mp / (4/3 * np.pi * rp**3) * earthmearthr3_to_gcm3
+                            self.dres['rhop {0}'.format(i+1)] = rhop
 
                     else:
 
-                        mp = calc_m_from_k(p*(1*u.day).to(u.yr).value, k, e, np.pi/2, mstar)
+                        mp = calc_m_from_k(p*d_to_yr, k, e, np.pi/2, mstar)
                         self.dres['Mpsini {0}'.format(i+1)] = mp
 
-                if self.fit_star or (not (self.fit_transit and self.is_transit[i]) and (self.is_rv[i] and self.fit_rv)):
 
-                    a = ((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3)
-                    self.dres['a {0}'.format(i+1)] = a
+                if (self.fit_star or self.fit_rhostar) and self.is_astro[i] and self.fit_gaia:
 
-                    ars = (a*u.AU).to(u.Rsun).value / rstar
+                    ars = (rhostar * 4/3*np.pi * g_to_msun * (1+q) * (p*d_to_yr)**2)**(1/3) * au_to_cm
                     self.dres['a/rs {0}'.format(i+1)] = ars
 
-                if (self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i]):
+                    a = ars * rstar / au_to_rsun
+                    self.dres['a {0}'.format(i+1)] = a
+
+                if self.is_fit[i] and 'a/rs {0}'.format(i+1) not in self.dres:
+
+                    a = ((mstar + mp*earthm_to_msun) * (p*d_to_yr)**2)**(1/3)
+                    self.dres['a {0}'.format(i+1)] = a
+
+                    ars = a*au_to_rsun / rstar
+                    self.dres['a/rs {0}'.format(i+1)] = ars
+
+                if self.is_fit[i]:
 
                     teq = (1/4)**(1/4) * T * ars**(-1/2)
                     self.dres['teq {0}'.format(i+1)] = teq
@@ -1771,15 +2065,15 @@ class ExoSystem:
                     depth = y['ror {0}'.format(i+1)]**2 * 1e6
                     self.dres['depth {0}'.format(i+1)] = depth
 
-                    dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * (1*u.day).to(u.hr).value
+                    dur = p / np.pi * np.arcsin(np.sqrt((1 + y['ror {0}'.format(i+1)])**2 - b**2) / (ars * np.sqrt(1 - y['cos(i) {0}'.format(i+1)]**2))) * d_to_hr
                     self.dres['dur {0}'.format(i+1)] = dur
 
-                    if not self.fit_star:
+                    if not self.fit_star and not self.fit_gaia:
 
                         rhos = 0.018916375 * ars**3 / p**2
                         self.dres['rhos {0}'.format(i+1)] = rhos
 
-                    if self.is_rv[i] and self.fit_rv and hasJ:
+                    if ((self.is_rv[i] and self.fit_rv) or (self.is_astro[i] and self.fit_gaia)) and hasJ:
 
                         sf = np.full(n, 0.19)
                         j = np.where(rp > 1.5)[0]
@@ -1793,37 +2087,44 @@ class ExoSystem:
                         self.dres['TSM {0}'.format(i+1)] = tsm
 
 
-        if not self.fit_star:
-            self.dres['rstar'] = rstar
-            self.dres['mstar'] = mstar
-            self.dres['Tstar'] = T
-
 
         pickle.dump(self.dres, open(self.direc+'Output/'+name+'_dres.p', 'wb'))
 
 
-        par_units = {'log(P)': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'secw': '', 'sesw': '',
-                     'fp': '', 'TT': 'BJD-2450000', 'F0': '', 'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day',
-                     'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr', 'feh': 'dex', 'distance': 'pc',
-                     'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2',
-                     'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days', 'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad',
-                     'K': 'm/s', 'Mp': 'Mearth', 'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr',
-                     'rhos': 'g/cm^3', 'TSM': ''}
+        par_units = {'log(P)': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'cos(i)': '', 'log(K)': 'm/s', 'log(q)': '', 'sico': '',
+                     'siso': '', 'comega': '', 'somega': '', 'secw': '', 'sesw': '', 'se': '', 'cw': '', 'sw': '', 'fp': '', 'TT': 'BJD-2450000', 'F0': '',
+                     'log(rho_gp)': 'days', 'log(sigma_gp)': '', 'gamma': 'm/s', 'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s',
+                     'ra*_offset': 'mas', 'dec_offset': 'mas', 'pmra*': 'mas/yr', 'pmdec': 'mas/yr', 'u1': '', 'u2': '', 'eep': '', 'log10(age)': 'yr',
+                     'feh': 'dex', 'plx': 'mas', 'distance': 'pc', 'AV': 'mag', 'rstar': 'Rsun', 'mstar': 'Msun', 'log(rhostar)': 'g/cm^3',
+                     'rhostar': 'g/cm^3', 'mstar_init': 'Msun', 'Tstar': 'K', 'loggstar': 'cm/s^2', 'Lstar': 'Lsun', 'Mbolstar': 'mag', 'P': 'days',
+                     'Rp': 'Rearth', 'a/rs': '', 'a': 'AU', 'i': 'deg', 'e': '', 'w': 'rad', 'K': 'm/s', 'q': '', 'omega': 'rad', 'Mp': 'Mearth',
+                     'rhop': 'g/cm^3', 'Mpsini': 'Mearth', 'teq': 'K', 'sinc': 'Searth', 'b': '', 'depth': 'ppm', 'dur': 'hr', 'rhos': 'g/cm^3',
+                     'TSM': '', 'Tp': 'BJD-2450000',}
 
 
         out = []
+
         for x in self.res:
             if x == 'log_like':
                 continue
             out.append([x, par_units[x.split()[0]], np.nanmedian(self.res[x])]+list(np.diff(np.nanpercentile(self.res[x], [16,50,84]))))
+
         for x in self.dres:
             out.append([x, par_units[x.split()[0]], np.nanmedian(self.dres[x])]+list(np.diff(np.nanpercentile(self.dres[x], [16,50,84]))))
+
+        for x in self.fixed:
+            out.append([x, par_units[x.split()[0]], self.fixed[x], 0, 0])
+
+        if 'gamma_dot' in self.res:
+            out.append(['RV t_ref', 'BJD-2450000', self.tr_ref, 0, 0])
+        if self.fit_gaia:
+            out.append(['Gaia t_ref', 'BJD-2450000', self.tg_ref, 0, 0])
 
         tab = Table(rows = out, names = ['Parameter','Units','Median','-Error','+Error'])
         self.restab = tab
         tab.write(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', overwrite = True, delimiter = '|', delimiter_pad = ' ', bookend = True)
 
-        run_settings = {'fit_transit': self.fit_transit, 'fit_rv': self.fit_rv, 'fit_star': self.fit_star, 'fit_ld': self.fit_ld, 'use_priors': self.use_priors, 'lc_supersample_size': self.lc_supersample_size}
+        run_settings = {'fit_transit': self.fit_transit, 'fit_rv': self.fit_rv, 'fit_gaia': self.fit_gaia, 'fit_star': self.fit_star, 'fit_ld': self.fit_ld, 'use_priors': self.use_priors, 'lc_supersample_size': self.lc_supersample_size}
         if self.use_priors:
             run_settings['fixed'] = self.fixed
 
@@ -1886,6 +2187,14 @@ class ExoSystem:
 
             self.plot_rv(name, show_plot = show_plots)
 
+        if self.fit_gaia:
+
+            self.gen_Gaia_astrometry(name)
+
+            self.plot_Gaia_AL(name, show_plot = show_plots)
+
+            self.plot_Gaia_onsky(name, show_plot = show_plots)
+
         if self.nttv > 0 and self.fit_transit:
 
             self.plot_ttvs(name, show_plot = show_plots)
@@ -1911,16 +2220,29 @@ class ExoSystem:
         Potential fit parameters:
 
         - log(P) x: Natural log of the orbital period, in days, for planet number x.
-        - Tc x: Time of conjunction, in BJD-2457000, for planet number x.
+        - Tc x: Time of conjunction, in BJD-2457000, for planet number x. Defined for non-transiting planets as the time when the true anomaly is
+            pi - w. For circular orbits, w is pi/2, and this is equal to Tp.
         - ror x: Planet to star radius ratio, for planet number x.
         - log(a/rs) x: Natural log of the orbital semi-major axis to stellar radius ratio, for planet number x.
-        - cos(i) x: Cosine of the orbital inclination, restricted between 0 and 90 degrees, for planet number x.
+        - cos(i) x: Cosine of the orbital inclination, for planet number x. Restricted between 0 and 90 degrees for transiting planets, extended
+            to -90 to 90 degrees for astrometric planets.
         - log(K) x: Natural log of the RV semi-amplitude, in m/s, for planet number x.
         - secw x: Square root of the eccentricity times the cosine of the argument of periastron, for planet number x.
         - sesw x: Square root of the eccentricity times the sine of the argument of periastron, for planet number x.
         - e x: Orbital eccentricity, for planet number x. Only fit if w is fixed.
-        - w x: Orbital argument of periastron, in radians, for planet number x. Only fit if e is fixed.
+        - cw x: Cosine of the orbital argument of periastron, for planet number x. Only fit if e is fixed.
+        - sw x: Sine of the orbital argument of periastron, for planet number x. Only fit if e is fixed.
         - fp x: Planet to star flux ratio, for planet number x.
+        - log(q) x: Natural log of the planet to star mass ratio, for planet number x.
+        - sico x: Sine of the inclination/2 times the cosine of the longitude of the ascending node, for planet number x. Fit for astrometric-only planets.
+        - siso x: Sine of the inclination/2 times the sine of the longitude of the ascending node, for planet number x. Fit for astrometric-only planets.
+        - comega x: Cosine of the longitude of the ascending node, for planet x. Fit for astrometric+transiting planets, or astrometric-only planets
+            in the case of fixed cos(i) or somega.
+        - somega x: Sine of the longitude of the ascending node, for planet x. Fit for astrometric+transiting planets, or astrometric-only planets
+            in the case of fixed cos(i) or comega.
+        - mstar: The stellar mass, in solar masses. Fit in Gaia-only fits.
+        - rstar: The stellar radius, in solar radii. Fit in Gaia+transit fits.
+        - log(rhostar): The natural log of the mean stellar density, in g/cm^3. Fit in Gaia+transit fits.
         - TT x y: Transit time (when fitting for TTVs), in BJD-2457000, for planet number x transit number y.
         - F0 x: Baseline flux value, for transit data set x.
         - log(rho_gp) x: Natural log of the GP period, in days, for transit data set x.
@@ -1929,12 +2251,16 @@ class ExoSystem:
         - gamma_dot: 1st derivative of the RV systemic velocity, in m/s/day. Relative to time of first RV measurement.
         - gamma_ddot: 2nd derivative of the RV systemic velocity, in m/s/day^2. Relative to time of first RV measurement.
         - rv_offset x: RV offset relative to first data set, in m/s, for RV data set x.
+        - ra*_offset: The offset from the reference value of right ascension times cosine of declination, in mas.
+        - dec_offset: The offset from the reference value of declination, in mas.
+        - pmra*: Proper motion in right ascension times cosine of declination, in mas/yr
+        - pmdec: Proper motion in declination, in mas/yr.
         - u1 x: Linear coefficient for quadratic limb darkening, for filter x.
         - u2 x: Non-linear coefficient for quadratic limb darkening, for filter x.
         - eep: Equivalent evolutionary phase, used to interpolate across MIST models for stellar fitting.
         - log10(age): Log base 10 of the stellar age, in yr.
         - feh: Stellar metallicity, in dex.
-        - distance: Distance to the system, in pc.
+        - plx: Parallax angle of the star, in mas.
         - AV: Visual band extinction to the system, in mags.
         """
         return self.res
@@ -1946,13 +2272,17 @@ class ExoSystem:
         Potential derived parameters:
     
         - P x: Orbital period, in days, for planet number x.
+        - Tp x: Time of periastron, in BJD-2457000, for planet number x. Equal to Tc for circular orbits.
         - Rp x: Planetary radius, in earth radii, for planet number x.
         - a/rs x: Orbital semi-major axis to stellar radius ratio, for planet number x.
         - a x: Orbital semi-major axis, in AU, for planet number x.
-        - i x: Orbital inclination, in degrees, for planet number x (restricted between 0 and 90 degrees).
+        - i x: Orbital inclination, in degrees, for planet number x. Restricted between 0 and 90 degrees for transiting planets, extended
+            to -90 to 90 degrees for astrometric planets.
         - e x: Orbital eccentricity, for planet number x.
         - w x: Orbital argument of periastron, in radians, for planet number x.
+        - omega x: Orbital longitude of the ascending node, in radians, for planet number x.
         - K x: RV semi-amplitude, in m/s, for planet number x.
+        - q x: The planet to star mass ratio, for planet number x.
         - Mp x: Planetary mass, in earth masses, for planet number x.
         - Mpsini x: Planetary mass times the sine of the orbital inclination, in earth masses, for planet number x (used when transit wasn't fit).
         - rhop x: Planetary mean density, in g/cm^3, for planet number x.
@@ -1961,12 +2291,13 @@ class ExoSystem:
         - b x: Transit impact parameter, for planet number x.
         - depth x: Transit depth, in ppm, for planet number x.
         - dur x: Transit duration, in hours, for planet number x.
-        - rhos x: Implied stellar density from transit of planet number x, in g/cm^3.
+        - rhos x: Implied stellar density from transit of planet number x, in g/cm^3. Only when fitting transits with stellar parameters or Gaia data.
         - TSM x: Transmission spectroscopy metric, for planet number x.
         - rstar: Stellar radius, in solar radii.
         - mstar: Stellar mass, in solar masses.
+        - distance: Distance to the system, in pc.
         - mstar_init: Initial stellar mass at the zero-age main sequence point, in solar masses.
-        - rhostar: Mean stellar density from stellar fitting, in g/cm^3.
+        - rhostar: Mean stellar density, in g/cm^3.
         - Tstar: Stellar effective temperature, in K.
         - loggstar: log10 of the stellar surface gravity, in cm/s^2.
         - Lstar: Stellar bolometric luminosity, in solar luminosities.
@@ -2028,6 +2359,11 @@ class ExoSystem:
             pass
 
         try:
+            self.load_gaia_mod(name)
+        except:
+            pass
+
+        try:
             self.load_magfit(name)
         except:
             pass
@@ -2050,11 +2386,13 @@ class ExoSystem:
             name (str): Name of the previous run to load in.
         """
 
+        from astropy.table import Table
+
         self.restab = Table.read(self.direc+'Results/'+name+'.txt', format = 'ascii.fixed_width_two_line', delimiter = '|', header_rows = ['name'])
 
         
     def load_lcs_mod(self, name: str):
-        """Loads in the best fit transit model of a previous run into ExoSystem.fm.
+        """Loads in the best fit transit model of a previous run into ExoSystem._lcm.
 
         Args:
             name (str): Name of the previous run to load in.
@@ -2064,13 +2402,23 @@ class ExoSystem:
 
 
     def load_rv_mod(self, name: str):
-        """Loads in the best fit RV model of a previous run into ExoSystem.rvm.
+        """Loads in the best fit RV model of a previous run into ExoSystem._rvm.
 
         Args:
             name (str): Name of the previous run to load in.
         """
 
         self._rvm = pickle.load(open(self.direc+'/Output/'+name+'_rvm.p', 'rb'))
+
+    
+    def load_gaia_mod(self, name: str):
+        """Loads in the best fit Gaia astrometry model of a previous run into ExoSystem._gaiam.
+
+        Args:
+            name (str): Name of the previous run to load in.
+        """
+
+        self._gaiam = pickle.load(open(self.direc+'/Output/'+name+'_gaiam.p', 'rb'))
 
 
     def load_magfit(self, name: str):
@@ -2099,6 +2447,10 @@ class ExoSystem:
         self.parnames = z['parnames']
         self.samples = z['samples']
         self.log_likes = z['log_like']
+        try:
+            self.lin_par = z['lin_par']
+        except:
+            pass
 
     
     def load_run_settings(self, name: str):
@@ -2112,13 +2464,14 @@ class ExoSystem:
         run_settings = pickle.load(open(self.direc+'/Output/'+name+'_run_settings.p', 'rb'))
         self.fit_transit = run_settings['fit_transit']
         self.fit_rv = run_settings['fit_rv']
+        self.fit_gaia = run_settings['fit_gaia']
         self.fit_star = run_settings['fit_star']
         self.fit_ld = run_settings['fit_ld']
         self.use_priors = run_settings['use_priors']
         self.lc_supersample_size = run_settings['lc_supersample_size']
         if self.use_priors:
             self.fixed = run_settings['fixed']
-        self.fit_planets = self.fit_transit or self.fit_rv
+        self.fit_planets = self.fit_transit or self.fit_rv or self.fit_gaia
 
 
     def delete_run(self, name: str):
@@ -2145,6 +2498,9 @@ class ExoSystem:
 
         if os.path.exists(self.direc+'Output/'+name+'_rvm.p'):
             os.remove(self.direc+'Output/'+name+'_rvm.p')
+
+        if os.path.exists(self.direc+'Output/'+name+'_gaiam.p'):
+            os.remove(self.direc+'Output/'+name+'_gaiam.p')
 
         if os.path.exists(self.direc+'Output/'+name+'_samples.p'):
             os.remove(self.direc+'Output/'+name+'_samples.p')
@@ -2174,6 +2530,8 @@ class ExoSystem:
         Args:
             name (str): Name of the Init_ttvs file.
         """
+
+        from alfred.init_class import Init_ttvs
 
         if not os.path.exists(self.direc+'/'+name):
 
@@ -2235,27 +2593,41 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.patheffects as pe
+        import matplotlib.pyplot as plt
 
         num1, num2 = 0, 0
         vargrid = []
 
         for i in range(self.n):
 
-            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i])):
+            if not self.is_fit[i]:
 
                 continue
 
             num2 += 1
             vargrid.append([])
 
-            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','secw','sesw','e','w','fp']:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','se','cw','sw','sico','siso','comega','somega','fp']:
 
                 if z+' {0}'.format(i+1) in self.parnames:
                     vargrid[-1].append(z)
 
             num1 = max(num1, len(vargrid[-1]))
 
-        fig, ax = plt.subplots(num1, num2, figsize = (7*num2, 18), sharex = True, layout = 'constrained')
+        if self.fit_gaia and not self.fit_star:
+
+            num2 += 1
+            vargrid.append([])
+
+            for z in ['plx','mstar','log(rhostar)','rstar']:
+
+                if z in self.parnames:
+                    vargrid[-1].append(z)
+
+            num1 = max(num1, len(vargrid[-1]))
+
+        fig, ax = plt.subplots(num1, num2, figsize = (7*num2, 2*num1), sharex = True, layout = 'constrained')
 
         if num2 == 1:
             ax = np.array([ax.T]).T
@@ -2263,7 +2635,7 @@ class ExoSystem:
         j = 0
         for i in range(self.n):
 
-            if not ((self.fit_transit and self.is_transit[i]) or (self.fit_rv and self.is_rv[i])):
+            if not self.is_fit[i]:
 
                 continue
 
@@ -2275,7 +2647,29 @@ class ExoSystem:
                 ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
                 ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
 
+            for k in range(len(vargrid[j]), num1):
+
+                plt.setp(ax[k][j].get_xticklabels(), visible = False)
+                plt.setp(ax[k][j].get_yticklabels(), visible = False)
+                ax[k][j].axis('off')
+
             j += 1
+
+        if self.fit_gaia and not self.fit_star:
+
+            ax[0][j].set_title('Star')
+
+            for k in range(len(vargrid[j])):
+
+                v = self.parnames[vargrid[j][k]]
+                ax[k][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
+                ax[k][j].text(0.01, 0.99, vargrid[j][k], fontsize = 20, ha = 'left', va = 'top', transform = ax[k][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
+
+            for k in range(len(vargrid[j]), num1):
+
+                plt.setp(ax[k][j].get_xticklabels(), visible = False)
+                plt.setp(ax[k][j].get_yticklabels(), visible = False)
+                ax[k][j].axis('off')
 
         fig.supxlabel('N Steps')
 
@@ -2297,6 +2691,8 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
 
         n = 0
         for x in self.ttvi:
@@ -2325,6 +2721,18 @@ class ExoSystem:
                     v = self.parnames['TT {0} {1}'.format(i+1, z+1)]
                     ax[z][k].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
 
+                else:
+
+                    plt.setp(ax[z][k].get_xticklabels(), visible = False)
+                    plt.setp(ax[z][k].get_yticklabels(), visible = False)
+                    ax[z][k].axis('off')
+
+            for z in range(len(self.ttvi['{0}'.format(i+1)]), n):
+
+                plt.setp(ax[z][k].get_xticklabels(), visible = False)
+                plt.setp(ax[z][k].get_yticklabels(), visible = False)
+                ax[z][k].axis('off')
+
 
         fig.supxlabel('N Steps')
         fig.supylabel('Transit Times')
@@ -2347,6 +2755,8 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(np.sum(self.detrend), 3, figsize = (15, 3*len(self.tt)), sharex = True, layout = 'constrained')
 
@@ -2399,9 +2809,11 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         fig, ax = plt.subplots(5, figsize = (7, 12), sharex = True, layout = 'constrained')
 
-        for i, z in enumerate(['eep','log10(age)','feh','distance','AV']):
+        for i, z in enumerate(['eep','log10(age)','feh','plx','AV']):
 
             if z in self.parnames:
                 v = self.parnames[z]
@@ -2428,6 +2840,10 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is False.
         """
+
+        import matplotlib.patheffects as pe
+        import matplotlib.pyplot as plt
+
          
         num1, num2 = min(len(self.parnames),10), (len(self.parnames)-1)//10 + 1
 
@@ -2443,6 +2859,15 @@ class ExoSystem:
 
             ax[i][j].plot(self.samples[:,:,v], color = 'black', alpha = 0.2)
             ax[i][j].text(0.01, 0.99, k, fontsize = 20, ha = 'left', va = 'top', transform = ax[i][j].transAxes, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
+
+        for k in range(len(self.parnames), num1*num2):
+
+            i = k%10
+            j = k//10
+
+            plt.setp(ax[i][j].get_xticklabels(), visible = False)
+            plt.setp(ax[i][j].get_yticklabels(), visible = False)
+            ax[i][j].axis('off')
 
         fig.supxlabel('N Steps')
 
@@ -2465,11 +2890,17 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+        import corner
+
         for i in range(self.n):
+
+            if not self.is_fit[i]:
+                continue
 
             labels = []
 
-            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','secw','sesw','e','w','fp']:
+            for z in ['log(P)','Tc','ror','log(a/rs)','cos(i)','log(K)','log(q)','secw','sesw','se','cw','sw','sico','siso','comega','somega','fp']:
 
                 if z+' {0}'.format(i+1) in self.parnames:
 
@@ -2481,6 +2912,13 @@ class ExoSystem:
 
                     if 'TT {0} {1}'.format(i+1, k+1) in self.parnames:
                         labels.append('TT {0} {1}'.format(i+1, k+1))
+
+            if self.fit_gaia and not self.fit_star:
+
+                for z in ['plx','mstar','log(rhostar)','rstar']:
+
+                    if z in self.parnames:
+                        labels.append(z)
 
             if not labels:
 
@@ -2513,9 +2951,12 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+        import corner
+
         labels = []
 
-        for z in ['eep','log10(age)','feh','distance','AV']:
+        for z in ['eep','log10(age)','feh','plx','AV']:
             if z in self.parnames:
                 labels.append(z)
 
@@ -2574,6 +3015,9 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is False.
         """
 
+        import matplotlib.pyplot as plt
+        import corner
+
         keys = list(self.res.keys())
         keys.remove('log_like')
 
@@ -2611,6 +3055,8 @@ class ExoSystem:
 
         n = len(y['log_like'])
 
+        idxs = np.random.choice(n, 100, replace = False)
+
         if self.use_priors:
 
             f = self.fixed.copy()
@@ -2623,14 +3069,16 @@ class ExoSystem:
 
             for i in range(self.n):
 
-                if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
+                if 'secw {0}'.format(i+1) not in y and 'se {0}'.format(i+1) in y:
 
-                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
-                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+                    y['secw {0}'.format(i+1)] = y['se {0}'.format(i+1)] * y['cw {0}'.format(i+1)]
+                    y['sesw {0}'.format(i+1)] = y['se {0}'.format(i+1)] * y['sw {0}'.format(i+1)]
 
         if self.fit_star:
 
             self.ldgrids = {}
+
+            from alfred.ld_grids import load_ld_grid
 
             for filt in np.unique(self.filters):
 
@@ -2638,34 +3086,18 @@ class ExoSystem:
 
                 self.ldgrids[filt] = [interpu1, interpu2]
 
-            self.misti = get_ichrone('mist')
+            y['log(rhostar)'] = np.log(y['rhostar'])
 
-            rstar, mstar, Tstar, loggstar = self.misti.interp_value([y[x] for x in ['eep','log10(age)','feh']],['radius','mass','Teff','logg']).T
-
-            arlist = []
             for j in range(self.n):
 
                 if not self.is_transit[j]:
-                    arlist.append(np.nan)
                     continue
 
                 p = y['P {0}'.format(j+1)]
 
-                if self.is_rv[j] and self.fit_rv:
+                if 'log(a/rs) {0}'.format(i+1) not in y:
 
-                    e = 0
-                    if self.fit_ecc[j]:
-                        e = y['e {0}'.format(j+1)]
-
-                    mp = calc_m_from_k(p, y['K {0}'.format(j+1)], e, np.arccos(y['cos(i) {0}'.format(j+1)]), mstar)
-
-                else:
-
-                    mp = 0
-
-                ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
-
-                arlist.append(ar)
+                    y['log(a/rs) {0}'.format(i+1)] = np.log(y['a/rs {0}'.format(i+1)])
 
         pars = []
         tcs = []
@@ -2675,27 +3107,17 @@ class ExoSystem:
             if not self.is_transit[j]:
                 continue
             
-            if self.fit_ttv[j]:
+            p = y['P {0}'.format(j+1)]
+            tc = y['Tc {0}'.format(j+1)]
+            ror = y['ror {0}'.format(j+1)]
+            ar = y['a/rs {0}'.format(j+1)]
+            inc = y['i {0}'.format(j+1)]
+            e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
+            w = y['w {0}'.format(j+1)]*180/np.pi if 'w {0}'.format(j+1) in y else np.full((n), 90)
+            
+            pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
 
-                p = y['P {0}'.format(j+1)]
-                tc = y['Tc {0}'.format(j+1)]
-                ror = y['ror {0}'.format(j+1)]
-                if self.fit_star:
-                    ar = arlist[j]
-                else:
-                    ar = y['a/rs {0}'.format(j+1)]
-                inc = y['i {0}'.format(j+1)]
-                e = y['e {0}'.format(j+1)] if 'e {0}'.format(j+1) in y else np.full((n), 0)
-                w = y['w {0}'.format(j+1)]*180/np.pi if 'w {0}'.format(j+1) in y else np.full((n), 90)
-                
-                pars.append(np.array([p,tc,ror,ar,inc,e,w]).T)
-
-                tcs.append(np.median(tc))
-
-            else:
-
-                pars.append(get_transit_params(y, j+1, ar = arlist[j] if self.fit_star else None).T)
-                tcs.append(np.median(y['Tc {0}'.format(j+1)]))
+            tcs.append(np.median(tc))
 
 
         filts = np.unique(self.filters)
@@ -2720,7 +3142,7 @@ class ExoSystem:
 
             if self.fit_star:
 
-                starpars = np.array([Tstar, loggstar, y['feh']]).T
+                starpars = np.array([y['Tstar'], y['loggstar'], y['feh']]).T
                 ld = np.array([self.ldgrids[filt][0](starpars)[0], self.ldgrids[filt][1](starpars)[0]]).T
 
             fmphase = []
@@ -2738,23 +3160,22 @@ class ExoSystem:
 
                 if self.is_eclipse[k]:
 
-                    rs = np.median(rstar) if self.fit_star else self.rs
-
+                    rs = np.median(y['rstar'])
                     q = 0
 
-                    if self.fit_rv and self.is_rv[k]:
-                        mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
-                        ms = np.median(mstar) if self.fit_star else self.ms
+                    if 'Mp {0}'.format(k+1) in y:
+                        mp = np.median(y['Mp {0}'.format(k+1)])*earthm_to_msun
+                        ms = np.median(y['mstar'])
                         q = mp/ms
 
                     tc2 = calc_t_sec(medpar[0], medpar[1], medpar[5], medpar[6]*np.pi/180, medpar[3], medpar[4]*np.pi/180, rs, q)
-                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = np.median(rstar) if self.fit_star else self.rs, q = q))
+                    eclphase.append(lightCurve(medpar, ttphase + tc2, np.median(ld, axis = 0) if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = rs, q = q))
 
 
-            fmphase_err = [[] for j in range(self.nt)]
-            eclphase_err = [[] for j in range(np.sum(self.is_eclipse))]
+            fmphase_draws = [[] for j in range(self.nt)]
+            eclphase_draws = [[] for j in range(np.sum(self.is_eclipse))]
 
-            for j in tqdm(range(0,n,200)):
+            for j in tqdm(idxs):
 
                 for k in range(self.n):
 
@@ -2763,28 +3184,23 @@ class ExoSystem:
 
                     l = np.sum(self.is_transit[:k])
 
-                    fmphase_err[l].append(lightCurve(pars[l][j], ttphase + tcs[l], ld[j] if ld.ndim > 1 else ld, phaseexp, phasess))
+                    fmphase_draws[l].append(lightCurve(pars[l][j], ttphase + tcs[l], ld[j] if ld.ndim > 1 else ld, phaseexp, phasess))
 
                     if self.is_eclipse[k]:
 
-                        rs = rstar[j] if self.fit_star else self.rs
-                        
+                        rs = y['rstar'][j]
                         q = 0
     
-                        if self.fit_rv and self.is_rv[k]:
-                            mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
-                            ms = mstar[j] if self.fit_star else self.ms
+                        if 'Mp {0}'.format(k+1) in y:
+                            mp = y['Mp {0}'.format(k+1)][j]*earthm_to_msun
+                            ms = y['mstar'][j]
                             q = mp/ms
 
                         tc2 = calc_t_sec(pars[l][j][0], pars[l][j][1], pars[l][j][5], pars[l][j][6]*np.pi/180, pars[l][j][3], pars[l][j][4]*np.pi/180, rs, q)
                         le = np.sum(self.is_eclipse[:k])
-                        eclphase_err[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rstar[j] if self.fit_star else self.rs, q = q))
-
-            fmphase_err = np.percentile(fmphase_err, [16,84], axis = 1)
-            if np.any(self.is_eclipse):
-                eclphase_err = np.percentile(eclphase_err, [16,84], axis = 1)
+                        eclphase_draws[le].append(lightCurve(pars[l][j], ttphase + tc2, ld[j] if ld.ndim > 1 else ld, phaseexp, phasess, eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rs, q = q))
             
-            self._lcm['phase'][filt] = {'fmphase': np.array(fmphase), 'fmphase_err': fmphase_err, 'eclphase': np.array(eclphase), 'eclphase_err': eclphase_err}
+            self._lcm['phase'][filt] = {'fmphase': np.array(fmphase), 'fmphase_draws': fmphase_draws, 'eclphase': np.array(eclphase), 'eclphase_draws': eclphase_draws}
 
         print('Full:\n')
 
@@ -2802,7 +3218,7 @@ class ExoSystem:
 
             if self.fit_star:
 
-                starpars = np.array([Tstar, loggstar, y['feh']]).T
+                starpars = np.array([y['Tstar'], y['loggstar'], y['feh']]).T
                 ld = np.array([self.ldgrids[self.filters[i]][0](starpars)[0], self.ldgrids[self.filters[i]][1](starpars)[0]]).T
 
             detrend = self.detrend[i]
@@ -2816,8 +3232,6 @@ class ExoSystem:
 
                 kernel = terms.SHOTerm(rho = rhogp[0], sigma = sigmagp[0], Q = 1/np.sqrt(2))
                 gp = GaussianProcess(kernel = kernel)
-
-                gpf_err = []
 
             fm = []
 
@@ -2855,13 +3269,12 @@ class ExoSystem:
 
                     if self.is_eclipse[k]:
 
-                        rs = np.median(rstar) if self.fit_star else self.rs
-                        
+                        rs = np.median(y['rstar'])
                         q = 0
     
-                        if self.fit_rv and self.is_rv[k]:
-                            mp = (np.median(y['Mp {0}'.format(k+1)])*u.earthMass).to(u.Msun).value
-                            ms = np.median(mstar) if self.fit_star else self.ms
+                        if 'Mp {0}'.format(k+1) in y:
+                            mp = np.median(y['Mp {0}'.format(k+1)])*earthm_to_msun
+                            ms = np.median(y['mstar'])
                             q = mp/ms
 
                         fm0 = lightCurve(np.median(pars[l], axis = 0), self.tt[i], np.median(ld, axis = 0) if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = np.median(y['fp {0}'.format(k+1)]), rstar = rs, q = q)
@@ -2887,9 +3300,13 @@ class ExoSystem:
                 z['gpf'] = np.array(gpf)
 
 
-            fm_err = [[] for j in range(self.nt)]
+            fm_draws = [[] for j in range(self.nt)]
 
-            for j in tqdm(range(0,n,200)):
+            if detrend:
+
+                gpf_draws = []
+
+            for j in tqdm(idxs):
 
                 fmsum = 0
 
@@ -2924,13 +3341,12 @@ class ExoSystem:
 
                         if self.is_eclipse[k]:
 
-                            rs = rstar[j] if self.fit_star else self.rs
-                            
+                            rs = y['rstar'][j]                           
                             q = 0
         
-                            if self.fit_rv and self.is_rv[k]:
-                                mp = (y['Mp {0}'.format(k+1)][j]*u.earthMass).to(u.Msun).value
-                                ms = mstar[j] if self.fit_star else self.ms
+                            if 'Mp {0}'.format(k+1) in y:
+                                mp = y['Mp {0}'.format(k+1)][j]*earthm_to_msun
+                                ms = y['mstar'][j]
                                 q = mp/ms
 
                             fm0 = lightCurve(pars[l][j], self.tt[i], ld[j] if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i], eclipse = True, fp = y['fp {0}'.format(k+1)][j], rstar = rs, q = q)
@@ -2940,23 +3356,20 @@ class ExoSystem:
                             fm0 = lightCurve(pars[l][j], self.tt[i], ld[j] if ld.ndim > 1 else ld, self.exptimes[i], self.supersamples[i])
                         
                     fmsum += fm0
-                    fm_err[l].append(fm0)
+                    fm_draws[l].append(fm0)
 
                 if detrend:
 
                     gp = set_gp_params(rhogp[j], sigmagp[j], self.tt[i], self.ferr[i], gp)
                     gpf0 = gp.predict(self.f[i] - fmsum - mean[j])
-                    gpf_err.append(gpf0)
+                    gpf_draws.append(gpf0)
 
 
-            fm_err = np.percentile(fm_err, [16,84], axis = 1)
-
-            z['fm_err'] = fm_err
+            z['fm_draws'] = fm_draws
 
             if detrend:
 
-                gpf_err = np.percentile(gpf_err, [16,84], axis = 0)
-                z['gpf_err'] = gpf_err
+                z['gpf_draws'] = gpf_draws
 
             self._lcm[sec] = z
 
@@ -2966,31 +3379,29 @@ class ExoSystem:
     def lc_mod(self):
         """Stores the best fit model light curves.
 
-        fm is a dict, with a key for the phase folded models as well as for each light curve data set using their nicknames.
+        lc_mod is a dict, with a key for the phase folded models as well as for each light curve data set using their nicknames.
 
         The 'phase' key contains a dict with 'ttphase', a 1d numpy array of phase-folded time points used for plotting the models. Also within 'phase'
         is a key for each filter/bandpass used (e.g. TESS or Kepler). These are their own dicts with the following:
 
         - fmphase: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit phase-folded
-          model light curve for each planet, at the times of ttphase.
-        - fmphase_err: A 3d numpy array of the 1 sigma uncertainties on fmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
-          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fmphase,
-          with each row corresponding to a different planet.
+            model light curve for each planet, at the times of ttphase.
+        - fmphase_draws: A 3d numpy array of 100 model light curves for each transiting planet, randomly drawn from the chains. The 0th axis
+            corresponds to each planet, and the 1st axis corresponds to each different model.
         - eclphase: The same as fmphase, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an empty array if
-          no planets were fit for secondary eclipses.
-        - eclphase_err: The same as fmphase_err, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an empty
-          array if no planets were fit for secondary eclipses.
+            no planets were fit for secondary eclipses.
+        - eclphase_draws: The same as fmphase_draws, but for the phase-folded secondary eclipses of any planets that were fit for this. Will be an
+            empty array if no planets were fit for secondary eclipses.
         
         Each of the data set keys is a dict with the following:
 
         - fm: A 2d numpy array, where each row corresponds to a different transiting planet. The rows contain the best fit model light curve for
-          each planet at the times of this data set.
-        - fm_err: A 3d numpy array of the 1 sigma uncertainties on fm. In the 0th axis, the 0 index is a 2d array corresponding to the lower 1 sigma
-          error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like fm, with each row
-          corresponding to a different planet.
+            each planet at the times of this data set.
+        - fm_draws: A 3d numpy array of 100 model light curves for each transiting planet, randomly drawn from the chains. The 0th axis corresponds
+            to each planet, and the 1st axis corresponds to each different model.
         - gpf: A 1d numpy array of the GP model for detrending this light curve data set, using best fit hyper parameters.
-        - gpf_err: A 2d numpy array of the 1 sigma uncertainties on gpf. In the 0th axis, the 0 index is a 1d array corresponding to the lower
-          1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.        
+        - gpf_draws: A 2d numpy array of 100 GP detrending models for the light curve, randomly drawn from the chains. The 0th axis corresponds to
+            each different model.        
         """
         return self._lcm
 
@@ -3007,6 +3418,8 @@ class ExoSystem:
             
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
         
         for i in range(len(self.lcnames)):
 
@@ -3024,17 +3437,18 @@ class ExoSystem:
             fig, ax = plt.subplot_mosaic(mosaic, figsize = (14,10), layout = 'constrained')
 
             fm = self._lcm[sec]['fm']
-            fm_err = self._lcm[sec]['fm_err']
+            fm_draws = self._lcm[sec]['fm_draws']
             mean = np.median(self.res['F0 {0}'.format(sec)] if 'F0 {0}'.format(sec) in self.res else self.fixed['F0 {0}'.format(sec)])
 
             if self.detrend[i]:
 
                 gpf = self._lcm[sec]['gpf']
-                gpf_err = self._lcm[sec]['gpf_err']
+                gpf_draws = self._lcm[sec]['gpf_draws']
 
                 ax['a'].errorbar(self.tt[i], self.f[i], yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
-                ax['a'].plot(self.tt[i], gpf + mean, color = 'green', label = 'GP Model', zorder = 3, linewidth = 2)
-                ax['a'].fill_between(self.tt[i], gpf_err[0]+mean, gpf_err[1]+mean, color = 'green', edgecolor = 'none', alpha = 0.5, zorder = 2)
+                ax['a'].plot(self.tt[i], gpf + mean, color = 'forestgreen', label = 'GP Model', zorder = 3, linewidth = 2)
+                for j in range(len(gpf_draws)):
+                    ax['a'].plot(self.tt[i], gpf_draws[j]+mean, color = 'darkgreen', linewidth = 1, zorder = 1, alpha = 0.05)
 
                 ax['a'].tick_params(axis = 'both', labelsize = 15)
                 ax['a'].set_title(str(sec), fontsize = 20)
@@ -3050,8 +3464,11 @@ class ExoSystem:
 
                 k = np.sum(self.is_transit[:j])
 
-                ax['b'].plot(self.tt[i], fm[k]+mean, label = 'Planet {0}'.format(j+1), zorder = 3, linewidth = 2)
-                ax['b'].fill_between(self.tt[i], fm_err[0][k]+mean, fm_err[1][k]+mean, zorder = 2, alpha = 0.5, edgecolor = 'none')
+                color = ['red','darkorange','green','blue','darkorchid'][k]
+
+                ax['b'].plot(self.tt[i], fm[k]+mean, label = 'Planet {0}'.format(j+1), zorder = 3, linewidth = 2, color = color)
+                for l in range(len(fm_draws[k])):
+                    ax['b'].plot(self.tt[i], fm_draws[k][l]+mean, color = color, zorder = 1, linewidth = 1, alpha = 0.05)
             
             ax['b'].tick_params(axis = 'both', labelsize = 15)
             ax['b'].legend(fontsize = 15)
@@ -3101,18 +3518,38 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         if np.any(self.fit_ttv):
             self.initialize_ttvs(name = self.init_ttvs_name)
 
-        eclipse = False
-        if np.any(self.is_eclipse):
-            eclipse = True
+        eclipse = np.any(self.is_eclipse)
 
         y = self.res | self.dres
 
         if self.use_priors:
 
             y = y | self.fixed
+
+        mos = []
+        for j in range(self.nt):
+            mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
+            mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
+            mos.append(['b{0}'.format(j),'b{0}'.format(j)] + (['d{0}'.format(j)] if eclipse else []))
+
+        allt = [[] for i in range(len(self.lcnames))]
+        allf = [[] for i in range(len(self.lcnames))]
+        allresid = [[] for i in range(len(self.lcnames))]
+        allferr = [[] for i in range(len(self.lcnames))]
+
+        if eclipse:
+            allte = [[] for i in range(len(self.lcnames))]
+            allfe = [[] for i in range(len(self.lcnames))]
+            allreside = [[] for i in range(len(self.lcnames))]
+            allferre = [[] for i in range(len(self.lcnames))]
+
+
+        ttphase = self._lcm['phase']['ttphase'] * 24
 
         for i in range(len(self.lcnames)):
 
@@ -3121,12 +3558,6 @@ class ExoSystem:
             alpha = 0.1
             if self.exptimes[i] >= 1200/60/60/24:
                 alpha = 0.3
-
-            mos = []
-            for j in range(self.nt):
-                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
-                mos.append(['a{0}'.format(j),'a{0}'.format(j)] + (['c{0}'.format(j)] if eclipse else []))
-                mos.append(['b{0}'.format(j),'b{0}'.format(j)] + (['d{0}'.format(j)] if eclipse else []))
 
             fig, ax = plt.subplot_mosaic(mos, figsize = (21 if eclipse else 14,6*self.nt), sharex = True, layout = 'constrained')
 
@@ -3160,24 +3591,30 @@ class ExoSystem:
 
                 other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                 xfold = ((newt - tc + 0.5 * p) % p - 0.5 * p) * 24
-                ttphase = self._lcm['phase']['ttphase'] * 24
                 fmphase = self._lcm['phase'][self.filters[i]]['fmphase'][k] + mean
-                fmphase_err = self._lcm['phase'][self.filters[i]]['fmphase_err'][:,k] + mean
+                fmphase_draws = self._lcm['phase'][self.filters[i]]['fmphase_draws'][k] + mean
                 fm = self._lcm[sec]['fm'][k]
 
-                ax['a{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                ind = np.where(np.abs(xfold) <= 12)[0]
+                allt[i].append(xfold[ind])
+                allf[i].append((self.f[i]-other-mean)[ind])
+                allresid[i].append((self.f[i] - other - fm - mean)[ind])
+                allferr[i].append(self.ferr[i][ind])
+
+                ax['a{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                 exp = self.exptimes[i]*60*60*24
                 bins = np.linspace(-12, 12, 25 if exp == 1800 else (40 if exp == 600 else 50))
                 denom, _ = np.histogram(xfold, bins)
                 num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
                 denom[num == 0] = 1.0
-                ax['a{0}'.format(j)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+                ax['a{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
 
-                ax['a{0}'.format(j)].plot(ttphase, fmphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
-                ax['a{0}'.format(j)].fill_between(ttphase, fmphase_err[0], fmphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
+                ax['a{0}'.format(k)].plot(ttphase, fmphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                for l in range(len(fmphase_draws)):
+                    ax['a{0}'.format(k)].plot(ttphase, fmphase_draws[l], color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
 
-                ax['a{0}'.format(j)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(j)].transAxes)
+                ax['a{0}'.format(k)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(k)].transAxes)
 
                 l = np.where((xfold >= -12) & (xfold <= 12))[0]
                 if len(l) > 0:
@@ -3189,26 +3626,26 @@ class ExoSystem:
                     high = np.max(fmphase[l])
                     low = np.min(fmphase[l])
 
-                ax['a{0}'.format(j)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
+                ax['a{0}'.format(k)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
 
-                ax['a{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                ax['a{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
-                ax['b{0}'.format(j)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
-                ax['b{0}'.format(j)].axhline(0, c = 'red', lw = 1, zorder = 2)
+                ax['b{0}'.format(k)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                ax['b{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
 
-                ax['b{0}'.format(j)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['b{0}'.format(j)].transAxes)
+                ax['b{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['b{0}'.format(k)].transAxes)
 
-                ax['b{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                ax['b{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
                 if eclipse and not self.is_eclipse[j]:
 
-                    plt.setp(ax['c{0}'.format(j)].get_xticklabels(), visible = False)
-                    plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
-                    ax['c{0}'.format(j)].axis('off')
+                    plt.setp(ax['c{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['c{0}'.format(k)].axis('off')
 
-                    plt.setp(ax['d{0}'.format(j)].get_xticklabels(), visible = False)
-                    plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
-                    ax['d{0}'.format(j)].axis('off')
+                    plt.setp(ax['d{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['d{0}'.format(k)].axis('off')
 
                     continue
 
@@ -3222,8 +3659,8 @@ class ExoSystem:
 
                     mp = 0
                     ms = np.median(y['mstar'])
-                    if self.fit_rv and self.is_rv[j]:
-                        mp = (np.median(y['Mp {0}'.format(j+1)])*u.earthMass).to(u.Msun).value
+                    if 'Mp {0}'.format(j+1) in y:
+                        mp = np.median(y['Mp {0}'.format(j+1)])*earthm_to_msun
 
                     q = mp/ms
 
@@ -3234,36 +3671,43 @@ class ExoSystem:
                     other = np.sum(self._lcm[sec]['fm'], axis = 0) - self._lcm[sec]['fm'][k] + (self._lcm[sec]['gpf'] if self.detrend[i] else 0)
                     xfold = ((newt - tc2 + 0.5 * p) % p - 0.5 * p) * 24
                     eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke] + mean
-                    eclphase_err = self._lcm['phase'][self.filters[i]]['eclphase_err'][:,ke] + mean
+                    eclphase_draws = self._lcm['phase'][self.filters[i]]['eclphase_draws'][ke] + mean
 
-                    ax['c{0}'.format(j)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                    ind = np.where(np.abs(xfold) <= 12)[0]
+                    allt[i].append(xfold[ind])
+                    allf[i].append((self.f[i]-other-mean)[ind])
+                    allreside[i].append((self.f[i]-other-fm-mean)[ind])
+                    allferr[i].append(self.ferr[i][ind])
+
+                    ax['c{0}'.format(k)].errorbar(xfold, self.f[i] - other, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
 
                     exp = self.exptimes[i]*60*60*24
                     bins = np.linspace(-12, 12, 25 if exp == 1800 else (40 if exp == 600 else 50))
                     denom, _ = np.histogram(xfold, bins)
                     num, _ = np.histogram(xfold, bins, weights = self.f[i] - other)
                     denom[num == 0] = 1.0
-                    ax['c{0}'.format(j)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+                    ax['c{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
 
-                    ax['c{0}'.format(j)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
-                    ax['c{0}'.format(j)].fill_between(ttphase, eclphase_err[0], eclphase_err[1], zorder = 3, alpha = 0.5, color = 'dodgerblue', edgecolor = 'none')
+                    ax['c{0}'.format(k)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                    for l in range(len(eclphase_draws)):
+                        ax['c{0}'.format(k)].plot(ttphase, eclphase_draws[l], color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
 
-                    ax['c{0}'.format(j)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(j)].transAxes)
+                    ax['c{0}'.format(k)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(k)].transAxes)
 
-                    ax['c{0}'.format(j)].sharey(ax['a{0}'.format(j)])
-                    plt.setp(ax['c{0}'.format(j)].get_yticklabels(), visible = False)
+                    ax['c{0}'.format(k)].sharey(ax['a{0}'.format(k)])
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
 
-                    ax['c{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                    ax['c{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
-                    ax['d{0}'.format(j)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
-                    ax['d{0}'.format(j)].axhline(0, c = 'red', lw = 1, zorder = 2)
+                    ax['d{0}'.format(k)].errorbar(xfold, self.f[i] - other - fm - mean, yerr = self.ferr[i], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+                    ax['d{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
 
-                    ax['d{0}'.format(j)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['d{0}'.format(j)].transAxes)
+                    ax['d{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['d{0}'.format(k)].transAxes)
 
-                    ax['d{0}'.format(j)].sharey(ax['b{0}'.format(j)])
-                    plt.setp(ax['d{0}'.format(j)].get_yticklabels(), visible = False)
+                    ax['d{0}'.format(k)].sharey(ax['b{0}'.format(k)])
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
 
-                    ax['d{0}'.format(j)].tick_params(axis = 'both', labelsize = 15)
+                    ax['d{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
 
             
             ax['a0'].set_xlim(-12,12)
@@ -3275,6 +3719,159 @@ class ExoSystem:
                 ax[a].set_rasterized(True)
 
             fig.savefig(self.direc+'/Plots/'+name+'/transits_{0}.png'.format(sec))
+
+            if show_plot:
+                plt.show()
+
+            else:
+                plt.close()
+
+
+        alpha = 0.1
+
+        for filt in np.unique(self.filters):
+
+            fig, ax = plt.subplot_mosaic(mos, figsize = (21 if eclipse else 14,6*self.nt), sharex = True, layout = 'constrained')
+
+            for j in range(self.n):
+
+                if not self.is_transit[j]:
+                    continue
+
+                k = np.sum(self.is_transit[:j])
+
+                fmphase = self._lcm['phase'][filt]['fmphase'][k]
+                fmphase_draws = self._lcm['phase'][filt]['fmphase_draws'][k]
+
+                tempt, tempf = [], []
+
+                for i in range(len(self.lcnames)):
+
+                    if self.filters[i] != filt:
+                        continue
+
+                    ax['a{0}'.format(k)].errorbar(allt[i][k], allf[i][k] + 1, yerr = allferr[i][k], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                    tempt.append(allt[i][k])
+                    tempf.append(allf[i][k] + 1)
+
+                tempt, tempf = np.concatenate(tempt), np.concatenate(tempf)
+
+                bins = np.linspace(-12, 12, 50)
+                denom, _ = np.histogram(tempt, bins)
+                num, _ = np.histogram(tempt, bins, weights = tempf)
+                denom[num == 0] = 1.0
+                ax['a{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+
+                ax['a{0}'.format(k)].plot(ttphase, fmphase + 1, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                for l in range(len(fmphase_draws)):
+                    ax['a{0}'.format(k)].plot(ttphase, fmphase_draws[l] + 1, color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
+
+                ax['a{0}'.format(k)].text(0.01, 0.99, 'Planet {0}'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['a{0}'.format(k)].transAxes)
+
+                l = np.where((xfold >= -12) & (xfold <= 12))[0]
+                if len(l) > 0:
+                    high = np.max(self.f[i][l] - other[l] + self.ferr[i][l])
+                    low = np.min(self.f[i][l] - other[l] - self.ferr[i][l])
+
+                else:
+                    l = np.where((ttphase >= -12) & (ttphase <= 12))[0]
+                    high = np.max(fmphase[l])
+                    low = np.min(fmphase[l])
+
+                ax['a{0}'.format(k)].set_ylim((low - 0.1*(high-low), high + 0.1*(high-low)))
+
+                ax['a{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+                for i in range(len(self.lcnames)):
+
+                    if self.filters[i] != filt:
+                        continue
+
+                    ax['b{0}'.format(k)].errorbar(allt[i][k], allresid[i][k], yerr = allferr[i][k], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                ax['b{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
+
+                ax['b{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['b{0}'.format(k)].transAxes)
+
+                ax['b{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+                if eclipse and not self.is_eclipse[j]:
+
+                    plt.setp(ax['c{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['c{0}'.format(k)].axis('off')
+
+                    plt.setp(ax['d{0}'.format(k)].get_xticklabels(), visible = False)
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
+                    ax['d{0}'.format(k)].axis('off')
+
+                    continue
+
+                if eclipse:
+
+                    ke = np.sum(self.is_eclipse[:j])
+
+                    eclphase = self._lcm['phase'][self.filters[i]]['eclphase'][ke]
+                    eclphase_draws = self._lcm['phase'][self.filters[i]]['eclphase_draws'][ke]
+
+                    tempt, tempf = [], []
+
+                    for i in range(len(self.lcnames)):
+
+                        if self.filters[i] != filt:
+                            continue
+
+                        ax['c{0}'.format(k)].errorbar(allte[i][ke], allfe[i][ke] + 1, yerr = allferre[i][ke], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                        tempt.append(allte[i][ke])
+                        tempf.append(allfe[i][ke] + 1)
+
+                    tempt, tempf = np.concatenate(tempt), np.concatenate(tempf)
+
+                    bins = np.linspace(-12, 12, 50)
+                    denom, _ = np.histogram(tempt, bins)
+                    num, _ = np.histogram(tempt, bins, weights = tempf)
+                    denom[num == 0] = 1.0
+                    ax['c{0}'.format(k)].scatter(0.5 * (bins[1:] + bins[:-1]), num / denom, color='mediumseagreen', zorder = 2)
+
+                    ax['c{0}'.format(k)].plot(ttphase, eclphase, zorder = 4, linewidth = 2, color = 'dodgerblue')
+                    for l in range(len(eclphase_draws)):
+                        ax['c{0}'.format(k)].plot(ttphase, eclphase_draws[l], color = 'royalblue', zorder = 1, linewidth = 1, alpha = 0.05)
+
+                    ax['c{0}'.format(k)].text(0.01, 0.99, 'Eclipse'.format(j+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(k)].transAxes)
+
+                    ax['c{0}'.format(k)].sharey(ax['a{0}'.format(k)])
+                    plt.setp(ax['c{0}'.format(k)].get_yticklabels(), visible = False)
+
+                    ax['c{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+                    for i in range(len(self.lcnames)):
+
+                        if self.filters[i] != filt:
+                            continue
+
+                        ax['d{0}'.format(k)].errorbar(allte[i][ke], allreside[i][ke], yerr = allferre[i][ke], fmt = '.k', zorder = 1, alpha = alpha, markersize = 5, markeredgewidth = 0, elinewidth = 1)
+
+                    ax['d{0}'.format(k)].axhline(0, c = 'red', lw = 1, zorder = 2)
+
+                    ax['d{0}'.format(k)].text(0.01, 0.99, 'Residuals', fontsize = 20, ha = 'left', va = 'top', transform = ax['d{0}'.format(k)].transAxes)
+
+                    ax['d{0}'.format(k)].sharey(ax['b{0}'.format(k)])
+                    plt.setp(ax['d{0}'.format(k)].get_yticklabels(), visible = False)
+
+                    ax['d{0}'.format(k)].tick_params(axis = 'both', labelsize = 15)
+
+            
+            ax['a0'].set_xlim(-12,12)
+            ax['a0'].set_title('All '+str(filt), fontsize = 20)
+            ax['b{0}'.format(self.nt-1)].set_xlabel('Time since $T_{C}$ [hours]', fontsize = 20)
+            fig.supylabel('Relative Flux', fontsize = 20)
+
+            for a in ax:
+                ax[a].set_rasterized(True)
+
+            fig.savefig(self.direc+'/Plots/'+name+'/transits_all_{0}.png'.format(filt))
 
             if show_plot:
                 plt.show()
@@ -3309,10 +3906,10 @@ class ExoSystem:
 
             for i in range(self.n):
 
-                if 'secw {0}'.format(i+1) not in y and 'e {0}'.format(i+1) in y:
+                if 'secw {0}'.format(i+1) not in y and 'se {0}'.format(i+1) in y:
 
-                    y['secw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.cos(y['w {0}'.format(i+1)])
-                    y['sesw {0}'.format(i+1)] = np.sqrt(y['e {0}'.format(i+1)]) * np.sin(y['w {0}'.format(i+1)])
+                    y['secw {0}'.format(i+1)] = y['se {0}'.format(i+1)] * y['cw {0}'.format(i+1)]
+                    y['sesw {0}'.format(i+1)] = y['se {0}'.format(i+1)] * y['sw {0}'.format(i+1)]
 
         pars = []
         ps = []
@@ -3323,7 +3920,7 @@ class ExoSystem:
             if not self.is_rv[i]:
                 continue
 
-            pars.append(get_rv_params(y, i+1).T)
+            pars.append(get_rv_params(y, i+1, shape = (n)).T)
             ps.append(np.median(y['P {0}'.format(i+1)]))
             tcs.append(np.median(y['Tc {0}'.format(i+1)]))
         
@@ -3372,10 +3969,12 @@ class ExoSystem:
 
         rvallplot += bkgplot
 
-        rvallplot_err = []
-        rvmphase_err = [[] for i in range(self.nr)]
+        rvallplot_draws = []
+        rvmphase_draws = [[] for i in range(self.nr)]
 
-        for i in tqdm(range(0,n,20)):
+        idxs = np.random.choice(n, 100, replace = False)
+
+        for i in tqdm(idxs):
 
             rvallplot0 = 0
 
@@ -3388,17 +3987,14 @@ class ExoSystem:
 
                 rvallplot0 += rvModel(pars[k][i], trplot)
 
-                rvmphase_err[k].append(rvModel(pars[k][i], trphase * ps[k] + tcs[k]))
+                rvmphase_draws[k].append(rvModel(pars[k][i], trphase * ps[k] + tcs[k]))
 
             bkgplot0 = trend0[i] * np.full(trplot.shape, 1) + (trend1[i] * (trplot - self.tr_ref) if bkg_order > 0 else 0) + (trend2[i] * (trplot - self.tr_ref)**2 if bkg_order > 1 else 0)
 
-            rvallplot_err.append(rvallplot0 + bkgplot0)
+            rvallplot_draws.append(rvallplot0 + bkgplot0)
 
 
-        rvallplot_err = np.percentile(rvallplot_err, [16,84], axis = 0)
-        rvmphase_err = np.percentile(rvmphase_err, [16,84], axis = 1)
-
-        self._rvm = {'rvm': np.array(rvm), 'bkg': bkg, 'rvallplot': rvallplot, 'rvallplot_err': rvallplot_err, 'rvmplot': np.array(rvmplot), 'bkgplot': bkgplot, 'rvmphase': np.array(rvmphase), 'rvmphase_err': rvmphase_err, 'trplot': trplot, 'trphase': trphase}
+        self._rvm = {'rvm': np.array(rvm), 'bkg': bkg, 'rvallplot': rvallplot, 'rvallplot_draws': rvallplot_draws, 'rvmplot': np.array(rvmplot), 'bkgplot': bkgplot, 'rvmphase': np.array(rvmphase), 'rvmphase_draws': rvmphase_draws, 'trplot': trplot, 'trphase': trphase}
 
         pickle.dump(self._rvm, open(self.direc+'Output/'+name+'_rvm.p', 'wb'))
 
@@ -3406,7 +4002,7 @@ class ExoSystem:
     def rv_mod(self):
         """Stores the best fit radial velocity models.
 
-        rvm is a dict,  with the following keys:
+        rv_mod is a dict,  with the following keys:
 
         - rvm: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit RV model for each planet
           at the times of the RV data.
@@ -3417,14 +4013,12 @@ class ExoSystem:
         - bkgplot: A 1d numpy array of the values of the background polynomial trend at the times of trplot, for smooth plotting.
         - rvallplot: A 1d numpy array of the full best fit RV model at the times of trplot, for smooth plotting. It is the sum of all planet
           components and the background polynomial.
-        - rvallplot_err: A 2d numpy array of the 1 sigma uncertainties on rvallplot. In the 0th axis, the 0 index is a 1d array corresponding to
-          the lower 1 sigma error and the 1 index is a 1d array corresponding to the upper 1 sigma error.
+        - rvallplot_draws: A 2d numpy array of 100 rv models randomly drawn from the chains. The 0th axis corresponds to each different model.
         - trphase: A 1d numpy array of phase folded times.
         - rvmphase: A 2d numpy array, where each row corresponds to a different RV planet. The rows contain the best fit phase-folded RV
           model for each planet, at the times of trphase.
-        - rvmphase_err: A 3d numpy array of the 1 sigma uncertainties on rvmphase. In the 0th axis, the 0 index is a 2d array corresponding to the
-          lower 1 sigma error and the 1 index is a 2d array corresponding to the upper 1 sigma error. Each of these is formatted like rvmphase,
-          with each row corresponding to a different planet.
+        - rvmphase_draws: A 3d numpy array of 100 phased rv models randomly drawn from the chains. The 0th axis corresponds to each planet, and the 1st
+            axis corresponds to each different model.
         """
         return self._rvm
 
@@ -3447,6 +4041,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         mos = [['a']*2, ['a']*2, ['b']*2]
         if self.nr == 1:
             mos += [['c0']*2, ['c0']*2, ['d0']*2]
@@ -3458,13 +4054,13 @@ class ExoSystem:
 
         trplot = self._rvm['trplot']
         rvallplot = self._rvm['rvallplot']
-        rvallplot_err = self._rvm['rvallplot_err']
+        rvallplot_draws = self._rvm['rvallplot_draws']
         rvmplot = self._rvm['rvmplot']
         bkgplot = self._rvm['bkgplot']
         rvm = self._rvm['rvm']
         bkg = self._rvm['bkg']
         rvmphase = self._rvm['rvmphase']
-        rvmphase_err = self._rvm['rvmphase_err']
+        rvmphase_draws = self._rvm['rvmphase_draws']
         trphase = self._rvm['trphase']
 
         y = self.res | self.dres
@@ -3488,7 +4084,8 @@ class ExoSystem:
 
 
         ax['a'].plot(trplot, rvallplot, color = 'mediumseagreen', linewidth = 2, zorder = 2)
-        ax['a'].fill_between(trplot, rvallplot_err[0], rvallplot_err[1], color = 'mediumseagreen', zorder = 1, alpha = 0.5, edgecolor = 'none')
+        for i in range(len(rvallplot_draws)):
+            ax['a'].plot(trplot, rvallplot_draws[i], color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
 
         for i in range(self.n):
 
@@ -3551,8 +4148,10 @@ class ExoSystem:
 
                 ax['c{0}'.format(j)].errorbar(xfold[jj], rv[jj] - other[jj] - bkg[jj], yerr = self.rverr[jj], fmt = '.', color = ['black','red','darkorange','green','blue','darkorchid'][ii], zorder = 3, markersize = 10, elinewidth = 2)
 
-            ax['c{0}'.format(j)].plot(trphase, rvmphase[j], linewidth = 2, zorder = 2)
-            ax['c{0}'.format(j)].fill_between(trphase, rvmphase_err[0][j], rvmphase_err[1][j], alpha = 0.5, edgecolor = 'none', zorder = 1)
+            ax['c{0}'.format(j)].plot(trphase, rvmphase[j], linewidth = 2, zorder = 2, color = 'dodgerblue')
+            for k in range(len(rvmphase_draws[j])):
+                ax['c{0}'.format(j)].plot(trphase, rvmphase_draws[j][k], color = 'royalblue', linewidth = 1, zorder = 1, alpha = 0.05)
+
 
             ax['c{0}'.format(j)].text(0.01, 0.99, 'Planet {0}'.format(i+1), fontsize = 20, ha = 'left', va = 'top', transform = ax['c{0}'.format(j)].transAxes)
 
@@ -3596,6 +4195,440 @@ class ExoSystem:
             plt.close()
 
 
+    def gen_Gaia_astrometry(self, name: str):
+        """Generates Gaia astrometry models from the best fit parameters. Saves these to the pickle file Output/name_gaiam.p. These astrometry models
+        are accessible through ExoSystem.gaia_mod. See the documentation on ExoSystem.gaia_mod for details on the formatting of the object.
+
+        Args:
+            name (str): Name of the run. Sets the name of the output pickle file to name_gaiam.p.
+        """
+
+        from astropy.time import Time
+        from astropy.coordinates import get_body_barycentric
+
+        print('\nGenerating Gaia astrometry models for plots.')
+
+        y = self.res | self.dres
+
+        n = len(y['log_like'])
+
+        if self.use_priors:
+
+            f = self.fixed.copy()
+
+            for ff in f:
+
+                f[ff] = np.full((n), f[ff])
+
+            y = y | f
+
+            for i in range(self.n):
+
+                if 'secw {0}'.format(i+1) not in y and 'se {0}'.format(i+1) in y:
+
+                    y['secw {0}'.format(i+1)] = y['se {0}'.format(i+1)] * y['cw {0}'.format(i+1)]
+                    y['sesw {0}'.format(i+1)] = y['se {0}'.format(i+1)] * y['sw {0}'.format(i+1)]
+
+        pars = []
+        maxp = 0
+
+        for i in range(self.n):
+
+            if not self.is_astro[i]:
+                continue
+
+            pars.append(get_Gaia_params(y, i+1, shape = (n)).T)
+
+            if np.median(y['P {0}'.format(i+1)]) > maxp:
+                maxp = np.median(y['P {0}'.format(i+1)])
+
+        plx = np.median(y['plx'])
+
+        gm = 0
+        gmra = 0
+        gmdec = 0
+        gmskyra = 0
+        gmskydec = 0
+        gmorbra = 0
+        gmorbdec = 0
+
+        tgsky = np.linspace(np.min(self.tg)-50, np.max(self.tg)+50, 1000)
+        tgorb = np.linspace(np.min(self.tg)-50, max(maxp+np.min(self.tg),np.max(self.tg)+50), 1000)
+
+        gmorbra_pl = []
+        gmorbdec_pl = []
+
+        xpts = []
+        ypts = []
+
+        for j in range(self.n):
+
+            if not self.is_astro[j]:
+                continue
+
+            k = np.sum(self.is_astro[:j])
+
+            medpars = np.median(pars[k], axis = 0)
+
+            gm0 = Gaia_AL_Model(medpars, self.tg, self.psi)
+            gm += gm0[2]
+            gmra += gm0[0]
+            gmdec += gm0[1]
+
+            gmsky = Gaia_AL_Model(medpars, tgsky, np.zeros(tgsky.shape))
+            gmskyra += gmsky[0]
+            gmskydec += gmsky[1]
+
+            gmorb = Gaia_AL_Model(medpars, tgorb, np.zeros(tgorb.shape))
+            gmorbra += gmorb[0]
+            gmorbdec += gmorb[1]
+
+            if np.sum(self.is_astro) > 1:
+                
+                gmorbra_pl.append(gmorb[0])
+                gmorbdec_pl.append(gmorb[1])
+
+            p = medpars[0]
+            tp = np.median(y['Tp {0}'.format(j+1)])
+            e = medpars[2]
+            w = medpars[3]
+            fasc = -w
+            Easc = np.arctan2(np.sqrt(1-e**2) * np.sin(fasc), e + np.cos(fasc))
+            tasc = p/(2*np.pi) * (Easc - e * np.sin(Easc)) + tp
+            fdesc = -w + np.pi
+            Edesc = np.arctan2(np.sqrt(1-e**2) * np.sin(fdesc), e + np.cos(fdesc))
+            tdesc = p/(2*np.pi) * (Edesc - e * np.sin(Edesc)) + tp
+            ts = np.array([tp, tp+p/2, tasc, tdesc])
+
+            xts, yts, _ = Gaia_AL_Model(medpars, ts, np.zeros(ts.shape))
+            xpts.append(xts)
+            ypts.append(yts)
+
+        gclean = self.gal - gm - self.plxf * plx
+        tgyr = (self.tg - self.tg_ref)*d_to_yr
+
+        M = np.zeros((len(self.tg),4))
+        M[:,0] = np.sin(self.psi)
+        M[:,1] = np.cos(self.psi)
+        M[:,2] = tgyr*np.sin(self.psi)
+        M[:,3] = tgyr*np.cos(self.psi)
+    
+        W = 1/self.galerr**2
+        Mw = M * np.sqrt(W)[:, None]
+        Yw = gclean * np.sqrt(W)
+    
+        X, _, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+
+        bkg = M @ X + self.plxf * plx
+
+        ra, dec = self.ra*np.pi/180, self.dec*np.pi/180
+        pvec = np.array([-np.sin(ra), np.cos(ra), 0])
+        qvec = np.array([-np.sin(dec)*np.cos(ra), -np.sin(dec)*np.sin(ra), np.cos(dec)])
+
+        tplx = Time(self.tg+2450000, format = 'jd', scale = 'tdb')
+        earth = get_body_barycentric('earth', tplx)
+        Rxyz = -np.array([earth.x.value, earth.y.value, earth.z.value]).T
+        fra = Rxyz @ pvec
+        fdec = Rxyz @ qvec
+        raplx = plx * fra
+        decplx = plx * fdec
+
+        bkgra = X[2] * tgyr + raplx
+        bkgdec = X[3] * tgyr + decplx
+
+        tplxsky = Time(tgsky+2450000, format = 'jd', scale = 'tdb')
+        earthsky = get_body_barycentric('earth', tplxsky)
+        Rxyzsky = -np.array([earthsky.x.value, earthsky.y.value, earthsky.z.value]).T
+        frasky = Rxyzsky @ pvec
+        fdecsky = Rxyzsky @ qvec
+        raplxsky = plx * frasky
+        decplxsky = plx * fdecsky
+
+        bkgskyra = X[2] * (tgsky - self.tg_ref)*d_to_yr + raplxsky
+        bkgskydec = X[3] * (tgsky - self.tg_ref)*d_to_yr + decplxsky
+
+        gm_draws = []
+        gmskyra_draws = []
+        gmskydec_draws = []
+        gmorbra_draws = []
+        gmorbdec_draws = []
+
+        idxs = np.random.choice(n, 100, replace = False)
+
+        for i in tqdm(idxs):
+
+            gm0 = self.plxf * y['plx'][i] + (y['ra*_offset'][i] + y['pmra*'][i]*tgyr)*np.sin(self.psi) + (y['dec_offset'][i] + y['pmdec'][i]*tgyr)*np.cos(self.psi)
+            gmskyra0 = 0
+            gmskydec0 = 0
+            gmorbra0 = 0
+            gmorbdec0 = 0
+
+            for j in range(self.n):
+
+                if not self.is_astro[j]:
+                    continue
+
+                k = np.sum(self.is_astro[:j])
+
+                gm0 += Gaia_AL_Model(pars[k][i], self.tg, self.psi)[2]
+
+                gmsky = Gaia_AL_Model(pars[k][i], tgsky, np.zeros(tgsky.shape))
+                gmskyra0 += gmsky[0]
+                gmskydec0 += gmsky[1]
+
+                gmorb = Gaia_AL_Model(pars[k][i], tgorb, np.zeros(tgorb.shape))
+                gmorbra0 += gmorb[0]
+                gmorbdec0 += gmorb[1]
+
+            gm_draws.append(gm0)
+            gmskyra_draws.append(gmskyra0)
+            gmskydec_draws.append(gmskydec0)
+            gmorbra_draws.append(gmorbra0)
+            gmorbdec_draws.append(gmorbdec0)
+
+
+        self._gaiam = {'gm': np.array(gm), 'bkg': np.array(bkg), 'gm_draws': np.array(gm_draws), 'gmra': gmra, 'gmdec': gmdec, 'bkgra': np.array(bkgra), 'bkgdec': np.array(bkgdec), 'tgsky': tgsky, 'gmskyra': np.array(gmskyra), 'gmskydec': np.array(gmskydec), 'gmskyra_draws': np.array(gmskyra_draws), 'gmskydec_draws': np.array(gmskydec_draws), 'bkgskyra': np.array(bkgskyra), 'bkgskydec': np.array(bkgskydec), 'tgorb': tgorb, 'gmorbra': np.array(gmorbra), 'gmorbdec': np.array(gmorbdec), 'gmorbra_draws': np.array(gmorbra_draws), 'gmorbdec_draws': np.array(gmorbdec_draws), 'gmorbra_pl': np.array(gmorbra_pl), 'gmorbdec_pl': np.array(gmorbdec_pl), 'xpts': np.array(xpts), 'ypts': np.array(ypts)}
+
+        pickle.dump(self._gaiam, open(self.direc+'Output/'+name+'_gaiam.p', 'wb'))
+
+
+    @property
+    def gaia_mod(self):
+        """Stores the best fit Gaia astrometry models.
+
+        gaia_mod is a dict,  with the following keys:
+
+        - gm: A 1d numpy array of the best fit Gaia along scan offsets, only including the orbital motion, at the observation times. Must be
+            combined with bkg to match the data.
+        - bkg: A 1d numpy array of the values of the along scan offsets due to the proper motion, position offsets, and parallax motion, at the
+            observation times.
+        - gm_draws: A 2d numpy array of 100 full gm + bkg models at the observation times, randomly drawn from the chains. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gm + bkg.
+        - gmra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the observation times.
+        - gmdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the observation times.
+        - bkgra: A 1d numpy array of the ra* proper motion and ra* component of the parallax motion, at the observation times.
+        - bkgdec: A 1d numpy array of the dec proper motion and dec component of the parallax motion, at the observation times.
+        - tgsky: A 1d numpy array of more finely sampled times to make the plotted on-sky models look smooth, spanning the range of the observation
+            times.
+        - gmskyra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgsky.
+        - gmskydec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the times of tgsky.
+        - gmskyra_draws: A 2d numpy array of 100 orbit models in the ra* direction randomly drawn from the chains, at the times of tgsky. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmskyra.
+        - gmskydec_draws: A 2d numpy array of 100 orbit models in the dec direction randomly drawn from the chains, at the times of tgsky. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmskydec.
+        - bkgskyra: A 1d numpy array of the ra* proper motion and ra* component of the parallax motion, at the times of tgsky.
+        - bkgskydec: A 1d numpy array of the dec proper motion and dec component of the parallax motion, at the times of tgsky.
+        - tgorb: A 1d numpy array of more finely sampled times to make the plotted 2d orbit models look smooth, spanning a full period of the
+            longest period astrometric planet.
+        - gmorbra: A 1d numpy array of the best fit Gaia model in the ra* direction, only including the orbital motion, at the times of tgorb.
+        - gmorbdec: A 1d numpy array of the best fit Gaia model in the dec direction, only including the orbital motion, at the times of tgorb.
+        - gmorbra_draws: A 2d numpy array of 100 orbit models in the ra* direction randomly drawn from the chains, at the times of tgorb. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmorbra.
+        - gmorbdec_draws: A 2d numpy array of 100 orbit models in the dec direction randomly drawn from the chains, at the times of tgorb. The 0th
+            axis corresponds to each different model, where each of these is a 1d array similar to gmorbdec.
+        - gmorbra_pl: A 2d numpy array of the best fit Gaia model for each individual astrometric planet in the ra* direction, only including the
+            orbital motion, at the times of tgorb. The 0th axis corresponds to each astrometric planet, where each of these is a 1d array similar to
+            gmorbra. If there is only 1 astrometric planet, this is empty as gmorbra would be an identical model.
+        - gmorbdec_pl: A 2d numpy array of the best fit Gaia model for each individual astrometric planet in the dec direction, only including the
+            orbital motion, at the times of tgorb. The 0th axis corresponds to each astrometric planet, where each of these is a 1d array similar to
+            gmorbdec. If there is only 1 astrometric planet, this is empty as gmorbdec would be an identical model.
+        - xpts: A 2d numpy array of the relative ra* positions on the orbit of the periastron, apastron, ascending node, and descending node for each
+            planet. The 0th axis corresponds to each planet.
+        - ypts: A 2d numpy array of the relative dec positions on the orbit of the periastron, apastron, ascending node, and descending node for each
+            planet. The 0th axis corresponds to each planet.
+        """
+        return self._gaiam
+
+
+    def plot_Gaia_AL(self, name: str, show_plot = True):
+        """Plots the best fit Gaia along scan model to the data. Saves to the folder in Plots set by name. The plot is named gaia_al.png. Shows the
+        plot if show_plot is True.
+
+        The top panel shows the full Gaia along scan offset time series, with the best fit model in green. The residuals are plotted below it.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
+
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14,8), layout = 'constrained', sharex = True)
+
+        gm = self._gaiam['gm']
+        bkg = self._gaiam['bkg']
+        gm_draws = self._gaiam['gm_draws']
+
+        ax['a'].errorbar(self.tg, self.gal, yerr = self.galerr, fmt = '.k', markersize = 10, elinewidth = 2, zorder = 2)
+        ax['a'].plot(self.tg, gm+bkg, color = 'mediumseagreen', linewidth = 2, zorder = 1)
+        for i in range(len(gm_draws)):
+            ax['a'].plot(self.tg, gm_draws[i],  color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
+
+        ax['a'].tick_params(axis = 'both', labelsize = 15)
+        ax['a'].set_ylabel('Gaia AL Offset [mas]', fontsize = 20)
+
+        ax['b'].errorbar(self.tg, self.gal-gm-bkg, yerr = self.galerr, fmt = '.k', markersize = 10, elinewidth = 2, zorder = 2)
+        ax['b'].axhline(0, c = 'red', lw = 1, zorder = 1)
+
+        ax['b'].tick_params(axis = 'both', labelsize = 15)
+        ax['b'].set_xlabel('Time [BJD-2450000]', fontsize = 20)
+        ax['b'].set_ylabel('Resid. [mas]', fontsize = 20)
+
+        fig.savefig(self.direc+'Plots/'+name+'/gaia_al.png')
+
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
+
+    
+    def plot_Gaia_onsky(self, name: str, show_plot = True):
+        """Plots the best fit Gaia astrometic model to the data. Saves to the folder in Plots set by name. The plot is named gaia_onsky.png. Shows
+        the plot if show_plot is True.
+
+        The left panel shows the total motion on the sky, including the orbit, proper motion, and parallax motion. The right panel shows just the
+        orbital motion.
+
+        Args:
+            name (str): Name of the run. Sets the folder in Plots to save this plot to.
+            
+            show_plot (bool, optional): Whether or not to show the plot. Default is True.
+        """
+
+        import matplotlib.pyplot as plt
+        
+        fig, ax = plt.subplots(1, 2, figsize = (14,8), layout = 'constrained')
+
+        y = self.res | self.dres
+        
+        if self.use_priors:
+
+            y = y | self.fixed
+
+        gmtot = self._gaiam['gm'] + self._gaiam['bkg']
+        gmra, gmdec = self._gaiam['gmra'], self._gaiam['gmdec']
+        bkgra, bkgdec = self._gaiam['bkgra'], self._gaiam['bkgdec']
+
+        gmskyra, gmskydec = self._gaiam['gmskyra'], self._gaiam['gmskydec']
+        bkgskyra, bkgskydec = self._gaiam['bkgskyra'], self._gaiam['bkgskydec']
+        gmskyra_draws, gmskydec_draws = self._gaiam['gmskyra_draws'], self._gaiam['gmskydec_draws']
+
+        pmra, pmdec = np.median(y['pmra*']), np.median(y['pmdec'])
+
+        ax[0].scatter((self.gal-gmtot)*np.sin(self.psi) + gmra + bkgra, (self.gal-gmtot)*np.cos(self.psi) + gmdec + bkgdec, marker = '.', c = 'black', s = 100, zorder = 4)
+
+        gmerrorbars = np.array([self.gal-gmtot-self.galerr, self.gal-gmtot+self.galerr])
+        for i in range(len(self.tg)):
+            ax[0].plot(gmerrorbars[:,i]*np.sin(self.psi[i]) + gmra[i] + bkgra[i], gmerrorbars[:,i]*np.cos(self.psi[i]) + gmdec[i] + bkgdec[i], c = 'black', linewidth = 2, zorder = 3)
+
+        ax[0].plot(gmskyra + bkgskyra, gmskydec + bkgskydec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
+        for i in range(len(gmskyra_draws)):
+            ax[0].plot(gmskyra_draws[i] + bkgskyra, gmskydec_draws[i] + bkgskydec, color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
+        
+        ax[0].plot(bkgskyra, bkgskydec, color = 'red', linewidth = 2, zorder = 0, linestyle = '--', label = 'On-Sky Motion')
+
+        xl, yl = ax[0].get_xlim(), ax[0].get_ylim()
+        ax[0].set_xlim(xl)
+        ax[0].set_ylim(yl)
+
+        xrange, yrange = (xl[1]-xl[0]), (yl[1]-yl[0])
+        totlen = np.abs(xrange/10*pmra/np.sqrt(pmra**2+pmdec**2)) + np.abs(yrange/10*pmdec/np.sqrt(pmra**2+pmdec**2))
+        xlen = totlen*pmra/np.sqrt(pmra**2+pmdec**2)
+        ylen = totlen*pmdec/np.sqrt(pmra**2+pmdec**2)
+        ya = yrange/8+yl[0]
+        if pmra/pmdec <= 0:
+            xa = xrange/8+xl[0]
+        else:
+            xa = xl[1]-xrange/8
+        ax[0].annotate('', xytext = (xa-xlen, ya-ylen), xy = (xa+xlen, ya+ylen), arrowprops = dict(arrowstyle='->',color='black',linewidth=2))
+
+        ax[0].set_box_aspect(1)
+        ax[0].invert_xaxis()
+
+        ax[0].legend(fontsize = 10, loc = 'upper center', ncols = 2, framealpha = 0.7, borderpad = 0.3)
+        ax[0].tick_params(axis = 'both', labelsize = 15)
+        ax[0].set_title('On-Sky Motion', fontsize = 20)
+        ax[0].set_xlabel('$\\Delta \\alpha \\mathrm{cos}(\\delta)$ [mas]', fontsize = 20)
+        ax[0].set_ylabel('$\\Delta \\delta$ [mas]', fontsize = 20)
+
+        gmorbra, gmorbdec = self._gaiam['gmorbra'], self._gaiam['gmorbdec']
+        gmorbra_draws, gmorbdec_draws = self._gaiam['gmorbra_draws'], self._gaiam['gmorbdec_draws']
+        gmorbra_pl, gmorbdec_pl = self._gaiam['gmorbra_pl'], self._gaiam['gmorbdec_pl']
+        xpts, ypts = self._gaiam['xpts'], self._gaiam['ypts']
+
+        ax[1].scatter((self.gal-gmtot)*np.sin(self.psi) + gmra, (self.gal-gmtot)*np.cos(self.psi) + gmdec, marker = '.', c = 'black', s = 100, zorder = 4, alpha = 0.5)
+
+        for i in range(len(self.tg)):
+            ax[1].plot(gmerrorbars[:,i]*np.sin(self.psi[i]) + gmra[i], gmerrorbars[:,i]*np.cos(self.psi[i]) + gmdec[i], c = 'black', linewidth = 2, zorder = 3, alpha = 0.5)
+
+        ax[1].plot(gmorbra, gmorbdec, color = 'mediumseagreen', linewidth = 2, zorder = 2, label = 'Full Model')
+        for i in range(len(gmorbra_draws)):
+            ax[1].plot(gmorbra_draws[i], gmorbdec_draws[i], color = 'darkseagreen', linewidth = 1, zorder = 1, alpha = 0.05)
+
+        ax[1].scatter(0, 0, c = '#4287f5', marker = '*', s = 150, zorder = 3)
+
+        for i in range(self.n):
+
+            if not self.is_astro[i]:
+                continue
+
+            j = np.sum(self.is_astro[:i])
+
+            if np.sum(self.is_astro) > 1:
+
+                color = ['red','darkorange','green','blue','darkorchid'][j]
+
+                ax[1].plot(gmorbra_pl[j], gmorbdec_pl[j], linewidth = 2, zorder = 2, label = 'Planet {0}'.format(i+1), color = color)
+
+                ii = np.argmin(np.sqrt((gmorbra_pl[j]-xpts[j][1])**2 + (gmorbdec_pl[j]-ypts[j][1])**2))
+                dx = gmorbra_pl[j][ii] - gmorbra_pl[j][ii-1]
+                dy = gmorbdec_pl[j][ii] - gmorbdec_pl[j][ii-1]
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = color, lw = 2, mutation_scale = 25), zorder = 2)
+
+                if j == 0:
+
+                    ax[1].annotate('', xytext = (gmorbra[-2], gmorbdec[-2]), xy = (gmorbra[-1], gmorbdec[-1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 2, mutation_scale = 25), zorder = 2)
+
+            else:
+                ii = np.argmin(np.sqrt((gmorbra-xpts[j][1])**2 + (gmorbdec-ypts[j][1])**2))
+                dx = gmorbra[ii] - gmorbra[ii-1]
+                dy = gmorbdec[ii] - gmorbdec[ii-1]
+                ax[1].annotate('', xytext = (xpts[j][1]-dx, ypts[j][1]-dy), xy = (xpts[j][1], ypts[j][1]), arrowprops = dict(arrowstyle = '->', color = 'mediumseagreen', lw = 2, mutation_scale = 25), zorder = 2)
+
+            ax[1].scatter(xpts[j][0], ypts[j][0], c = "#4287f5", marker = 'x', linewidths = 2, s = 100, zorder = 3, label = '$\\omega$' if j == 0 else None)
+            ax[1].scatter(xpts[j][2], ypts[j][2], c = '#4287f5', marker = '+', linewidths = 2, s = 100, zorder = 3, label = '\u260A' if j == 0 else None)
+            ax[1].plot(xpts[j][2:], ypts[j][2:], c = 'gray', linestyle = '--', linewidth = 1, zorder = 2, label = 'Line of Nodes' if j == 0 else None)
+
+
+        xl, yl = ax[1].get_xlim(), ax[1].get_ylim()
+        limrange = max(xl[1]-xl[0], yl[1]-yl[0])
+        xlm = (xl[1]+xl[0])/2
+        ylm = (yl[1]+yl[0])/2
+        ax[1].set_xlim(xlm-limrange/2, xlm+limrange/2)
+        ax[1].set_ylim(ylm-limrange/2, ylm+limrange/2)
+        ax[1].invert_xaxis()
+        ax[1].set_aspect('equal')
+
+        ax[1].legend(fontsize = 10, ncols = 4, loc = 'upper center', framealpha = 0.7, borderpad = 0.3)
+        ax[1].tick_params(axis = 'both', labelsize = 15)
+        ax[1].set_title('Astrometric Orbit', fontsize = 20)
+        ax[1].set_xlabel('$\\Delta \\alpha \\mathrm{cos}(\\delta)$ [mas]', fontsize = 20)
+        ax[1].set_ylabel('$\\Delta \\delta$ [mas]', fontsize = 20)
+
+        fig.savefig(self.direc+'Plots/'+name+'/gaia_onsky.png')
+
+        if show_plot:
+            plt.show()
+
+        else:
+            plt.close()
+
+
+
+
+
     def gen_magfit(self, name: str):
         """Generates SED magnitudes and errors from the best fit parameters. Saves these to the pickle file Output/name_magfit.p. These model
         magnitudes are accessible through ExoSystem.magfit and ExoSystem.magfiterr. Also saves out the bands, so that the order can be matched.
@@ -3610,7 +4643,7 @@ class ExoSystem:
             
             y = y | self.fixed
 
-        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],y['distance'],y['AV']], list(self.magbands))[3]
+        mags = self.misti.interp_mag([y['eep'],y['log10(age)'],y['feh'],1000/y['plx'],y['AV']], list(self.magbands))[3]
         self.magfit = np.median(mags, axis = 0)
         self.magfiterr = np.diff(np.percentile(mags, [16,50,84], axis = 0), axis = 0)
 
@@ -3626,6 +4659,8 @@ class ExoSystem:
            
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
+
+        import matplotlib.pyplot as plt
 
         fig, ax = plt.subplot_mosaic([['a'],['a'],['b']], figsize = (14, 12), layout = 'constrained', sharex = True)
 
@@ -3662,6 +4697,8 @@ class ExoSystem:
             show_plot (bool, optional): Whether or not to show the plot. Default is True.
         """
 
+        import matplotlib.pyplot as plt
+
         self.initialize_ttvs(name = self.init_ttvs_name)
 
         y = self.res | self.dres
@@ -3692,7 +4729,7 @@ class ExoSystem:
                 tt = y['TT {0} {1}'.format(i+1,k+1)]
                 ttmed = np.median(tt)
 
-                diff = ((tt - (tc + p * self.ttvi['{0}'.format(i+1)][k]))*u.day).to(u.min).value
+                diff = (tt - (tc + p * self.ttvi['{0}'.format(i+1)][k]))*d_to_min
                 diffmed = np.median(diff)
                 differr = np.diff(np.percentile(diff, [16,50,84]))
 
@@ -3726,6 +4763,9 @@ class ExoSystem:
             parname (str): The name of the parameter whose chains will be plotted. See the parameters that were fit in this run with
                 ExoSystem.parnames.
         """
+
+        import mplcursors
+        import matplotlib.pyplot as plt
 
         k = self.parnames[parname]
 
@@ -3768,6 +4808,7 @@ class ExoSystem:
 
         self.samples = np.delete(self.samples, idxs, axis = 1)
         self.log_likes = np.delete(self.log_likes, idxs, axis = 1)
+        self.lin_par = np.delete(self.lin_par, idxs, axis = 1)
 
         if save_samples:
 
@@ -3860,8 +4901,8 @@ class ExoSystem:
         Does this light curve by light curve. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
         value to put into init_lcs for each light curve, accounting for any error scaling already in effect.
 
-        It can be useful to rescale errors to if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
-        This is an alternative to using a jitter term in other fitting packages. Rescaling the errors can be very important when detrending light
+        It can be useful to rescale errors if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is a simple alternative to using a jitter term in other fitting packages. Rescaling the errors can be very important when detrending light
         curves using a GP, as underestimated errors will cause the GP to try to detrend to each individual point.
         """
 
@@ -3892,8 +4933,8 @@ class ExoSystem:
         Does this data set by data set. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
         value to put into init_rv for each data set, accounting for any error scaling already in effect.
 
-        It can be useful to rescale errors to if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
-        This is an alternative to using a jitter term in other fitting packages.
+        It can be useful to rescale errors if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is a simple alternative to using a jitter term in other fitting packages.
         """
 
         y = self.res.copy()
@@ -3920,13 +4961,46 @@ class ExoSystem:
             print(self.rvnames[i], ': resid. std', resstd, ', median err', mederr, ', resid. std / median err', resstd / mederr, ', new err scale', resstd/mederr*self.rv_err_scale[i])
 
 
+    def calc_gaia_err_scale(self):
+        """Calculates the standard deviation of the residual of the best fit Gaia astrometry model and compares this to the median error on the Gaia
+        AL data. Prints out the ratio of this standard deviation to the median errors. Prints out a new error scaling
+        value to put into init_gaia, accounting for any error scaling already in effect.
+
+        It can be useful to rescale errors if you believe they are under or overestimated, and a good place to start is looking at residual scatter.
+        This is a simple alternative to using a jitter term in other fitting packages.
+        """
+
+        y = self.res.copy()
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
+        gm = self._gaiam['gm'] + self._gaiam['bkg']
+
+        gal = self.gal.copy()
+
+        resstd = np.std(gal - gm)
+
+        mederr = np.median(self.galerr)
+
+        print('resid. std', resstd, ', median err', mederr, ', resid. std / median err', resstd / mederr, ', new err scale', resstd/mederr*self.gaia_err_scale)
+
+
     def calc_autocorr(self):
         """Prints the integrated autocorrelation time (ACT) for each parameter in the MCMC fit, and how it compares to the chain lengths. Generally, if
         the chain length is 50 times the ACT for all parameters, then the MCMC has converged. This is also checked during fitting to stop the MCMC once
         it is converged. This function is for after the fit is finished.
         """
 
+        from astropy.table import Table
+
         print('\nIntegrated Autorcorrelation Times:')
+
+        if self.sampler_type == 'emcee':
+            import emcee
+        elif self.sampler_type == 'zeus':
+            import zeus
 
         if self.sampler_type == 'emcee':
 
@@ -3964,11 +5038,29 @@ class ExoSystem:
             frequency, or make other plots.
         """
 
+        import matplotlib.pyplot as plt
+        from astropy.timeseries import LombScargle
+
+        y = self.res.copy()
+
+        if self.use_priors:
+
+            y = y | self.fixed
+
+        rv = self.rv.copy()
+        for i in np.unique(self.which_rv):
+
+            j = np.where(self.which_rv == i)[0]
+
+            if i > 0:
+
+                rv[j] -= np.median(y['rv_offset {0}'.format(self.rvnames[i])])
+
         if use_residual:
-            rvres = self.rv - np.sum(self._rvm['rvm'], axis = 0) - self._rvm['bkg']
+            rvres = rv - np.sum(self._rvm['rvm'], axis = 0) - self._rvm['bkg']
 
         else:
-            rvres = self.rv
+            rvres = rv
 
         ls = LombScargle(self.tr, rvres, dy = self.rverr)
 
@@ -4016,13 +5108,37 @@ class MiniExoSystem:
         """
 
         attrs = ('use_priors','fixed','n','fit_planets','fit_transit','is_transit','fit_ecc','fit_ld','fit_star','starmod','misti','fit_ttv',
-                 'is_rv','fit_rv','ttvi','allpriors','tt','lcnames','ld','filters','ldgrids','ttvsectors','exptimes','supersamples','is_eclipse','ms',
-                 'rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames','rv','rverr')
+                 'is_rv','fit_rv','is_astro','fit_gaia','ttvi','allpriors','lin_names','tt','lcnames','ld','filters','ldgrids','ttvsectors',
+                 'exptimes','supersamples','is_eclipse','ms','rs','detrend','f','ferr','gps','tr','tr_ref','rv_bkg_order','which_rv','rvnames',
+                 'rv','rverr','tg','tg_ref','gal','galerr','psi','plxf')
 
         for att in attrs:
             val = getattr(exs, att, None)
             if val is not None:
                 setattr(self, att, val)
+
+
+def _init_worker(miniobj: MiniExoSystem):
+    """Function for initializing workers for multiprocessing. Takes a MiniExosystem object and makes it global, allowing the log likelihood
+    function to access it, and avoiding pickling everything during parallel MCMC sampling.
+    """
+
+    global miniexs
+    miniexs = miniobj
+
+
+class _SubPool:
+    """Limits existing multiprocessing pool to use a specific number of works via chunking. Useful in speeding up find opt cores.
+    """
+
+    def __init__(self, pool, ncores):
+        self.pool = pool
+        self.ncores = ncores
+
+    def map(self, func, iterable):
+        items = list(iterable)
+        chunksize = max(1, math.ceil(len(items) / self.ncores))
+        return self.pool.map(func, items, chunksize=chunksize)
 
 
 
@@ -4043,7 +5159,7 @@ def calc_m_from_k(p: np.typing.ArrayLike, k: np.typing.ArrayLike, e: np.typing.A
 
         sini = np.sin(inc)
         
-        b = (1*u.earthMass).to(u.Msun).value / mstar
+        b = earthm_to_msun / mstar
         c = (k * np.sqrt(1-e**2) / 0.08946 / sini)**(-3/2) * p**(-1/2) / mstar
 
         m = b**2 / (3*c**2) + (2*b**6 + 18*b**3*c**2 + 3*np.sqrt(3)*np.sqrt(4*b**3*c**6 + 27*c**8) + 27*c**4)**(1/3) / (3*2**(1/3)*c**2) - 2**(1/3)*(-b**4 - 6*b*c**2) / (3*c**2*(2*b**6 + 18*b**3*c**2 + 3*np.sqrt(3)*np.sqrt(4*b**3*c**6 + 27*c**8) + 27*c**4)**(1/3))  
@@ -4055,7 +5171,7 @@ def lightCurve(par: np.typing.NDArray, t: np.typing.ArrayLike, ld: list, expt: f
         """Generates a model transit light curve using batman.
 
         Args:
-            par (ndarray): Array of transit parameters. Parameters must be specifically in this order.
+            par (ndarray): Array of transit parameters. Parameters must be specifically in this order:
                 - Orbital period in same units as t.
                 - Time of conjunction in same units as t.
                 - Planet to star radius ratio.
@@ -4133,7 +5249,7 @@ def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.Arr
     E2 = np.arctan2(np.sqrt(1-e**2)*np.sin(f2), e + np.cos(f2))
     M2 = E2 - e*np.sin(E2)
 
-    light_delay = (2 / constants.c * 1/(q+1) * a*r*u.Rsun * np.sin(i) * (1-e**2) / (1-(e*np.sin(w))**2)).to(u.day).value
+    light_delay = 2 / c_ms * 1/(q+1) * a*r * np.sin(i) * (1-e**2) / (1-(e*np.sin(w))**2) * rsunsm_to_d
 
     tc2 = p/(2*np.pi)*(M2-M1) + tc + light_delay
 
@@ -4143,18 +5259,18 @@ def calc_t_sec(p: np.typing.ArrayLike, tc: np.typing.ArrayLike, e: np.typing.Arr
 def rvModel(par: np.typing.NDArray, t: np.typing.ArrayLike) -> np.typing.ArrayLike:
     """Generates model RVs using _rvModel. This is compiled with cython to run faster for large amounts of data.
 
-        Args:
-            par (Array): Array of RV parameters. Parameters must be specifically in this order.
-                - Orbital period in same units as t.
-                - Time of conjunction in same units as t.
-                - RV semi-amplitude. Returns model RV points in same units as this.
-                - Orbital eccentricity. Should not be over 0.9 or batman has issues.
-                - Argument of periastron in radians.
+    Args:
+        par (Array): Array of RV parameters. Parameters must be specifically in this order:
+            - Orbital period in same units as t.
+            - Time of conjunction in same units as t. This is defined as the time when the true anomaly is pi/2 - w.
+            - RV semi-amplitude. Returns model RV points in same units as this.
+            - Orbital eccentricity.
+            - Argument of periastron in radians.
 
-            t (ArrayLike): Times at which to calculate the RV model.
+        t (ArrayLike): Times at which to calculate the RV model.
 
-        Returns:
-            ArrayLike: The model RVs at each of the input times, centered at 0.
+    Returns:
+        ArrayLike: The model RVs at each of the input times, centered at 0.
     """
 
     par = np.array(par, dtype = float)
@@ -4165,14 +5281,46 @@ def rvModel(par: np.typing.NDArray, t: np.typing.ArrayLike) -> np.typing.ArrayLi
     return rv
 
 
-def get_transit_params(par: dict, i: int, ar: np.typing.ArrayLike = None) -> np.typing.NDArray:
+def Gaia_AL_Model(par: np.typing.NDArray, t: np.typing.ArrayLike, psi: np.typing.ArrayLike) -> tuple[np.typing.ArrayLike,np.typing.ArrayLike,np.typing.ArrayLike]:
+    """Generates model Gaia astrometry due to an orbit (not including proper motion), given the times and Gaia scan angles. This returns the
+    ra*cos(dec) offsets, the dec offsets, and the along scan offsets. This is compiled with cython to run faster for large amounts of data.
+
+    Args:
+        par (Array): Array of astrometric parameters. Parameters must be specifically in this order:
+            - Orbital period in same units as t.
+            - Time of conjunction in same units as t. This is defined as the time when the true anomaly is pi/2 - w.
+            - Orbital eccentricity.
+            - Argument of periastron in radians.
+            - Orbital inclination in radians.
+            - Longitude of the ascending node in radians. The angle is defined Eastward of North, or from postive Dec towards positive RA.
+            - The planet mass, in units of solar masses (for ease of calculation).
+            - The stellar mass, in units of solar masses.
+            - Parallax, in mas.
+
+        t (ArrayLike): Times at which to calculate the Gaia AL offset model.
+        psi (ArrayLike): Gaia scan angles, in radians, at each time in t.
+
+    Returns:
+        tuple[ArrayLike, ArrayLike, ArrayLike]: The model astrometric offsets, in mas, due to the orbit. The first item is the ra*cos(dec) offsets,
+            the second is the dec offsets, and the third is the Gaia along scan offsets.
+    """
+
+    par = np.array(par, dtype = float)
+    t = np.array(t, dtype = float)
+    psi = np.array(psi, dtype = float)
+
+    x, y, eta = _astrometryModel(par, t, psi)
+
+    return x, y, eta
+
+
+def get_transit_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
     """Generates the specific list of transit parameters needed for the lightCurve function from the parameter dict used in fitting.
 
     Args:
         par (dict): Dictionary of fit parameters.
         i (int): Planet number.
-        ar (ArrayLike, optional): Direct input for the semi-major axis to stellar radius ratio if it is not being fit for (during stellar fitting).
-            Default is None, in which case the value is pulled from par.
+        shape (tuple, optional): The shape of each parameter. Default is (), which is a scalar.
     
     Returns:
         ndarray: Array of transit parameters that can be input directly into lightCurve.
@@ -4181,43 +5329,42 @@ def get_transit_params(par: dict, i: int, ar: np.typing.ArrayLike = None) -> np.
     p = np.exp(par['log(P) {0}'.format(i)])
     tc = par['Tc {0}'.format(i)]
     ror = par['ror {0}'.format(i)]
-    if ar is None:
-        ar = np.exp(par['log(a/rs) {0}'.format(i)])
     inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
-
-    shape = np.shape(par['log(P) {0}'.format(i)])
 
     e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
     w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(shape, 90)
 
+    if 'log(a/rs) {0}'.format(i) in par:
+        ar = np.exp(par['log(a/rs) {0}'.format(i)])
+
+    elif 'log(q) {0}'.format(i) in par:
+        ar = (np.exp(par['log(rhostar)']) * 4/3*np.pi * g_to_msun * (1+np.exp(par['log(q) {0}'.format(i)])) * (p*d_to_yr)**2)**(1/3) * au_to_cm
+    
+    elif 'log(K) {0}'.format(i) in par and 'rstar' in par:
+        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
+        mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i)]), e, inc, ms)*earthm_to_msun
+        ar = ((ms+mp) * (p*d_to_yr)**2)**(1/3)*au_to_rsun / par['rstar']
+
+    else:
+        ar = (np.exp(par['log(rhostar)']) * p**2 / 0.018916375)**(1/3)
+
     return np.array([p, tc, ror, ar, inc, e, w])
 
 
-def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], ar: np.typing.ArrayLike = None) -> np.typing.NDArray:
-    """Generates the specific list of transit parameters needed for the lightCurve function from the parameter dict used in fitting, in the case
-    when the planet is being fit for TTVs. Calculates the period and time of conjunction using linear regression on the transit times.
+def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64]) -> np.typing.NDArray:
+    """Calculates the period and time of conjunction for a planet with ttvs using linear regression on the transit times.
 
     Args:
         par (dict): Dictionary of fit parameters.
         i (int): Planet number.
         ttvi (ndarray): Array of integers representing the number of periods that have occurred between the first observed transit and each
             observed transit that is being fit.
-        ar (ArrayLike, optional): Direct input for the semi-major axis to stellar radius ratio if it is not being fit for (during stellar fitting).
-            Default is None, in which case the value is pulled from par.
         
     Returns:
-        ndarray: Array of transit parameters that can be input directly into lightCurve.
+        ndarray: Array of period and Tc.
     """
 
-    ror = par['ror {0}'.format(i)]
-    if ar is None:
-        ar = np.exp(par['log(a/rs) {0}'.format(i)])
-    inc = np.arccos(par['cos(i) {0}'.format(i)]) * 180/np.pi
-
-    shape = np.shape(par['log(P) {0}'.format(i)])
-
-    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
-    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) * 180/np.pi if 'secw {0}'.format(i) in par else np.full(shape, 90)
+    from scipy.stats import linregress
 
     tts = [par['TT {0} {1}'.format(i, j+1)] for j in range(len(ttvi))]
 
@@ -4225,36 +5372,89 @@ def get_ttv_params(par: dict, i: int, ttvi: np.typing.NDArray[np.int64], ar: np.
     p = res.slope
     tc = res.intercept
 
-    return np.array([p, tc, ror, ar, inc, e, w])
+    return np.array([p, tc])
 
 
-def get_rv_params(par: dict, i: int, p: np.typing.ArrayLike = None, tc: np.typing.ArrayLike = None) -> np.typing.NDArray:
+def get_rv_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
     """Generates the specific list of RV parameters needed for the rvModel function from the parameter dict used in fitting.
 
     Args:
         par (dict): Dictionary of fit parameters.
         i (int): Planet number.
-        p (ArrayLike, optional): Direct input for the orbital period if it is not being fit for (if the planet is being fit for ttvs).
-            Default is None, in which case the value is pulled from par.
-        tc (ArrayLike, optional): Direct input for the time of conjunction if it is not being fit for (if the planet is being fit for ttvs).
-            Default is None, in which case the value is pulled from par.
+        shape (tuple, optional): The shape of each parameter. Default is (), which is a scalar.
     
     Returns:
         ndarray: Array of RV parameters that can be input directly into rvModel.
     """
 
-    if p is None:
-        p = np.exp(par['log(P) {0}'.format(i)])
-        tc = par['Tc {0}'.format(i)]
-
-    shape = np.shape(par['log(K) {0}'.format(i)])
+    p = np.exp(par['log(P) {0}'.format(i)])
+    tc = par['Tc {0}'.format(i)]
 
     e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
     w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) if 'secw {0}'.format(i) in par else np.full(shape, np.pi/2)
 
-    k = np.exp(par['log(K) {0}'.format(i)])
+    if 'log(K) {0}'.format(i) in par:
+        k = np.exp(par['log(K) {0}'.format(i)])
+
+    else:
+        
+        if 'sico {0}'.format(i) in par:
+            inc = np.arccos(1-2*(par['sico {0}'.format(i)]**2 + par['siso {0}'.format(i)]**2))
+        
+        else:
+            inc = np.arccos(par['cos(i) {0}'.format(i)])
+
+        if 'mstar' in par:
+            ms = par['mstar']
+
+        else:
+            ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
+
+        q = np.exp(par['log(q) {0}'.format(i)])
+        k = 29785.326 * np.sin(inc) / np.sqrt(1-e**2) * (p*d_to_yr)**(-1/3) * q/(1+q)**(2/3) * ms**(1/3)
 
     return np.array([p, tc, k, e, w])
+
+
+def get_Gaia_params(par: dict, i: int, shape: tuple = ()) -> np.typing.NDArray:
+    """Generates the specific list of gaia astrometric parameters needed for the Gaia_AL_Model function from the parameter dict used in fitting.
+    
+    Args:
+        par (dict): Dictionary of fit parameters.
+        i (int): Planet number.
+        shape (tuple, optional): The shape of each parameter. Default is (), which is a scalar.
+    
+    Returns:
+        ndarray: Array of Gaia astrometric parameters that can be input directly into Gaia_AL_Model.
+    """
+
+    p = np.exp(par['log(P) {0}'.format(i)])
+    tc = par['Tc {0}'.format(i)]
+
+    e = par['secw {0}'.format(i)]**2 + par['sesw {0}'.format(i)]**2 if 'secw {0}'.format(i) in par else np.zeros(shape)
+    w = np.arctan2(par['sesw {0}'.format(i)], par['secw {0}'.format(i)]) if 'secw {0}'.format(i) in par else np.full(shape, np.pi/2)
+
+    if 'sico {0}'.format(i) in par:
+
+        inc = np.arccos(1-2*(par['sico {0}'.format(i)]**2 + par['siso {0}'.format(i)]**2))
+        omega = np.arctan2(par['siso {0}'.format(i)], par['sico {0}'.format(i)])
+
+    else:
+
+        inc = np.arccos(par['cos(i) {0}'.format(i)])
+        omega = np.arctan2(par['somega {0}'.format(i)], par['comega {0}'.format(i)])
+
+    if 'mstar' in par:
+        ms = par['mstar']
+
+    else:
+        ms = np.exp(par['log(rhostar)']) * 4/3*np.pi * par['rstar']**3 * gcm3rsun3_to_msun
+
+    mp = np.exp(par['log(q) {0}'.format(i)]) * ms
+
+    plx = par['plx']
+
+    return np.array([p, tc, e, w, inc, omega, mp, ms, plx])
 
 
 def set_gp_params(rho: float, sigma: float, t: np.typing.ArrayLike, ferr: np.typing.ArrayLike, gp: GaussianProcess) -> GaussianProcess:
@@ -4293,6 +5493,15 @@ def lnNorm(data: np.typing.ArrayLike, model: np.typing.ArrayLike, err: np.typing
 
 
 def log_like_zeus(par: np.typing.NDArray, keys: np.typing.NDArray) -> float:
+    """Wrapper function on log_like used for zeus sampler. Needed to turn the parameter array back into a dict.
+
+    Args:
+        par (ndarray): The fit parameter array.
+        keys (ndarray): The names of each parameter, used to turn the array back into a dict.
+
+    Returns:
+        float: The log likelihood value from the log_like function.
+    """
 
     pardict = dict(zip(keys, par))
 
@@ -4300,6 +5509,25 @@ def log_like_zeus(par: np.typing.NDArray, keys: np.typing.NDArray) -> float:
 
 
 def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, burnin: int, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
+    """Checks whether or not the chains have converged, for the emcee sampler. The condition is that the length of the chain (with burn-in removed)
+    must be greater than or equal to the maximum integrated autocorrelation time of the chains times ntau. Additionally, the fractional change in
+    the maximum autocorrelation time from the last check must be less than deltatau.
+
+    Args:
+        sampler (emcee.EnsembleSampler): The emcee EnsembleSampler object.
+        it (int): The current step number.
+        last_tau (float): The previous maximum integrated autocorrelation time of the chains, from the last check.
+        burnin (int): Number of burn-in steps to remove.
+        ntau (int, optional): For convergence, the chain length must reach ntau times the maximum integrated autocorrelation time of the chains.
+            Default is 50.
+        deltatau (float, optional): For convergence, the rate of change of the maximum integrated autocorrelation time of the chains must drop below
+            deltatau. Default is 0.01.
+
+    Returns:
+        tuple[bool, float]: Returns whether or not the chains have converged, as well as the maximum integrated autocorrelation time of the chains (to
+            be passed into the next check as last_tau).
+    """
+    import emcee
 
     cleanlen = it-burnin
 
@@ -4322,6 +5550,25 @@ def check_emcee_conv(sampler: emcee.EnsembleSampler, it: int, last_tau: float, b
 
 
 def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, burnin: int, ntau: int = 50, deltatau: float = 0.01) -> tuple[bool, float]:
+    """Checks whether or not the chains have converged, for the zeus sampler. The condition is that the length of the chain (with burn-in removed)
+    must be greater than or equal to the maximum integrated autocorrelation time of the chains times ntau. Additionally, the fractional change in
+    the maximum autocorrelation time from the last check must be less than deltatau.
+
+    Args:
+        sampler (zeus.EnsembleSampler): The zeus EnsembleSampler object.
+        it (int): The current step number.
+        last_tau (float): The previous maximum integrated autocorrelation time of the chains, from the last check.
+        burnin (int): Number of burn-in steps to remove.
+        ntau (int, optional): For convergence, the chain length must reach ntau times the maximum integrated autocorrelation time of the chains.
+            Default is 50.
+        deltatau (float, optional): For convergence, the rate of change of the maximum integrated autocorrelation time of the chains must drop below
+            deltatau. Default is 0.01.
+
+    Returns:
+        tuple[bool, float]: Returns whether or not the chains have converged, as well as the maximum integrated autocorrelation time of the chains (to
+            be passed into the next check as last_tau).
+    """
+    import zeus
 
     cleanlen = it-burnin
 
@@ -4343,140 +5590,133 @@ def check_zeus_conv(sampler: zeus.EnsembleSampler, it: int, last_tau: float, bur
     return conv, tau
 
 
-def log_like(par_in: dict) -> float:
+def log_like(par_in: dict) -> tuple[float,np.typing.NDArray]:
     """The log likelihood function for fitting.
 
-    Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood and for stellar
+    Checks certain parameters to make sure they are in bounds. Calculates likelihoods from any priors. Calculates log likelihood for stellar
     fitting using the isochrones MIST star model. Generates transit and RV models, then calculates log likelihood relative to data using lnNorm.
 
     Args:
         par_in (dict): Dictionary of fit parameters.
 
     Returns:
-        float | tuple: Generally, just the log likelihood value is returned. If any parameter is out of bounds or any portion of the log likelihood
-            is nan, returns negative infinity. If fitting for TTVs, an array of periods and an array of conjunction times of any planets that are
-            being fit for TTVs are also returned. They are used to track the period and time of conjunction that are computed from linear regression
-            at each step, rather than redoing it later.
+        float, ndrray: The log likelihood value is returned. If any parameter is out of bounds or any portion of the log likelihood
+            is nan, returns negative infinity. Additionally, an array of the linear parameters (solved for using least squares) is returned.
     """
 
     par = par_in | miniexs.fixed
 
     for i in range(miniexs.n):
 
-        if 'e {0}'.format(i+1) in par:
+        if 'se {0}'.format(i+1) in par:
 
-            par['secw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.cos(par['w {0}'.format(i+1)])
-            par['sesw {0}'.format(i+1)] = np.sqrt(par['e {0}'.format(i+1)]) * np.sin(par['w {0}'.format(i+1)])
+            par['secw {0}'.format(i+1)] = par['se {0}'.format(i+1)] * par['cw {0}'.format(i+1)]
+            par['sesw {0}'.format(i+1)] = par['se {0}'.format(i+1)] * par['sw {0}'.format(i+1)]
  
-
+    nlin = len(miniexs.lin_names)
 
     like = 0
 
     if miniexs.fit_star:
 
-        if not -0.5 <= par['feh'] <= 0.5:
-            return -np.inf
-        
-        if par['AV'] < 0:
-            return -np.inf
-
-        starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
-        starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+        starlike = miniexs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
+        starlike += miniexs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
         if np.isnan(starlike):
-            return -np.inf
+            return -np.inf, *np.zeros((nlin))
         
         like += starlike
 
+        rstar, mstar, Tstar, loggstar, rhostar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg','density'])
+
+        par['mstar'] = mstar
+        par['rstar'] = rstar
+        par['log(rhostar)'] = np.log(rhostar)
+
         if miniexs.fit_planets:
 
-            rstar, mstar, Tstar, loggstar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg'])
-
             if not 2300 <= Tstar <= 7800 or not 3 <= loggstar <= 6:
-                return -np.inf
+                return -np.inf, *np.zeros((nlin))
 
-            arlist = []
             for i in range(miniexs.n):
 
                 if not miniexs.is_transit[i]:
-                    arlist.append(np.nan)
                     continue
 
                 if miniexs.fit_ttv[i]:
 
-                    p = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)], ar = 1)[0]
+                    p = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])[0]
 
                 else:
 
                     p = np.exp(par['log(P) {0}'.format(i+1)])
 
-                if miniexs.is_rv[i] and miniexs.fit_rv:
+                if miniexs.is_astro[i] and miniexs.fit_gaia:
+
+                    q = np.exp(par['log(q) {0}'.format(i+1)])
+                    mp = q * mstar
+
+                elif miniexs.is_rv[i] and miniexs.fit_rv:
 
                     e = 0
                     if miniexs.fit_ecc[i]:
                         e = par['secw {0}'.format(i+1)]**2 + par['sesw {0}'.format(i+1)]**2
 
-                    mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)
+                    mp = calc_m_from_k(p, np.exp(par['log(K) {0}'.format(i+1)]), e, np.arccos(par['cos(i) {0}'.format(i+1)]), mstar)*earthm_to_msun
 
                 else:
 
                     mp = 0
 
-                ar = (((mstar + (mp*u.earthMass).to(u.Msun).value) * (p*u.day).to(u.yr).value**2)**(1/3) * u.AU).to(u.Rsun).value / rstar
+                ar = ((mstar + mp) * (p*d_to_yr)**2)**(1/3) * au_to_rsun / rstar
 
-                arlist.append(ar)
+                par['log(a/rs) {0}'.format(i+1)] = np.log(ar)
+
         
+    lin_par = np.empty(0)
 
+    if miniexs.fit_transit:
+
+        for i in range(miniexs.n):
+            
+            if miniexs.is_transit[i] and miniexs.fit_ttv[i]:
+
+                pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)])
+
+                lin_par = np.append(lin_par, pars)
+
+                par['log(P) {0}'.format(i+1)] = np.log(pars[0])
+                par['Tc {0}'.format(i+1)] = pars[1]
+
+
+    priorlike = miniexs.allpriors.apply(par)
+
+    if np.isinf(priorlike):
+        return -np.inf, *np.zeros((nlin))
+    
+    else:
+        like += priorlike
             
     tpars = []
     rpars = []
-    ps = []
-    tcs = []
+    gpars = []
     
-    priorpar = par.copy()
-
     if miniexs.fit_planets:
 
         for i in range(miniexs.n):
             
             if miniexs.is_transit[i] and miniexs.fit_transit:
 
-                if miniexs.fit_ttv[i]:
+                tpars.append(get_transit_params(par, i+1))
 
-                    pars = get_ttv_params(par, i+1, miniexs.ttvi['{0}'.format(i+1)], ar = arlist[i] if miniexs.fit_star else None)
-                    ps.append(pars[0])
-                    tcs.append(pars[1])
-                    tpars.append(pars)
-
-                    priorpar['log(P) {0}'.format(i+1)] = np.log(pars[0])
-                    priorpar['Tc {0}'.format(i+1)] = pars[1]
-
-                    if miniexs.is_rv[i] and miniexs.fit_rv:
-
-                        rpars.append(get_rv_params(par, i+1, pars[0], pars[1]))
-
-                else:
-
-                    tpars.append(get_transit_params(par, i+1, ar = arlist[i] if miniexs.fit_star else None))
-
-                    if miniexs.is_rv[i] and miniexs.fit_rv:
-
-                        rpars.append(get_rv_params(par, i+1))
-
-            elif miniexs.is_rv[i] and miniexs.fit_rv:
+            if miniexs.is_rv[i] and miniexs.fit_rv:
 
                 rpars.append(get_rv_params(par, i+1))
+
+            if miniexs.is_astro[i] and miniexs.fit_gaia:
+
+                gpars.append(get_Gaia_params(par, i+1))
             
-
-    
-
-    priorlike = miniexs.allpriors.apply(priorpar)
-
-    if np.isinf(priorlike):
-        return -np.inf
-    
-    else:
-        like += priorlike
 
 
     if miniexs.fit_transit:
@@ -4527,18 +5767,23 @@ def log_like(par_in: dict) -> float:
 
                     if miniexs.is_eclipse[j]:
 
-                        mp = 0
-                        ms = mstar if miniexs.fit_star else miniexs.ms
+                        ms = par['mstar'] if 'mstar' in par else miniexs.ms
+                        rs = par['rstar'] if 'rstar' in par else miniexs.rs
+                        q = 0
 
-                        if miniexs.is_rv[j] and miniexs.fit_rv:
+                        if miniexs.is_astro[j] and miniexs.fit_gaia:
+
+                            q = np.exp(par['log(q) {0}'.format(j+1)])
+
+                        elif miniexs.is_rv[j] and miniexs.fit_rv:
 
                             kr = np.sum(miniexs.is_rv[:j])
                             
-                            mp = calc_m_from_k(p, rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)
+                            mp = calc_m_from_k(tpars[k][0], rpars[kr][2], rpars[kr][3], tpars[k][4]*np.pi/180, ms)*earthm_to_msun
 
-                        q = mp/ms
+                            q = mp/ms
 
-                        fm += lightCurve(tpars[k], miniexs.tt[i], ld, miniexs.exptimes[i], miniexs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rstar if miniexs.fit_star else miniexs.rs, q = q)
+                        fm += lightCurve(tpars[k], miniexs.tt[i], ld, miniexs.exptimes[i], miniexs.supersamples[i], eclipse = True, fp = par['fp {0}'.format(j+1)], rstar = rs, q = q)
 
                     else:
 
@@ -4551,11 +5796,10 @@ def log_like(par_in: dict) -> float:
                 ii = np.sum(miniexs.detrend[:i])
 
                 try:
-
                     gp = set_gp_params(np.exp(par['log(rho_gp) {0}'.format(miniexs.lcnames[i])]), np.exp(par['log(sigma_gp) {0}'.format(miniexs.lcnames[i])]), miniexs.tt[i], miniexs.ferr[i], miniexs.gps[ii])
 
                 except:
-                    return -np.inf
+                    return -np.inf, *np.zeros((nlin))
 
                 like += gp.log_likelihood(resid)
 
@@ -4563,15 +5807,10 @@ def log_like(par_in: dict) -> float:
 
                 like += np.sum(lnNorm(miniexs.f[i], fm, miniexs.ferr[i]))
 
+
     if miniexs.fit_rv:
 
-        rvm = np.array([par['gamma']]*len(miniexs.tr)) + (par['gamma_dot'] * (miniexs.tr - miniexs.tr_ref) if miniexs.rv_bkg_order > 0 else 0) + (par['gamma_ddot'] * (miniexs.tr - miniexs.tr_ref)**2 if miniexs.rv_bkg_order > 1 else 0)
-
-        for i in np.unique(miniexs.which_rv)[1:]:
-
-            j = np.where(miniexs.which_rv == i)[0]
-
-            rvm[j] += par['rv_offset {0}'.format(miniexs.rvnames[i])]
+        rvm = 0
 
         for i in range(miniexs.n):
 
@@ -4582,11 +5821,147 @@ def log_like(par_in: dict) -> float:
 
             rvm += rvModel(rpars[j], miniexs.tr)
 
+        rvclean = miniexs.rv - rvm
 
-        like += np.sum(lnNorm(miniexs.rv, rvm, miniexs.rverr))
+        M = []
+
+        if 'gamma' in miniexs.fixed:
+            rvclean -= miniexs.fixed['gamma']
+
+        else:
+            M.append(np.ones((len(miniexs.tr))))
+
+        if miniexs.rv_bkg_order > 0:
+
+            if 'gamma_dot' in miniexs.fixed:
+                rvclean -= miniexs.fixed['gamma_dot'] * (miniexs.tr - miniexs.tr_ref)
+
+            else:
+                M.append(miniexs.tr - miniexs.tr_ref)
+
+        if miniexs.rv_bkg_order > 1:
+
+            if 'gamma_ddot' in miniexs.fixed:
+                rvclean -= miniexs.fixed['gamma_ddot'] * (miniexs.tr - miniexs.tr_ref)**2
+
+            else:
+                M.append((miniexs.tr - miniexs.tr_ref)**2)
+
+        for i in np.unique(miniexs.which_rv)[1:]:
+
+            if 'rv_offset {0}'.format(miniexs.rvnames[i]) in miniexs.fixed:
+
+                j = np.where(miniexs.which_rv == i)[0]
+
+                rvclean[j] -= miniexs.fixed['rv_offset {0}'.format(miniexs.rvnames[i])]
+
+            else:
+                M.append((miniexs.which_rv == i).astype(float))
+
+        if len(M) > 0:
+
+            M = np.column_stack(M)
+
+            W = 1/miniexs.rverr**2
+            Mw = M * np.sqrt(W)[:, None]
+            Yw = rvclean * np.sqrt(W)
+
+            X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+
+            if len(chi2) > 0:
+                chi2min = chi2[0]
+            else:
+                chi2min = np.sum((Yw - Mw @ X)**2)
+
+            _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+            like += -0.5 * (chi2min + logdet)
+
+            lin_par = np.append(lin_par, X)
+
+        else:
+
+            like += np.sum(lnNorm(rvclean, np.zeros(rvclean.shape), miniexs.rverr))
 
 
-    return like if not np.isnan(like) else -np.inf
+    if miniexs.fit_gaia:
+
+        galm = miniexs.plxf * par['plx']
+
+        for i in range(miniexs.n):
+
+            if not miniexs.is_astro[i]:
+                continue
+
+            j = np.sum(miniexs.is_astro[:i])
+
+            galm += Gaia_AL_Model(gpars[j], miniexs.tg, miniexs.psi)[2]
+
+        gclean = miniexs.gal - galm
+        tgyr = (miniexs.tg - miniexs.tg_ref)*d_to_yr
+
+        M = []
+
+        if 'ra*_offset' in miniexs.fixed:
+            gclean -= miniexs.fixed['ra*_offset']*np.sin(miniexs.psi)
+
+        else:
+            M.append(np.sin(miniexs.psi))
+
+        if 'dec_offset' in miniexs.fixed:
+            gclean -= miniexs.fixed['dec_offset']*np.cos(miniexs.psi)
+
+        else:
+            M.append(np.cos(miniexs.psi))
+
+        if 'pmra*' in miniexs.fixed:
+            gclean -= miniexs.fixed['pmra*']*tgyr*np.sin(miniexs.psi)
+
+        else:
+            M.append(tgyr*np.sin(miniexs.psi))
+
+        if 'pmdec' in miniexs.fixed:
+            gclean -= miniexs.fixed['pmdec']*tgyr*np.cos(miniexs.psi)
+
+        else:
+            M.append(tgyr*np.cos(miniexs.psi))
+
+        if len(M) > 0:
+
+            M = np.column_stack(M)
+    
+            W = 1/miniexs.galerr**2
+            Mw = M * np.sqrt(W)[:, None]
+            Yw = gclean * np.sqrt(W)
+        
+            X, chi2, _, _ = np.linalg.lstsq(Mw, Yw, rcond = None)
+        
+            if len(chi2) > 0:
+                chi2min = chi2[0]
+            else:
+                chi2min = np.sum((Yw - Mw @ X)**2)
+
+            _, logdet = np.linalg.slogdet(Mw.T @ Mw)
+
+            like += -0.5 * (chi2min + logdet)
+
+            lin_par = np.append(lin_par, X)
+
+        else:
+
+            like += np.sum(lnNorm(gclean, np.zeros(gclean.shape), miniexs.galerr))
+
+    if nlin > 0:
+
+        linpriorlike = miniexs.allpriors.apply({miniexs.lin_names[i]: lin_par[i] for i in range(len(lin_par))})
+
+        if np.isinf(linpriorlike):
+            return -np.inf, *np.zeros((nlin))
+        
+        else:
+            like += linpriorlike
+
+    return (like, *lin_par) if not np.isnan(like) else (-np.inf, *np.zeros((nlin)))
 
 
 def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
@@ -4614,10 +5989,16 @@ def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
     if par['AV'] < 0:
         return -np.inf
 
-    starlike = exs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
-    starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],par['distance'],par['AV']])
+    starlike = exs.starmod.lnlike([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
+    starlike += exs.starmod.lnprior([par['eep'],par['log10(age)'],par['feh'],1000/par['plx'],par['AV']])
 
     if exs.use_priors:
+
+        rstar, mstar, Tstar, loggstar, rhostar = miniexs.misti.interp_value([par['eep'],par['log10(age)'],par['feh']],['radius','mass','Teff','logg','density'])
+
+        par['mstar'] = mstar
+        par['rstar'] = rstar
+        par['log(rhostar)'] = np.log(rhostar)
 
         starlike += exs.allpriors.apply(par)
 
@@ -4625,3 +6006,9 @@ def log_like_staronly(par_in: dict, exs: ExoSystem) -> float:
         return -np.inf
     
     return starlike
+
+
+
+
+if __name__ == "__main__":
+    pass

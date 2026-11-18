@@ -1,9 +1,152 @@
-import numpy as np
-from astropy.table import Table
-from isochrones import SingleStarModel
-from isochrones.priors import FlatPrior, GaussianPrior
-from scipy.optimize import minimize_scalar
+from __future__ import annotations
 
+import numpy as np
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astropy.table import Table
+
+class GaussianPrior:
+    """Gaussian prior class. Returns the log of the Gaussian prior value for a given trial.
+    """
+
+    def __init__(self, mean: float, std: float):
+        """Initializes a GaussianPrior object with a mean and standard deviation.
+
+        Args:
+            mean (float): The mean of the Gaussian distribution.
+            std (float): The standard deviation of the Gaussian distribution.
+        """
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the Gaussian prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the Gaussian prior given x.
+        """
+        return - 0.5 * ((x - self.mean) / self.std)**2 - np.log(np.sqrt(2 * np.pi) * self.std)
+
+
+class UniformPrior:
+    """Uniform prior class. Returns negative infinity if the given trial value is out of the bounds, otherwise the log of the normalized
+    uniform prior value.
+    """
+
+    def __init__(self, lower: float, upper: float):
+        """Initializes a UniformPrior object with a lower and upper bound.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
+        """
+        self.lower = lower
+        self.upper = upper
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the uniform prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the uniform prior given x.
+        """
+        if np.isscalar(x):
+            return -np.log(self.upper-self.lower) if self.lower <= x <= self.upper else -np.inf
+
+        else:
+            return np.where((x >= self.lower) & (x <= self.upper), -np.log(self.upper-self.lower), -np.inf)
+
+
+class LogUniformPrior:
+    """Log uniform prior class. Variable must be positive definite. Returns negative infinity if the given trial value is out of the bounds, 
+    otherwise the log of the normalized log uniform prior. Does not work if the lower bound is 0!!! In that case, use a modified Jeffrey's prior.
+    """
+
+    def __init__(self, lower: float, upper: float):
+        """Initializes a LogUniformPrior object with a lower and upper bound.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
+        """
+        self.lower = lower
+        self.upper = upper
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the log uniform prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the log uniform prior given x.
+        """
+        if np.isscalar(x):
+            return -np.log(x) - np.log(np.log(self.upper/self.lower)) if self.lower <= x <= self.upper else -np.inf
+
+        else:
+            return np.where((x >= self.lower) & (x <= self.upper), -np.log(x) - np.log(np.log(self.upper/self.lower)), -np.inf)
+
+
+class ModifiedJeffreysPrior:
+    """Modified Jeffrey's prior class. Variable must be positive definite. Has implicit lower bound of 0. Returns negative infinity if the given trial
+    value is out of the bounds, otherwise the log of the normalized modified Jeffrey's prior. The modified Jeffrey's prior is log uniform above the
+    knee and becomes uniform below the knee value.
+    """
+
+    def __init__(self, upper: float, knee: float):
+        """Initializes a LogUniformPrior object with a lower and upper bound.
+
+        Args:
+            upper (float): The upper boundary.
+            knee (float): Value at which the prior transitions from log uniform to uniform.
+        """
+        self.upper = upper
+        self.knee = knee
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the modified Jeffrey's prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the modified Jeffrey's prior given x.
+        """
+        if np.isscalar(x):
+            return -np.log(x+self.knee) - np.log(np.log((self.knee+self.upper)/self.knee)) if 0 <= x <= self.upper else -np.inf
+
+        else:
+            return np.where((x >= 0) & (x <= self.upper), -np.log(x+self.knee) - np.log(np.log((self.knee+self.upper)/self.knee)), -np.inf)
+
+
+class UnitCirclePrior:
+    """Unit circle prior class. Flattens out the prior space when sampling an angle with cos(angle) and sin(angle). This is automatically
+    applied when sampling omega or w this way. The assumed input on this prior is cos^2(angle) + sin^2(angle). This is generally hidden from
+    users and is not included in the init priors GUI.
+    """
+
+    def __call__(self, x: np.typing.ArrayLike):
+        """Computes the log of the unit circle prior value for a trial value(s) x.
+
+        Args:
+            x (ArrayLike): The trial value or values.
+
+        Returns:
+            The log of the unit circle prior given x.
+        """
+        if np.isscalar(x):
+                return -0.5 * np.log(x) if x <= 1 else -np.inf
+
+        else:
+            return np.where(x <= 1, -0.5 * np.log(x), -np.inf)
+    
 
 class Priors:
     """Class for holding prior functions for a specific variable and applying them.
@@ -20,81 +163,59 @@ class Priors:
 
 
     def add_gaussian_prior(self, mean: float, std: float):
-        """Adds a Gaussian prior function to the list of priors with the given parameters. The prior function returns the log of the prior value for
-        a given trial value to be added to the log likelihood during fitting.
+        """Adds a Gaussian prior function to the list of priors with the given mean and standard deviation.
 
         Args:
             mean (float): The mean of the Gaussian distribution.
             std (float): The standard deviation of the Gaussian distribution.
         """
-
-        self.lbound = max(self.lbound, mean-10*std)
-        self.ubound = min(self.ubound, mean+10*std)
-
-        def gaussian_prior(x):
-
-            return - 0.5 * ((x - mean) / std)**2 - np.log( np.sqrt(2 * np.pi) * std)
         
-        self.prior_funcs.append(gaussian_prior)
+        self.prior_funcs.append(GaussianPrior(mean, std))
 
     
     def add_uniform_prior(self, lower: float, upper: float):
-        """Adds a uniform prior function to the list of priors with the given bounds. The prior function returns negative infinity if the given trial
-        value is out of the bounds, otherwise 0. Updates the lower and upper bounds of the Priors object.
+        """Adds a uniform prior function to the list of priors with the given bounds.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
         """
 
         self.lbound = max(self.lbound, lower)
         self.ubound = min(self.ubound, upper)
-
-        def uniform_prior(x):
-
-            if np.isscalar(x):
-                return -np.log(upper-lower) if lower <= x <= upper else -np.inf
-
-            else:
-                return np.where((x >= lower) & (x <= upper), -np.log(upper-lower), -np.inf)
         
-        self.prior_funcs.append(uniform_prior)
+        self.prior_funcs.append(UniformPrior(lower, upper))
 
 
     def add_log_uniform_prior(self, lower: float, upper: float):
-        """Adds a log uniform prior function to the list of priors with the given bounds. Variable must be positive definite. The prior function
-        returns negative infinity if the given trial value is out of the bounds, otherwise the normalized log uniform prior. Does not work if the
-        lower bound is 0!!! In that case, use a modified Jeffrey's prior. Updates the lower and upper bounds of the Priors object.
+        """Adds a log uniform prior function to the list of priors with the given bounds.
+
+        Args:
+            lower (float): The lower boundary.
+            upper (float): The upper boundary.
         """
 
         self.lbound = max(self.lbound, lower)
         self.ubound = min(self.ubound, upper)
 
-        def log_uniform_prior(x):
-
-            if np.isscalar(x):
-                return -np.log(x) - np.log(np.log(upper/lower)) if lower <= x <= upper else -np.inf
-
-            else:
-                return np.where((x >= lower) & (x <= upper), -np.log(x) - np.log(np.log(upper/lower)), -np.inf)
-
-        self.prior_funcs.append(log_uniform_prior)
+        self.prior_funcs.append(LogUniformPrior(lower, upper))
 
     
     def add_modified_jeffreys_prior(self, upper: float, knee: float):
-        """Adds a modified Jeffrey's prior function to the list of priors with the given bounds. Variable must be positive definite. Implicit lower
-        bound of 0. The prior function returns negative infinity if the given trial value is out of the bounds, otherwise the normalized modified
-        Jeffrey's prior. The modified Jeffrey's prior becomes log uniform below the knee value. Updates the lower and upper bounds of the Priors object.
+        """Adds a modified Jeffrey's prior function to the list of priors with the given upper bound and knee value.
         """
 
         self.lbound = max(self.lbound, 0)
         self.ubound = min(self.ubound, upper)
 
-        def modified_jeffreys_prior(x):
+        self.prior_funcs.append(ModifiedJeffreysPrior(upper, knee))
 
-            if np.isscalar(x):
-                return -np.log(x+knee) - np.log(np.log((knee+upper)/knee)) if 0 <= x <= upper else -np.inf
 
-            else:
-                return np.where((x >= 0) & (x <= upper), -np.log(x+knee) - np.log(np.log((knee+upper)/knee)), -np.inf)
+    def add_unit_circle_prior(self):
+        """Adds a unit circle prior function to the list of priors.
+        """
 
-        self.prior_funcs.append(modified_jeffreys_prior)
+        self.prior_funcs.append(UnitCirclePrior())
 
 
     def apply_priors(self, x: np.typing.ArrayLike) -> np.typing.ArrayLike:
@@ -132,9 +253,11 @@ class Priors:
 
     def sample(self, n: int):
 
+        from scipy.optimize import minimize_scalar
+
         xmin, xmax = self.bounds()
 
-        res = minimize_scalar(lambda x: -self.apply_priors(x), bounds = (xmin, xmax) if np.all(np.isfinite([xmin, xmax])) else None)
+        res = minimize_scalar(lambda x: -self.apply_priors(x), bounds = (xmin, xmax) if np.any(np.isfinite([xmin, xmax])) else None)
         max_log_prob = -res.fun
 
         accepted = []
@@ -164,91 +287,83 @@ class AllPriors:
     parameter and a dict of all fixed parameters.
     """
 
-    def __init__(self, tab: Table, x0: dict, fit_ttv: np.typing.NDArray):
-        """Initializes an AllPriors object from an Init_priors table and a list of fit parameters. Parses the table into actual priors for any relevant
-        parameters. Sets up a dict of fixed parameters and their values.
-
-        Args:
-            tab (Table): The table from an Init_priors object with a list of priors to set up.
-            x0 (dict): A dict with initial values for all fit parameters from an ExoSystem fit, used to determine which variables are being fit for and
-                require priors to be set up.
-            fit_ttv (ndarray): An array of bools for each planet. They represent whether or not each planet is being fit for TTVs. Priors can be placed
-            on P and Tc for a planet even if they are fit for TTVs and don't directly have those in the fit parameters.
-        """
+    def __init__(self):
 
         self.prior_dict = {}
         self.fixed = {}
 
-        searchvars = {'P': 'log(P)', 'a/rs': 'log(a/rs)', 'rhos': 'log(a/rs)', 'i': 'cos(i)', 'K': 'log(K)', 'e': 'secw', 'w': 'secw',
-                      'rho_gp': 'log(rho_gp)', 'sigma_gp': 'log(sigma_gp)', 'age': 'log10(age)'}
-        
-        star_vars = ['eep', 'log10(age)', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
+        self.searchvars = {'P': ['log(P)'], 'a/rs': ['log(a/rs)','log(rhostar)'], 'log(a/rs)': ['log(a/rs)','log(rhostar)'],
+                           'rhostar': ['log(rhostar)', 'eep'], 'i': ['cos(i)','sico','siso'], 'cos(i)': ['cos(i)','sico','siso'],
+                           'K': ['log(K)'], 'e': ['se','secw','sesw'], 'w': ['secw','sesw','cw','sw'], 'rsq_w': ['cw','sw'],
+                           'cw': ['cw','secw','sesw'], 'sw': ['sw','secw','sesw'], 'se': ['se','secw','sesw'],
+                           'rho_gp': ['log(rho_gp)'], 'sigma_gp': ['log(sigma_gp)'], 'age': ['log10(age)'], 'q': ['log(q)'],
+                           'omega': ['sico','siso','comega','somega'], 'rsq_omega': ['comega','somega'],
+                           'comega': ['comega','sico','siso'], 'somega': ['somega','sico','siso'], 'distance': ['plx'],
+                           'rstar': ['rstar', 'eep'], 'mstar': ['mstar', 'eep'], 'log(rhostar)': ['log(rhostar)', 'eep']}
+
+
+    def init_fixed(self, tab: Table, x0: dict):
+        """Sets up a dict of fixed parameters and their values.
+
+        Args:
+            tab (Table): The table from an Init_priors object with a list of priors to set up.
+            x0 (dict): A dict with initial values for all fit parameters from an ExoSystem fit, used to determine which variables are being fit for and
+                can be set to fixed.
+        """
+
+        x0keys = list(x0.keys())
 
         for i in range(len(tab)):
 
-            var = tab['Variable'][i]
-
-            if var in star_vars:
-
-                if var in star_vars[:5] and tab['Prior Type'][i] == 'F':
-                    
-                    self.fixed[var] = tab['Param 1'][i]
-
+            if tab['Prior Type'][i] != 'F':
                 continue
+
+            var = tab['Variable'][i]
 
             split = var.split()
 
+            if 'a/rs' in split and 'log(rhostar)' in x0keys:
+                continue
+
             svar = split[0]
-            if svar in searchvars:
-                svar = searchvars[svar]
+            if svar in self.searchvars:
+                svar = self.searchvars[svar]
+            else:
+                svar = [svar]
 
-            fvar = ' '.join([svar]+split[1:])
+            fvar = [' '.join([sv]+split[1:]) for sv in svar]
 
-            if svar in ['log(P)','Tc'] and np.any(fit_ttv):
+            if np.any(np.isin(fvar, x0keys)) or np.any(np.isin(svar, x0keys)):
 
-                if tab['Prior Type'][i] == 'F':
-
-                    continue
-
-                if split[-1] == 'x':
-
-                    for j in range(len(fit_ttv)):
-
-                        if fit_ttv[j] and 'ror {0}'.format(j+1) in x0:
-
-                            self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
-
-                elif fit_ttv[int(split[-1])-1] and 'ror {0}'.format(split[-1]) in x0:
-
-                    self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
-
-
-            if fvar in x0:
-
-                self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+                self.fixed[var] = tab['Param 1'][i]
 
             elif split[-1] == 'x':
 
                 for y in x0:
 
-                    if y.split()[0] == svar:
+                    if np.any(np.isin(y.split()[0], svar)):
 
                         yvar = ' '.join([split[0]]+y.split()[1:])
 
-                        self.set_up_prior(yvar, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+                        self.fixed[yvar] = tab['Param 1'][i]
 
+            elif var in ['log(rhostar)', 'rhostar']:
+
+                for y in x0:
+
+                    if y.split()[0] == 'log(a/rs)':
+
+                        self.fixed[var] = tab['Param 1'][i]
+
+                        break
 
 
         keys = list(self.fixed.keys())
         for f in keys:
 
-            if f in self.prior_dict:
-
-                self.prior_dict.pop(f)
-
             split = f.split()
 
-            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp']:
+            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp', 'q', 'rhostar']:
 
                 sf = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
@@ -263,6 +378,122 @@ class AllPriors:
                 sf = ' '.join(['cos(i)']+split[1:])
 
                 self.fixed[sf] = np.cos(self.fixed.pop(f))
+
+            elif split[0] == 'omega':
+
+                sf = ' '.join(['comega']+split[1:])
+                sf2 = ' '.join(['somega']+split[1:])
+
+                self.fixed[sf] = np.cos(self.fixed[f])
+                self.fixed[sf2] = np.sin(self.fixed.pop(f))
+
+            elif split[0] == 'e':
+
+                sf = ' '.join(['se']+split[1:])
+
+                self.fixed[sf] = np.sqrt(self.fixed.pop(f))
+
+            elif split[0] == 'w':
+
+                sf = ' '.join(['cw']+split[1:])
+                sf2 = ' '.join(['sw']+split[1:])
+
+                self.fixed[sf] = np.cos(self.fixed[f])
+                self.fixed[sf2] = np.sin(self.fixed.pop(f))
+
+            elif split[0] == 'distance':
+
+                self.fixed['plx'] = 1000/self.fixed.pop(f)
+
+            if split[0] in ['i','cos(i)','omega','comega','somega']:
+
+                sf = ' '.join(['sico']+split[1:])
+                sf2 = ' '.join(['siso']+split[1:])
+
+                if sf in self.fixed:
+                    self.fixed.pop(sf)
+                if sf2 in self.fixed:
+                    self.fixed.pop(sf2)
+
+            elif split[0] in ['e','se','w','cw','sw']:
+
+                sf = ' '.join(['secw']+split[1:])
+                sf2 = ' '.join(['sesw']+split[1:])
+
+                if sf in self.fixed:
+                    self.fixed.pop(sf)
+                if sf2 in self.fixed:
+                    self.fixed.pop(sf2)
+
+
+    def init_priors(self, tab: Table, x0: dict, fit_ttv: np.typing.NDArray):
+        """Parses the Init_priors table into actual priors for any relevant parameters that are being fit.
+
+        Args:
+            tab (Table): The table from an Init_priors object with a list of priors to set up.
+            x0 (dict): A dict with initial values for all fit parameters from an ExoSystem fit, used to determine which variables are being fit for and
+                can be set to fixed.
+            fit_ttv (ndarray): An array of bools for each planet. They represent whether or not each planet is being fit for TTVs. Priors can be placed
+                on P and Tc for a planet even if they are fit for TTVs and don't directly have those in the fit parameters.
+        """
+
+        x0keys = list(x0.keys())
+
+        for i in range(len(tab)):
+
+            if tab['Prior Type'][i] == 'F':
+                continue
+
+            var = tab['Variable'][i]
+
+            split = var.split()
+
+            svar = split[0]
+            if svar in self.searchvars:
+                svar = self.searchvars[svar]
+            else:
+                svar = [svar]
+
+            fvar = [' '.join([sv]+split[1:]) for sv in svar]
+
+            if np.any(np.isin(svar, ['log(P)','Tc'])) and np.any(fit_ttv):
+
+                if split[-1] == 'x':
+
+                    for j in range(len(fit_ttv)):
+
+                        if fit_ttv[j] and 'ror {0}'.format(j+1) in x0:
+
+                            self.set_up_prior('{0} {1}'.format(split[0], j+1), tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+                elif fit_ttv[int(split[-1])-1] and 'ror {0}'.format(split[-1]) in x0:
+
+                    self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+
+            if np.any(np.isin(fvar, x0keys)) or np.any(np.isin(svar, x0keys)):
+
+                self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+            elif split[-1] == 'x':
+
+                for y in x0:
+
+                    if np.any(np.isin(y.split()[0], svar)):
+
+                        yvar = ' '.join([split[0]]+y.split()[1:])
+
+                        self.set_up_prior(yvar, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+            elif var in ['log(rhostar)', 'rhostar']:
+
+                for y in x0:
+
+                    if y.split()[0] == 'log(a/rs)':
+
+                        self.set_up_prior(var, tab['Prior Type'][i], [tab['Param {0}'.format(k)][i] for k in range(1,3)])
+
+                        break
 
 
 
@@ -287,10 +518,6 @@ class AllPriors:
 
             self.prior_dict[var].add_gaussian_prior(params[0], params[1])
 
-        elif prior_type == 'F':
-
-            self.fixed[var] = params[0]
-
         elif prior_type == 'LU':
 
             self.prior_dict[var].add_log_uniform_prior(params[0], params[1])
@@ -298,6 +525,10 @@ class AllPriors:
         elif prior_type == 'MJ':
 
             self.prior_dict[var].add_modified_jeffreys_prior(params[0], params[1])
+
+        elif prior_type == 'UC':
+
+            self.prior_dict[var].add_unit_circle_prior()
 
 
     def apply(self, par: dict) -> float:
@@ -310,302 +541,250 @@ class AllPriors:
             float: The total log likelihood from the priors.
         """
 
-        log_like = 0
+        log_like = np.zeros(np.array(list(par.values())[0]).shape)
 
         for var in self.prior_dict:
 
             split = var.split()
 
-            if split[0] in ['P', 'a/rs', 'K', 'rho_gp', 'sigma_gp']:
+            if var in par:
+
+                x = par[var]
+
+                log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] in ['P', 'K', 'rho_gp', 'sigma_gp', 'q']:
 
                 svar = ' '.join(['log({0})'.format(split[0])]+split[1:])
 
-                x = np.exp(par[svar])
+                if svar in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = np.exp(par[svar])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'age':
 
-                x = 10**(par['log10(age)'])
+                if 'log10(age)' in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = 10**(par['log10(age)'])
 
-            elif split[0] == 'rhos':
+                    log_like += self.prior_dict[var].apply_priors(x)
 
-                svar1 = ' '.join(['log(P)']+split[1:])
-                svar2 = ' '.join(['log(a/rs)']+split[1:])
+            elif var in ['log(rhostar)','rhostar']:
 
-                x = 0.018916375 * np.exp(par[svar2])**3 / np.exp(par[svar1])**2
+                if var == 'rhostar' and 'log(rhostar)' in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = np.exp(par['log(rhostar)'])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                else:
+
+                    for y in par:
+
+                        if y.split()[0] == 'log(a/rs)':
+
+                            y2 = ' '.join(['log(P)']+y.split()[1:])
+
+                            if y2 in par:
+
+                                x = 0.018916375 * np.exp(par[y])**3 / np.exp(par[y2])**2
+
+                                if var == 'log(rhostar)':
+
+                                    x = np.log(x)
+
+                                log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] in ['log(a/rs)','a/rs']:
+
+                svar = ' '.join(['log(a/rs)']+split[1:])
+
+                if split[0] == 'a/rs' and svar in par:
+
+                    x = np.exp(par[svar])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                elif 'log(rhostar)' in par:
+
+                    svar2 = ' '.join(['log(P)']+split[1:])
+
+                    if svar2 in par:
+
+                        x = (np.exp(par['log(rhostar)']) / 0.018916375 * np.exp(par[svar2])**2)**(1/3)
+
+                        if split[0] == 'log(a/rs)':
+
+                            x = np.log(x)
+
+                        log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'i':
 
                 svar = ' '.join(['cos(i)']+split[1:])
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
 
-                x = np.arccos(par[svar])
+                if svar in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = np.arccos(par[svar])
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                elif svar1 in par:
+
+                    x = np.arccos(1-2*(par[svar1]**2 + par[svar2]**2))
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'cos(i)':
+
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
+
+                if svar1 in par:
+
+                    x = 1-2*(par[svar1]**2 + par[svar2]**2)
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'e':
+
+                svar = ' '.join(['se']+split[1:])
+                svar1 = ' '.join(['secw']+split[1:])
+                svar2 = ' '.join(['sesw']+split[1:])
+
+                if svar in par:
+
+                    x = par[svar]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+                elif svar1 in par:
+
+                    x = par[svar1]**2 + par[svar2]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'se':
 
                 svar1 = ' '.join(['secw']+split[1:])
                 svar2 = ' '.join(['sesw']+split[1:])
 
-                x = par[svar1]**2 + par[svar2]**2
+                if svar1 in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    x = np.sqrt(par[svar1]**2 + par[svar2]**2)
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
             elif split[0] == 'w':
 
                 svar1 = ' '.join(['secw']+split[1:])
                 svar2 = ' '.join(['sesw']+split[1:])
 
-                x = np.arctan2(par[svar2], par[svar1])
+                if svar1 not in par:
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    svar1 = ' '.join(['cw']+split[1:])
+                    svar2 = ' '.join(['sw']+split[1:])
 
-            else:
+                if svar1 in par:
 
-                x = par[var]
+                    x = np.arctan2(par[svar2], par[svar1])
 
-                log_like += self.prior_dict[var].apply_priors(x)
+                    p0 = self.prior_dict[var].apply_priors(x)
+                    p1 = self.prior_dict[var].apply_priors(x+2*np.pi)
+                    p2 = self.prior_dict[var].apply_priors(x-2*np.pi)
+
+                    log_like += np.max([p0,p1,p2])
+
+            elif split[0] == 'rsq_w':
+
+                svar1 = ' '.join(['cw']+split[1:])
+                svar2 = ' '.join(['sw']+split[1:])
+
+                if svar1 in par:
+
+                    x = par[svar1]**2 + par[svar2]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] in ['cw', 'sw']:
+                
+                svar1 = ' '.join(['secw']+split[1:])
+                svar2 = ' '.join(['sesw']+split[1:])
+
+                if svar1 in par:
+
+                    r = np.sqrt(par[svar1]**2 + par[svar2]**2)
+
+                    if split[0] == 'cw':
+                        
+                        x = par[svar1]/r
+
+                    else:
+
+                        x = par[svar2]/r
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'omega':
+
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
+
+                if svar1 not in par:
+
+                    svar1 = ' '.join(['comega']+split[1:])
+                    svar2 = ' '.join(['somega']+split[1:])
+
+                if svar1 in par:
+
+                    x = np.arctan2(par[svar2], par[svar1])
+
+                    p0 = self.prior_dict[var].apply_priors(x)
+                    p1 = self.prior_dict[var].apply_priors(x+2*np.pi)
+                    p2 = self.prior_dict[var].apply_priors(x-2*np.pi)
+
+                    log_like += np.max([p0,p1,p2])
+
+            elif split[0] == 'rsq_omega':
+
+                svar1 = ' '.join(['comega']+split[1:])
+                svar2 = ' '.join(['somega']+split[1:])
+
+                if svar1 in par:
+
+                    x = par[svar1]**2 + par[svar2]**2
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] in ['comega', 'somega']:
+                
+                svar1 = ' '.join(['sico']+split[1:])
+                svar2 = ' '.join(['siso']+split[1:])
+
+                if svar1 in par:
+
+                    r = np.sqrt(par[svar1]**2 + par[svar2]**2)
+
+                    if split[0] == 'comega':
+                        
+                        x = par[svar1]/r
+
+                    else:
+
+                        x = par[svar2]/r
+
+                    log_like += self.prior_dict[var].apply_priors(x)
+
+            elif split[0] == 'distance':
+
+                if 'plx' in par:
+
+                    x = 1000/par['plx']
+
+                    log_like += self.prior_dict[var].apply_priors(x)
 
         return log_like
-    
-
-    def get_bounds(self, var: str) -> tuple[float, float]:
-        """Gets the bounds on a fit parameter, if there are any from uniform priors. Used for setting up truncated Gaussians when
-        initializing the MCMC chains to ensure they do not leave any bounds. Combines bounds from any variations on the actual fitted parameter, for
-        instance P to log(P) or e to secw.
-
-        Args:
-            var (str): The parameter to get the bounds for.
-
-        Returns:
-            tuple: The lower and upper bounds on this fit parameter.
-        """
-
-        logvars = {'log(P)':'P', 'log(a/rs)':'a/rs', 'log(K)':'K', 'log(rho_gp)':'rho_gp', 'log(sigma_gp)':'sigma_gp'}
-
-        lbound, ubound = -np.inf, np.inf
-
-        if var in self.prior_dict:
-            
-            l, u = self.prior_dict[var].bounds()
-            lbound = max(lbound, l)
-            ubound = min(ubound, u)
-
-        elif var == 'log10(age)' and 'age' in self.prior_dict:
-
-            l, u = self.prior_dict['age'].bounds()
-            lbound = max(lbound, np.log10(max(l,1e-100)))
-            ubound = min(ubound, np.log10(u))
-
-        elif var[:4] == 'log(':
-
-            svar = ' '.join([logvars[var.split()[0]]]+var.split()[1:])
-
-            if svar in self.prior_dict:
-
-                l, u = self.prior_dict[svar].bounds()
-                lbound = max(lbound, np.log(max(l,1e-100)))
-                ubound = min(ubound, np.log(u))
-
-            if var.split()[0] == 'log(a/rs)':
-
-                svar = ' '.join(['rhos']+var.split()[1:])
-
-                if svar in self.prior_dict:
-
-                    lr, ur = self.get_bounds(svar)
-                    lr = max(lr, 0)
-
-                    svar = ' '.join(['log(P)']+var.split()[1:])
-
-                    lp, up = self.get_bounds(svar)
-                    lp = np.exp(lp)
-                    up = np.exp(up)
-
-                    lbound = max(lbound, 52.86425121092176*lr**(1/3)*lp**(2/3))
-                    ubound = min(ubound, 52.86425121092176*ur**(1/3)*up**(2/3))
-
-        elif var[:6] == 'cos(i)':
-
-            svar = ' '.join(['i']+var.split()[1:])
-
-            if svar in self.prior_dict:
-
-                l, u = self.prior_dict[svar].bounds()
-                l = max(l, 0)
-                u = min(u, np.pi/2)
-                lbound = max(lbound, np.cos(u))
-                ubound = min(ubound, np.cos(l))
-
-        elif var[:4] in ['secw','sesw']:
-
-            el, eu = 0, 0.9
-            wl, wu = -np.pi, np.pi
-            
-            svar = ' '.join(['e']+var.split()[1:])
-            if svar in self.prior_dict:
-                el2, eu2 = self.prior_dict[svar].bounds()
-                el = max(el, el2)
-                eu = min(eu, eu2)
-            
-            svar = ' '.join(['w']+var.split()[1:])
-            if svar in self.prior_dict:
-                wl2, wu2 = self.prior_dict[svar].bounds()
-                wl = max(wl, wl2)
-                wu = min(wu, wu2)
-
-            if var[:4] == 'secw':
-
-                blist = [np.sqrt(el)*np.cos(wl), np.sqrt(el)*np.cos(wu), np.sqrt(eu)*np.cos(wl), np.sqrt(eu)*np.cos(wu)]
-
-                if wl < 0 < wu:
-                    blist.append(np.sqrt(eu))
-                    blist.append(np.sqrt(el))
-
-                lbound = max(lbound, min(blist))
-                ubound = min(ubound, max(blist))
-
-            else:
-
-                blist = [np.sqrt(el)*np.sin(wl), np.sqrt(el)*np.sin(wu), np.sqrt(eu)*np.sin(wl), np.sqrt(eu)*np.sin(wu)]
-
-                if wl < -np.pi/2 < wu:
-                    blist.append(-np.sqrt(eu))
-                    blist.append(-np.sqrt(el))
-
-                if wl < np.pi/2 < wu:
-                    blist.append(np.sqrt(eu))
-                    blist.append(np.sqrt(el))
-
-                lbound = max(lbound, min(blist))
-                ubound = min(ubound, max(blist))
-
-        elif var.split()[0] in ['e','w']:
-
-            secwl, secwu = -1, 1
-            seswl, seswu = -1, 1
-
-            svar = ' '.join(['secw']+var.split()[1:])
-            if svar in self.prior_dict:
-                secwl2, secwu2 = self.prior_dict[svar].bounds()
-                secwl = max(secwl, secwl2)
-                secwu = min(secwu, secwu2)
-
-            svar = ' '.join(['sesw']+var.split()[1:])
-            if svar in self.prior_dict:
-                seswl2, seswu2 = self.prior_dict[svar].bounds()
-                seswl = max(seswl, seswl2)
-                seswu = min(seswu, seswu2)
-
-            if var.split()[0] == 'e':
-
-                lbound = max(lbound, secwl**2 + seswl**2)
-                ubound = min(ubound, secwu**2 + seswu**2)
-
-            else:
-
-                if secwl < 0:
-
-                    lbound = max(lbound, -np.pi)
-                    ubound = min(ubound, np.pi)
-
-                else:
-
-                    lbound = max(lbound, min(np.arctan2(seswl,secwl), np.arctan2(seswl,secwu)))
-                    ubound = min(ubound, max(np.arctan2(seswu,secwl), np.arctan2(seswu,secwu)))
-
-
-        return lbound, ubound
-    
-
-
-def setup_star_priors(tab: Table, starmod: SingleStarModel) -> SingleStarModel:
-    """Sets up any priors on the stellar parameters that are directly fit for using the internal priors functionality from isochrones. Will replace
-    the default priors on those parameters. Only one prior can be applied to each parameter, with the exception of Gaussian plus uniform, which is
-    interpreted as a truncated Gaussian.
-
-    Args:
-        tab (Table): The table from an Init_priors object.
-        starmod (SingleStarModel): The isochrones starmodel object being used in the ExoSystem fit.
-
-    Returns:
-        SingleStarModel: Returns the updated starmodel object that was input.
-    """
-
-    set_priors = {'mstar': lambda x: starmod.set_prior(mass = x),
-                'rstar': lambda x: starmod.set_prior(radius = x),
-                'rhostar': lambda x: starmod.set_prior(density = x),
-                'eep': lambda x: starmod.set_prior(eep = x),
-                'log10(age)': lambda x: starmod.set_prior(age = x),
-                'feh': lambda x: starmod.set_prior(feh = x),
-                'distance': lambda x: starmod.set_prior(distance = x),
-                'AV': lambda x: starmod.set_prior(AV = x)}
-    
-    var_convert = {'mstar': 'mass',
-                   'rstar': 'radius',
-                   'rhostar': 'density',
-                   'eep': 'eep',
-                   'log10(age)': 'age',
-                   'feh': 'feh',
-                   'distance': 'distance',
-                   'AV': 'AV'}
-
-    for var in set_priors:
-
-        i = np.where(tab['Variable'] == var)[0]
-
-        if len(i) == 0:
-
-            continue
-
-        elif np.any(tab['Prior Type'][i] == 'F'):
-
-            if var_convert[var] in starmod._priors:
-
-                starmod._priors.pop(var_convert[var])
-
-            continue
-
-        elif len(i) == 1:
-
-            if tab['Prior Type'][i] == 'U':
-
-                starprior = FlatPrior((tab['Param 1'][i], tab['Param 2'][i]))
-
-            elif tab['Prior Type'][i] == 'G':
-        
-                starprior = GaussianPrior(tab['Param 1'][i], tab['Param 2'][i])
-
-        elif len(i) > 2 and len(np.unique(tab['Prior Type'][i])) < 2:
-
-            print('Cannot apply multiple priors of same type to {0}.'.format(var))
-            continue
-
-        else:
-
-            j = np.where(tab['Prior Type'][i] == 'U')[0]
-            bounds = (tab['Param 1'][i][j], tab['Param 2'][i][j])
-
-            j = np.where(tab['Prior Type'][i] == 'G')[0]
-            mean, std = tab['Param 1'][i][j], tab['Param 2'][i][j]
-
-            starprior = GaussianPrior(mean, std, bounds = bounds)
-
-        set_priors[var](starprior)
-
-    if 'age' in tab['Variable']:
-
-        i = np.where(tab['Variable'] == 'age')[0]
-
-        if tab['Prior Type'][i] == 'F':
-
-            if 'age' in starmod._priors:
-
-                starmod._priors.pop('age')
-
-    return starmod

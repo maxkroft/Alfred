@@ -304,34 +304,73 @@ class FloatEntry(ctk.CTkEntry):
         except ValueError:
             return np.nan
 
-    
-class ToggleCheckbox(ctk.CTkCheckBox):
-    def __init__(self, master, label, startval=0, toggles=[]):
 
-        self.label = label
-        self.val = ctk.IntVar(value = startval)
-        self.toggles = toggles
+class IntEntry(ctk.CTkEntry):
+    def __init__(self, master, min_val = None, max_val = None, **kwargs):
+        super().__init__(master, **kwargs)
 
-        super().__init__(master, text = self.label, font = (font, 18, 'bold'), variable = self.val, command = self.toggle_entry)
-        self.toggle_entry()
+        self.min_val = min_val
+        self.max_val = max_val
 
+        validate_int_cmd = self.register(self.validate_int_input)
 
-    def toggle_entry(self):
+        self.configure(validate = 'key', validatecommand = (validate_int_cmd, '%P'))
+
+        self.bind("<FocusOut>", self._on_focus_out)
         
-        if self.val.get():
 
-            for x in self.toggles:
-                x.grid(row = x.row, column = x.col, sticky = "ew", padx = 10)
+    def validate_int_input(self, proposed_text):
 
-        else:
+        if proposed_text == "":
+            return True
+        
+        text = proposed_text.strip()
 
-            for x in self.toggles:
-                x.grid_forget()
+        if text.startswith("-") and self.min_val is not None and float(self.min_val) >= 0:
+            return False
 
-    def return_bool(self):
-        return self.val.get() == 1
-    
-    
+        try:
+            val = int(proposed_text)
+            return True
+        
+        except ValueError:
+            return False
+
+
+    def _on_focus_out(self, event):
+        try:
+            raw_text = self.get().strip()
+            if not raw_text:
+                return
+                
+            val = int(raw_text)
+            
+            if self.min_val is not None and val < self.min_val:
+                self.delete(0, "end")
+                self.insert(0, str(self.min_val))
+                self.configure(text_color = "#CB2626")
+
+            elif self.max_val is not None and val > self.max_val:
+                self.delete(0, "end")
+                self.insert(0, str(self.max_val))
+                self.configure(text_color = "#CB2626")
+
+            else:
+                self.configure(text_color = '#FFFFFF')
+
+        except ValueError:
+            self.delete(0, "end")
+
+    def return_int(self):
+        try:
+            x = int(self.get().strip())
+            if self.min_val is not None and x < self.min_val:
+                return 0
+            if self.max_val is not None and x > self.max_val:
+                return 0
+            return x
+        except ValueError:
+            return 0
 
 
 class ScrollableDropdown(ctk.CTkToplevel):
@@ -351,7 +390,6 @@ class ScrollableDropdown(ctk.CTkToplevel):
         self.requested_height = height
         
         # Build standard Frame container inside window wrapper
-        # We start with placeholder dimensions, then update them on click
         self.frame = ctk.CTkScrollableFrame(self, width=150, height=self.requested_height, fg_color = "#4F4F4F")
         self.frame.pack(fill="both", expand=True)
         
@@ -394,13 +432,36 @@ class ScrollableDropdown(ctk.CTkToplevel):
         self.attach.update_idletasks()
         
         x = self.attach.winfo_rootx()
-        y = self.attach.winfo_rooty() + self.attach.winfo_height()
+        y = self.attach.winfo_rooty()
+        w = self.attach.winfo_width()
+        h = self.attach.winfo_height()
+
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+
+        below = sh - y - h
+        above = y
+        pad = 10
+
+        if below >= self.requested_height + pad:
+            finalh = self.requested_height
+            finaly = y+h
+        elif above > below:
+            finalh = min(self.requested_height, above-pad)
+            finaly = y-finalh
+        else:
+            finalh = max(50, below-pad)
+            finaly = y+h
         
-        width = self.requested_width if self.requested_width else self.attach.winfo_width()
+        width = self.requested_width if self.requested_width else w
+        if x + width > sw:
+            finalx = max(0, sw - width - pad)
+        else:
+            finalx = x
         
-        self.frame.configure(width=width - 15)
-        
-        self.geometry(f"{width}x{self.requested_height}+{x}+{y}")
+        self.frame.configure(width=width - 15, height = finalh)
+        self.geometry(f"{int(width)}x{int(finalh)}+{int(finalx)}+{int(finaly)}")
+
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -475,7 +536,7 @@ class PlanetGUI(ctk.CTkToplevel):
         self.close_cmd = close_cmd
 
         self.title('Planet {0}'.format(idx))
-        self.geometry('600x600')
+        self.geometry('600x700')
         self.grid_columnconfigure((0,1), weight = 1)
 
         self.p_entry = FloatEntryFrame(self, "P (days)", 1, 0, min_val = 0)
@@ -492,8 +553,8 @@ class PlanetGUI(ctk.CTkToplevel):
         self.a_entry = FloatEntryFrame(self, "a/Rstar", 2, 1, min_val = 0)
         self.a_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['a/Rs']) else self.data['a/Rs']))
 
-        self.i_entry = FloatEntryFrame(self, "cos(i)", 3, 0, min_val = 0, max_val = 1)
-        self.i_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['cos(i)']) else self.data['cos(i)']))
+        self.i_entry = FloatEntryFrame(self, "i (degrees)", 3, 0, min_val = 0, max_val = 180)
+        self.i_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['i']) else self.data['i']))
 
         self.k_entry = FloatEntryFrame(self, "K (m/s)", 3, 1, min_val = 0)
         self.k_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['K']) else self.data['K']))
@@ -504,7 +565,13 @@ class PlanetGUI(ctk.CTkToplevel):
         self.sesw_entry = FloatEntryFrame(self, "sqrt(e)sin(w) (-1 to 1)", 4, 1, min_val = -1, max_val = 1)
         self.sesw_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['sqrt(e)sin(w)']) else self.data['sqrt(e)sin(w)']))
 
-        self.f_entry = FloatEntryFrame(self, "Fp/Fstar", 5, 0, min_val = 0)
+        self.q_entry = FloatEntryFrame(self, 'Mp/Mstar', 5, 0, min_val = 0)
+        self.q_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Mp/Ms']) else self.data['Mp/Ms']))
+
+        self.omega_entry = FloatEntryFrame(self, 'Omega (rad)', 5, 1, min_val = -np.pi, max_val = np.pi)
+        self.omega_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['omega']) else self.data['omega']))
+
+        self.f_entry = FloatEntryFrame(self, "Fp/Fstar", 6, 0, min_val = 0)
         self.f_entry.entry.configure(textvariable = ctk.StringVar(value = '' if np.isnan(self.data['fp']) else self.data['fp']))
 
 
@@ -512,24 +579,28 @@ class PlanetGUI(ctk.CTkToplevel):
         self.checkbox_frame.grid_columnconfigure(0, weight = 1)
         self.checkbox_frame.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="nsew", columnspan = 2)
 
-        self.t_check = ToggleCheckbox(self.checkbox_frame, 'Fit Transit', startval = 1 if self.data['Transiting'] else 0, toggles = [self.r_entry, self.a_entry, self.i_entry])
+        self.t_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Transit', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Transiting'] else 0), command = self.toggle_cmd)
         self.t_check.grid(row = 0, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.r_check = ToggleCheckbox(self.checkbox_frame, 'Fit RV', startval = 1 if self.data['RV Signal'] else 0, toggles = [self.k_entry])
+        self.r_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit RV', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['RV Signal'] else 0), command = self.toggle_cmd)
         self.r_check.grid(row = 1, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.e_check = ToggleCheckbox(self.checkbox_frame, 'Fit Eccentricity', startval = 1 if self.data['Fit Ecc'] else 0, toggles = [self.secw_entry, self.sesw_entry])
-        self.e_check.grid(row = 2, column = 0, padx=10, pady=(10, 0), sticky="w")
+        self.g_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Gaia', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit Gaia'] else 0), command = self.toggle_cmd)
+        self.g_check.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'w')
 
-        self.ttv_check = ToggleCheckbox(self.checkbox_frame, 'Fit TTVs', startval = 1 if self.data['Fit TTVs'] else 0)
-        self.ttv_check.grid(row = 3, column = 0, padx=10, pady=(10, 0), sticky="w")
+        self.e_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Eccentricity', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit Ecc'] else 0), command = self.toggle_cmd)
+        self.e_check.grid(row = 3, column = 0, padx=10, pady=(10, 0), sticky="w")
 
-        self.se_check = ToggleCheckbox(self.checkbox_frame, 'Fit Secondary Eclipse', startval = 1 if self.data['Fit Eclipse'] else 0, toggles = [self.f_entry])
-        self.se_check.grid(row = 4, column = 0, padx=10, pady=(10, 0), sticky="w")
+        self.ttv_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit TTVs', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit TTVs'] else 0), command = self.toggle_cmd)
+        self.ttv_check.grid(row = 4, column = 0, padx=10, pady=(10, 0), sticky="w")
 
+        self.se_check = ctk.CTkCheckBox(self.checkbox_frame, text = 'Fit Secondary Eclipse', font = (font, 18, 'bold'), variable = ctk.IntVar(value = 1 if self.data['Fit Eclipse'] else 0), command = self.toggle_cmd)
+        self.se_check.grid(row = 5, column = 0, padx=10, pady=(10, 0), sticky="w")
+
+        self.toggle_cmd()
 
         self.save = ctk.CTkButton(self, text = 'Save', command = self.save_cmd, font = (font, 18, 'bold'))
-        self.save.grid(row = 6, column = 0, padx = 10, pady = (10,0), sticky = "ew", columnspan = 2)
+        self.save.grid(row = 7, column = 0, padx = 10, pady = (10,0), sticky = "ew", columnspan = 2)
 
         self.deiconify()
         self.attributes("-topmost", True)
@@ -539,22 +610,63 @@ class PlanetGUI(ctk.CTkToplevel):
         self.after(200, lambda: self.attributes("-topmost", False))
 
 
+    def toggle_cmd(self):
+
+        if self.t_check.get():
+            self.r_entry.grid(row = self.r_entry.row, column = self.r_entry.col, sticky = "ew", padx = 10)
+            self.a_entry.grid(row = self.a_entry.row, column = self.a_entry.col, sticky = "ew", padx = 10)
+        else:
+            self.r_entry.grid_forget()
+            self.a_entry.grid_forget()
+
+        if self.t_check.get() or self.g_check.get():
+            self.i_entry.grid(row = self.i_entry.row, column = self.i_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.i_entry.grid_forget()
+
+        if self.r_check.get() and not self.g_check.get():
+            self.k_entry.grid(row = self.k_entry.row, column = self.k_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.k_entry.grid_forget()
+
+        if self.e_check.get():
+            self.secw_entry.grid(row = self.secw_entry.row, column = self.secw_entry.col, sticky = 'ew', padx = 10)
+            self.sesw_entry.grid(row = self.sesw_entry.row, column = self.sesw_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.secw_entry.grid_forget()
+            self.sesw_entry.grid_forget()
+
+        if self.g_check.get():
+            self.q_entry.grid(row = self.q_entry.row, column = self.q_entry.col, sticky = 'ew', padx = 10)
+            self.omega_entry.grid(row = self.omega_entry.row, column = self.omega_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.q_entry.grid_forget()
+            self.omega_entry.grid_forget()
+
+        if self.se_check.get():
+            self.f_entry.grid(row = self.f_entry.row, column = self.f_entry.col, sticky = 'ew', padx = 10)
+        else:
+            self.f_entry.grid_forget()
+
 
     def save_cmd(self):
 
-        self.data['Transiting'] = self.t_check.return_bool()
-        self.data['RV Signal'] = self.r_check.return_bool()
-        self.data['Fit Ecc'] = self.e_check.return_bool()
-        self.data['Fit TTVs'] = self.ttv_check.return_bool()
-        self.data['Fit Eclipse'] = self.se_check.return_bool()
+        self.data['Transiting'] = self.t_check.get() == 1
+        self.data['RV Signal'] = self.r_check.get() == 1
+        self.data['Fit Gaia'] = self.g_check.get() == 1
+        self.data['Fit Ecc'] = self.e_check.get() == 1
+        self.data['Fit TTVs'] = self.ttv_check.get() == 1
+        self.data['Fit Eclipse'] = self.se_check.get() == 1
         self.data['Period'] = self.p_entry.entry.return_float()
         self.data['Tc'] = self.t_entry.entry.return_float()
         self.data['Rp/Rs'] = self.r_entry.entry.return_float()
         self.data['a/Rs'] = self.a_entry.entry.return_float()
-        self.data['cos(i)'] = self.i_entry.entry.return_float()
+        self.data['i'] = self.i_entry.entry.return_float()
         self.data['K'] = self.k_entry.entry.return_float()
         self.data['sqrt(e)cos(w)'] = self.secw_entry.entry.return_float()
         self.data['sqrt(e)sin(w)'] = self.sesw_entry.entry.return_float()
+        self.data['Mp/Ms'] = self.q_entry.entry.return_float()
+        self.data['omega'] = self.omega_entry.entry.return_float()
         self.data['fp'] = self.f_entry.entry.return_float()
 
         self.close_cmd()
@@ -660,7 +772,7 @@ class InitPlanetsGUI(InitGUI):
 
     def add_cmd(self):
         
-        self.table.add_row([False]*5 + [np.nan]*9)
+        self.table.add_row([False]*6 + [np.nan]*11)
         i = len(self.planets)
         self.add_planet(i)
         self.planets[i].edit_cmd()
@@ -1076,9 +1188,11 @@ class PriorFrame(ctk.CTkFrame):
 
         varlabel = ctk.CTkLabel(self, text = 'Variable', font = (font, 16, 'bold'))
         varlabel.grid(row = 0, column = 1, padx = (10,0), sticky = 'nsew')
-        varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'TT', 'fp',
-                    'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
-                    'eep', 'log10(age)', 'age', 'feh', 'distance', 'AV', 'mstar', 'rstar', 'rhostar']
+        varoptions = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'se', 'e', 'cw', 'sw', 'w',
+                      'TT', 'fp', 'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega',
+                      'F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp', 'u1', 'u2', 'gamma', 'gamma_dot', 'gamma_ddot', 'rv_offset',
+                      'ra*_offset', 'dec_offset', 'pmra*', 'pmdec',
+                      'eep', 'log10(age)', 'age', 'feh', 'plx', 'distance', 'AV', 'mstar', 'rstar', 'log(rhostar)', 'rhostar']
         self.variable_anchor = ctk.CTkButton(self, text = 'P' if data['Variable'] == '' else data['Variable'].split()[0], font = (font, 18))
         self.variable_anchor.grid(row = 1, column = 1, padx = (10,0), pady = (10,0), sticky = 'nesw')
         self.variable = ScrollableDropdown(self, self.variable_anchor, values = varoptions, height = 400, command = self.varoption_cmd, font = (font, 18))
@@ -1139,15 +1253,19 @@ class PriorFrame(ctk.CTkFrame):
 
         self.variable_anchor.configure(text=choice)
 
-        varunits = {'log(P)': 'days', 'P': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'a/rs': '', 'rhos': 'g/cm^3', 'cos(i)': '',
-                    'i': 'rads', 'log(K)': 'm/s', 'K': 'm/s', 'secw': '', 'sesw': '', 'e': '', 'w': 'rads', 'TT': 'BJD-2450000', 'fp': '',
+        varunits = {'log(P)': 'days', 'P': 'days', 'Tc': 'BJD-2450000', 'ror': '', 'log(a/rs)': '', 'a/rs': '', 'cos(i)': '',
+                    'i': 'rads', 'log(K)': 'm/s', 'K': 'm/s', 'secw': '', 'sesw': '', 'se': '', 'e': '', 'cw': '', 'sw': '', 'w': 'rads',
+                    'TT': 'BJD-2450000', 'fp': '', 'log(q)': '', 'q': '', 'sico': '', 'siso': '', 'comega': '', 'somega': '', 'omega': 'rads',
                     'F0': '', 'log(rho_gp)': 'days', 'rho_gp': 'days', 'log(sigma_gp)': '', 'sigma_gp': '', 'u1': '', 'u2': '', 'gamma': 'm/s',
-                    'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s', 'eep': '', 'log10(age)': 'yr', 'age': 'yr', 'feh': 'dex',
-                    'distance': 'pc', 'AV': 'mag', 'mstar': 'Msun', 'rstar': 'Rsun', 'rhostar': 'g/cm^3'}
+                    'gamma_dot': 'm/s/day', 'gamma_ddot': 'm/s/day^2', 'rv_offset': 'm/s',
+                    'ra*_offset': 'mas', 'dec_offset': 'mas', 'pmra*': 'mas/yr', 'pmdec': 'mas/yr',
+                    'eep': '', 'log10(age)': 'yr', 'age': 'yr', 'feh': 'dex', 'plx': 'mas', 'distance': 'pc', 'AV': 'mag', 'mstar': 'Msun',
+                    'rstar': 'Rsun', 'log(rhostar)': 'g/cm^3', 'rhostar': 'g/cm^3'}
         
         self.unitsvar.set(varunits[choice])
 
-        planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'rhos', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'e', 'w', 'fp']
+        planet_vars = ['log(P)', 'P', 'Tc', 'ror', 'log(a/rs)', 'a/rs', 'cos(i)', 'i', 'log(K)', 'K', 'secw', 'sesw', 'se', 'e', 'cw', 'sw', 'w',
+                       'fp', 'log(q)', 'q', 'sico', 'siso', 'comega', 'somega', 'omega']
         lc_vars = ['F0', 'log(rho_gp)', 'rho_gp', 'log(sigma_gp)', 'sigma_gp']
         ld_vars = ['u1', 'u2']
 
@@ -1212,7 +1330,7 @@ class PriorFrame(ctk.CTkFrame):
         variable = self.variable_anchor.cget('text')
         priortype = self.priortype.get()
 
-        pos_def_vars = ['P', 'a/rs', 'rhos', 'K', 'rho_gp', 'sigma_gp', 'eep', 'log10(age)', 'age', 'distance',
+        pos_def_vars = ['P', 'ror', 'a/rs', 'K', 'fp', 'q', 'rho_gp', 'sigma_gp', 'eep', 'log10(age)', 'age', 'plx', 'distance',
                         'mstar', 'rstar', 'rhostar']
 
         if priortype in ["Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
@@ -1221,8 +1339,8 @@ class PriorFrame(ctk.CTkFrame):
         if priortype in ['Gaussian',"Log Uniform", "Mod. Jeffrey's"] or variable in pos_def_vars:
             self.par2.min_val = 0
 
-        bounded_vars = {'cos(i)':[0,1], 'i':[-np.pi,np.pi], 'secw':[-1,1], 'sesw':[-1,1], 'e':[0,1], 'w':[-np.pi,np.pi], 
-                        'u1':[0,1], 'u2':[0,1], 'feh':[-0.5,0.5], 'AV':[0,1]}
+        bounded_vars = {'cos(i)':[-1,1], 'i':[-np.pi/2,np.pi/2], 'secw':[-1,1], 'sesw':[-1,1], 'se':[0,1], 'e':[0,1], 'cw':[-1,1], 'sw':[-1,1], 'w':[-np.pi,np.pi],
+                        'sico':[-1, 1], 'siso':[-1,1], 'comega':[-1,1], 'somega':[-1,1], 'omega':[-np.pi,np.pi], 'u1':[0,1], 'u2':[0,1], 'feh':[-0.5,0.5], 'AV':[0,1]}
         
         if variable in bounded_vars:
 
@@ -2307,5 +2425,199 @@ class InitTTVsGUI(InitGUI):
             if np.all(np.isnan(list(self.table[i]))):
 
                 self.table.remove_row(i)
+
+        super().save_cmd()
+
+
+###################
+#####Init Gaia#####
+###################
+
+class InitGaiaGUI(InitGUI):
+    def __init__(self, initfile: InitFile):
+        super().__init__(initfile)
+
+        self.geometry('800x600')
+
+        self.frame_title = ctk.CTkLabel(self, text = 'Gaia Epoch Astrometry File', font = (font, 18, 'bold'))
+        self.frame_title.grid(row = 0, column = 0, padx = 10, sticky = 'ew', columnspan = 2)
+
+        self.add.destroy()
+
+        self.setup_items_frame()
+
+    
+    def setup_items_frame(self):
+
+        self.data = self.table[0]
+
+        self.items_frame = ctk.CTkScrollableFrame(self)
+        self.items_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nesw', columnspan = 2)
+        self.items_frame.grid_rowconfigure([0,1,2,3], weight = 1)
+        self.items_frame.grid_columnconfigure([0,1,2], weight = 1)
+
+        self.format_frame = ctk.CTkFrame(self.items_frame)
+        self.format_frame.grid(row = 0, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.format_frame.grid_rowconfigure([0,1], weight = 1)
+        self.format_label = ctk.CTkLabel(self.format_frame, text = 'File Format', font = (font, 18, 'bold'))
+        self.format_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.format = ctk.CTkOptionMenu(self.format_frame, values = ['DR4','Other'], font = (font, 18), variable = ctk.StringVar(value = 'DR4' if self.data['Format'] == '' else self.data['Format']), command = self.format_cmd)
+        self.format.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+        self.format._dropdown_menu.configure(font = (font, 18))
+
+        self.file_frame = ctk.CTkFrame(self.items_frame)
+        self.file_frame.grid(row = 0, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.file_frame.grid_rowconfigure([0,1], weight = 1)
+        self.file_label = ctk.CTkLabel(self.file_frame, text = 'File Name', font = (font, 18, 'bold'))
+        self.file_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.filename = ctk.CTkEntry(self.file_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['File']))
+        self.filename.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.sourceid_frame = ctk.CTkFrame(self.items_frame)
+        self.sourceid_frame.grid_rowconfigure([0,1,2], weight = 1)
+        self.sourceid_label = ctk.CTkLabel(self.sourceid_frame, text = 'Gaia ID', font = (font, 18, 'bold'))
+        self.sourceid_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.sourceid_desc = ctk.CTkLabel(self.sourceid_frame, text = 'Number Only', font = (font, 18))
+        self.sourceid_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.sourceid_var = ctk.StringVar(value = self.data['Source ID'])
+        self.sourceid = IntEntry(self.sourceid_frame, min_val = 0, textvariable = self.sourceid_var, font = (font, 18), justify = 'center')
+        self.sourceid.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.timecol_frame = ctk.CTkFrame(self.items_frame)
+        self.timecol_frame.grid_rowconfigure([0,1], weight = 1)
+        self.timecol_label = ctk.CTkLabel(self.timecol_frame, text = 'Time Column', font = (font, 18, 'bold'))
+        self.timecol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.timecol = ctk.CTkEntry(self.timecol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Time Col']))
+        self.timecol.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.alcol_frame = ctk.CTkFrame(self.items_frame)
+        self.alcol_frame.grid_rowconfigure([0,1], weight = 1)
+        self.alcol_label = ctk.CTkLabel(self.alcol_frame, text = 'AL Column', font = (font, 18, 'bold'))
+        self.alcol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.alcol = ctk.CTkEntry(self.alcol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['AL Col']))
+        self.alcol.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.errcol_frame = ctk.CTkFrame(self.items_frame)
+        self.errcol_frame.grid_rowconfigure([0,1], weight = 1)
+        self.errcol_label = ctk.CTkLabel(self.errcol_frame, text = 'Error Column', font = (font, 18, 'bold'))
+        self.errcol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.errcol = ctk.CTkEntry(self.errcol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Err Col']))
+        self.errcol.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.offset_frame = ctk.CTkFrame(self.items_frame)
+        self.offset_frame.grid_rowconfigure([0,1], weight = 1)
+        self.offset_label = ctk.CTkLabel(self.offset_frame, text = 'Time Offset (BJD)', font = (font, 18, 'bold'))
+        self.offset_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.offset = FloatEntry(self.offset_frame, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Time Offset']) else self.data['Time Offset']), font = (font, 18), justify = 'center')
+        self.offset.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.errscale_frame = ctk.CTkFrame(self.items_frame)
+        self.errscale_frame.grid_rowconfigure([0,1], weight = 1)
+        self.errscale_label = ctk.CTkLabel(self.errscale_frame, text = 'Error Scale', font = (font, 18, 'bold'))
+        self.errscale_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.errscale = FloatEntry(self.errscale_frame, min_val = 0, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Err Scale']) else self.data['Err Scale']), font = (font, 18), justify = 'center')
+        self.errscale.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.psicol_frame = ctk.CTkFrame(self.items_frame)
+        self.psicol_frame.grid_rowconfigure([0,1,2], weight = 1)
+        self.psicol_label = ctk.CTkLabel(self.psicol_frame, text = 'Psi Column', font = (font, 18, 'bold'))
+        self.psicol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.psicol_desc = ctk.CTkLabel(self.psicol_frame, text = 'Scan Angle (deg)', font = (font, 18))
+        self.psicol_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.psicol = ctk.CTkEntry(self.psicol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Psi Col']))
+        self.psicol.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.plxfcol_frame = ctk.CTkFrame(self.items_frame)
+        self.plxfcol_frame.grid_rowconfigure([0,1,2], weight = 1)
+        self.plxfcol_label = ctk.CTkLabel(self.plxfcol_frame, text = 'Plx Factor Column', font = (font, 18, 'bold'))
+        self.plxfcol_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.plxfcol_desc = ctk.CTkLabel(self.plxfcol_frame, text = 'AL Component', font = (font, 18))
+        self.plxfcol_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.plxfcol = ctk.CTkEntry(self.plxfcol_frame, font = (font, 18), justify = 'center', textvariable = ctk.StringVar(value = self.data['Plx Fac Col']))
+        self.plxfcol.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.ra_frame = ctk.CTkFrame(self.items_frame)
+        self.ra_frame.grid_rowconfigure([0,1], weight = 1)
+        self.ra_label = ctk.CTkLabel(self.ra_frame, text = 'RA (deg)', font = (font, 18, 'bold'))
+        self.ra_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.ra = FloatEntry(self.ra_frame, min_val = 0, max_val = 360, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['RA']) else self.data['RA']), font = (font, 18), justify = 'center')
+        self.ra.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.dec_frame = ctk.CTkFrame(self.items_frame)
+        self.dec_frame.grid_rowconfigure([0,1], weight = 1)
+        self.dec_label = ctk.CTkLabel(self.dec_frame, text = 'Dec (deg)', font = (font, 18, 'bold'))
+        self.dec_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.dec = FloatEntry(self.dec_frame, min_val = -90, max_val = 90, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Dec']) else self.data['Dec']), font = (font, 18), justify = 'center')
+        self.dec.grid(row = 1, column = 0, pady = 10, sticky = 'nsew')
+
+        self.tref_frame = ctk.CTkFrame(self.items_frame)
+        self.tref_frame.grid_rowconfigure([0,1], weight = 1)
+        self.tref_label = ctk.CTkLabel(self.tref_frame, text = 'Reference Time (BJD)', font = (font, 18, 'bold'))
+        self.tref_label.grid(row = 0, column = 0, pady = (10,0), sticky = 'nsew')
+        self.tref_desc = ctk.CTkLabel(self.tref_frame, text = 'For RA and Dec', font = (font, 18))
+        self.tref_desc.grid(row = 1, column = 0, pady = (10,0), sticky = 'nsew')
+        self.tref = FloatEntry(self.tref_frame, textvariable = ctk.StringVar(value = '' if np.isnan(self.data['Ref Time']) else self.data['Ref Time']), font = (font, 18), justify = 'center')
+        self.tref.grid(row = 2, column = 0, pady = 10, sticky = 'nsew')
+
+        self.format_cmd(self.format.get())
+
+
+    def format_cmd(self, choice):
+
+        if choice == 'DR4':
+            self.dr4_format()
+
+        elif choice == 'Other':
+            self.other_format()
+
+
+    def dr4_format(self):
+
+        self.timecol_frame.grid_forget()
+        self.alcol_frame.grid_forget()
+        self.errcol_frame.grid_forget()
+        self.psicol_frame.grid_forget()
+        self.plxfcol_frame.grid_forget()
+        self.offset_frame.grid_forget()
+        self.ra_frame.grid_forget()
+        self.dec_frame.grid_forget()
+        self.tref_frame.grid_forget()
+
+        self.sourceid_frame.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.errscale_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+
+    def other_format(self):
+        
+        self.sourceid_frame.grid_forget()
+
+        self.errscale_frame.grid(row = 0, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.timecol_frame.grid(row = 1, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.offset_frame.grid(row = 1, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.alcol_frame.grid(row = 1, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.errcol_frame.grid(row = 2, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.psicol_frame.grid(row = 2, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.plxfcol_frame.grid(row = 2, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.ra_frame.grid(row = 3, column = 0, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.dec_frame.grid(row = 3, column = 1, padx = 10, pady = (10,0), sticky = 'nsew')
+        self.tref_frame.grid(row = 3, column = 2, padx = 10, pady = (10,0), sticky = 'nsew')
+
+
+    def save_cmd(self):
+
+        self.table['File'] = update_string_col(self.table['File'], self.filename.get().strip(), 0)
+        self.table['Format'] = update_string_col(self.table['Format'], self.format.get().strip(), 0)
+        self.table['Source ID'] = self.sourceid.return_int()
+        self.table['Time Col'] = update_string_col(self.table['Time Col'], self.timecol.get().strip(), 0)
+        self.table['AL Col'] = update_string_col(self.table['AL Col'], self.alcol.get().strip(), 0)
+        self.table['Err Col'] = update_string_col(self.table['Err Col'], self.errcol.get().strip(), 0)
+        self.table['Psi Col'] = update_string_col(self.table['Psi Col'], self.psicol.get().strip(), 0)
+        self.table['Plx Fac Col'] = update_string_col(self.table['Plx Fac Col'], self.plxfcol.get().strip(), 0)
+        self.table['Time Offset'] = self.offset.return_float()
+        self.table['Err Scale'] = self.errscale.return_float()
+        self.table['RA'] = self.ra.return_float()
+        self.table['Dec'] = self.dec.return_float()
+        self.table['Ref Time'] = self.tref.return_float()
+
+        self.initfile.table = self.table
 
         super().save_cmd()
