@@ -2635,7 +2635,7 @@ class ExoSystem:
             for filt in np.unique(self.filters):
 
                 try:
-                    grid = pickle.load(open(os.path.dirname(os.path.realpath(__file__))+'/ld_grids/{0}_grid.p'.format(filt), 'rb'))
+                    grid = pickle.load(open(ld_grid_path(filt), 'rb'))
 
                 except:
                     print('No limb darkening grid available for filter {0}.'.format(filt))

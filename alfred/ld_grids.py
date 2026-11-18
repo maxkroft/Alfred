@@ -9,10 +9,21 @@ from alfred import ld_grid_dir, exoctk_inst
 if exoctk_inst:
     from exoctk.limb_darkening import limb_darkening_fit as ldf
 
+# Johnson-Cousins I and R are stored under distinct names because I_grid.p and
+# i_grid.p (and R/r) are the same file on case-insensitive file systems.
+_grid_file_names = {'I': 'Johnson_I', 'R': 'Johnson_R'}
+_grid_filter_names = {v: k for k, v in _grid_file_names.items()}
+
+
+def ld_grid_path(filter_name: str) -> str:
+    """Returns the path of the pickled limb darkening grid for a filter."""
+    return os.path.join(ld_grid_dir, '{0}_grid.p'.format(_grid_file_names.get(filter_name, filter_name)))
+
+
 ld_grid_list = []
 for fname in os.listdir(ld_grid_dir):
     if fname[-7:] == '_grid.p':
-        ld_grid_list.append(fname[:-7])
+        ld_grid_list.append(_grid_filter_names.get(fname[:-7], fname[:-7]))
 
 
 def generate_ld_grid(filter: str, filter_nickname: str):
@@ -63,7 +74,7 @@ def generate_ld_grid(filter: str, filter_nickname: str):
 
     d = {'coords': coords, 'u1': u1array, 'u2': u2array}
 
-    pickle.dump(d, open(os.path.dirname(os.path.realpath(__file__))+'/ld_grids/{0}_grid.p'.format(filter_nickname), 'wb'))
+    pickle.dump(d, open(ld_grid_path(filter_nickname), 'wb'))
 
 
 def load_ld_grid(filter_name: str) -> tuple[LinearNDInterpolator, LinearNDInterpolator]:
@@ -79,7 +90,7 @@ def load_ld_grid(filter_name: str) -> tuple[LinearNDInterpolator, LinearNDInterp
 
     try:
 
-        grid = pickle.load(open(os.path.dirname(os.path.realpath(__file__))+'/ld_grids/{0}_grid.p'.format(filter_name), 'rb'))
+        grid = pickle.load(open(ld_grid_path(filter_name), 'rb'))
 
     except FileNotFoundError:
         print('No limb darkening grid available for filter {0}.'.format(filter_name))
