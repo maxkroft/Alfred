@@ -13,7 +13,7 @@ exoplanet detection and characterization.
 
 Key Features:
 
-* Transit and radial velocity fitting for arbritary systems of exoplanets
+* Joint transit, radial velocity, and Gaia epoch astrometry fitting for arbritary systems of exoplanets
 * Simultaneous light curve detrending with Gaussian processes
 * Optional simultaneous stellar SED fitting
 * Flexible, user-defined priors
@@ -21,7 +21,7 @@ Key Features:
 * Support for photometry and RVs from multiple instruments
 
 At its core, ``Alfred`` is built around `batman <https://lkreidberg.github.io/batman/docs/html/index.html>`_
-(for transit modelling), a small numerical solver for Kepler's equation (for RV modeling), `isochrones <https://isochrones.readthedocs.io/en/latest/index.html#>`_ (for stellar modelling),
+(for transit modelling), a small numerical solver for Kepler's equation (for RV and Gaia astrometry modeling), `isochrones <https://isochrones.readthedocs.io/en/latest/index.html#>`_ (for stellar modelling),
 and MCMC fitting with `emcee <https://emcee.readthedocs.io/en/stable/>`_ or `zeus <https://zeus-mcmc.readthedocs.io/en/latest/index.html>`_. ``Alfred`` handles all the busy-work behind the scenes,
 while ``batman`` and friends do all the heavy-lifting, allowing you to focus on the science.
 
@@ -63,6 +63,30 @@ Future Features Wishlist
 
 Changelog
 +++++++++
+
+**1.3.0 (2026-November-18)**
+
+* Now supports fitting Gaia DR4 epoch astrometry simultaneous with everything else!
+
+   * Uses a cython compiled function based on Thiele-Innes elements to speed up the model, similar to the RV model.
+   * Can read in epoch astrometry from the standard DR4 format, or a user defined table.
+   * This means there is a new init_gaia file and Init_gaia GUI.
+   * Produces two plots, one showing the along scan offset model that is directly fit, the other showing the on-sky orbit.
+   * Note: when fitting Gaia astrometry with transit data, log(rhostar) and rstar are fit to anchor the two together, and log(a/rs) is not fit.
+
+* New option to fit a single log(rhostar) for all transiting planets rather than individual log(a/rs).
+* Linear parameters for RV and Gaia modeling are now computed with least squares, rather than sampled.
+
+   * This includes systemic velocity and its derivatives, RV offsets, and RA* and Dec offsets and proper motion.
+   * These can still have priors on them or be fixed to a specific value.
+
+* Plots now show 100 random draws rather than error envelopes.
+* Massive speed-up to importing ``alred``.
+* Many other small changes and bug fixes to accomodate all this.
+
+**1.2.1 (2026-November-01)**
+
+* Fixed issue with zeus in requirements.
 
 **1.2.0 (2026-September-08)**
 

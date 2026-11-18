@@ -10,16 +10,16 @@
             ]
         ],
         "depends": [
-            "/tmp/pip-build-env-qbv2fucj/overlay/lib/python3.13/site-packages/numpy/_core/include/numpy/arrayobject.h",
-            "/tmp/pip-build-env-qbv2fucj/overlay/lib/python3.13/site-packages/numpy/_core/include/numpy/arrayscalars.h",
-            "/tmp/pip-build-env-qbv2fucj/overlay/lib/python3.13/site-packages/numpy/_core/include/numpy/ndarrayobject.h",
-            "/tmp/pip-build-env-qbv2fucj/overlay/lib/python3.13/site-packages/numpy/_core/include/numpy/ndarraytypes.h",
-            "/tmp/pip-build-env-qbv2fucj/overlay/lib/python3.13/site-packages/numpy/_core/include/numpy/ufuncobject.h",
-            "alfred/orbit_funcs.c"
+            "C:\\Users\\kroft\\AppData\\Local\\Temp\\pip-build-env-b1sk1w6f\\overlay\\Lib\\site-packages\\numpy\\_core\\include\\numpy\\arrayobject.h",
+            "C:\\Users\\kroft\\AppData\\Local\\Temp\\pip-build-env-b1sk1w6f\\overlay\\Lib\\site-packages\\numpy\\_core\\include\\numpy\\arrayscalars.h",
+            "C:\\Users\\kroft\\AppData\\Local\\Temp\\pip-build-env-b1sk1w6f\\overlay\\Lib\\site-packages\\numpy\\_core\\include\\numpy\\ndarrayobject.h",
+            "C:\\Users\\kroft\\AppData\\Local\\Temp\\pip-build-env-b1sk1w6f\\overlay\\Lib\\site-packages\\numpy\\_core\\include\\numpy\\ndarraytypes.h",
+            "C:\\Users\\kroft\\AppData\\Local\\Temp\\pip-build-env-b1sk1w6f\\overlay\\Lib\\site-packages\\numpy\\_core\\include\\numpy\\ufuncobject.h",
+            "alfred\\orbit_funcs.c"
         ],
         "include_dirs": [
             "alfred",
-            "/tmp/pip-build-env-qbv2fucj/overlay/lib/python3.13/site-packages/numpy/_core/include"
+            "C:\\Users\\kroft\\AppData\\Local\\Temp\\pip-build-env-b1sk1w6f\\overlay\\Lib\\site-packages\\numpy\\_core\\include"
         ],
         "name": "alfred._orbit_funcs",
         "sources": [
