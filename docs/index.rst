@@ -13,7 +13,7 @@ exoplanet detection and characterization.
 
 Key Features:
 
-* Joint transit, radial velocity, and Gaia epoch astrometry fitting for arbitary systems of exoplanets
+* Joint transit, radial velocity, and Gaia epoch astrometry fitting for arbitrary systems of exoplanets
 * Simultaneous light curve detrending with Gaussian processes
 * Optional simultaneous stellar SED fitting
 * Flexible, user-defined priors
