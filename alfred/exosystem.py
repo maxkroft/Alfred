@@ -1475,6 +1475,8 @@ class ExoSystem:
         else:
             ctx = mp.get_context('spawn').Pool(processes = self.cores, initializer = _init_worker, initargs = (miniobj,))
 
+        log_like({z: pos[0][self.parnames[z]] for z in self.parnames}) #initializes things and seems to suppress red-blue warnings
+
         with ctx as pool:
         
             if self.cores > 0:
@@ -1568,6 +1570,7 @@ class ExoSystem:
 
         miniobj = MiniExoSystem(self)
         _init_worker(miniobj)
+        log_like({z: pos[0][self.parnames[z]] for z in self.parnames}) #initializes things and seems to suppress red-blue warnings
 
         blobs_dtype = [(name, np.float64) for name in self.lin_names]
 
@@ -1586,8 +1589,6 @@ class ExoSystem:
                                    'verbose': False,
                                    })
 
-        t00 = time.perf_counter()
-
         pool_ctx = (
             mp.get_context("spawn").Pool(
                 processes=max_cores, initializer=_init_worker, initargs=(miniobj,)
@@ -1599,7 +1600,11 @@ class ExoSystem:
         with pool_ctx as shared_pool:
 
             if shared_pool is not None:
-                shared_pool.map(int, range(max_cores))
+                warmup_kwargs = dict(sampler_kwargs, pool=shared_pool)
+                if self.sampler_type == "emcee":
+                    emcee.EnsembleSampler(**warmup_kwargs).run_mcmc(pos, 2, progress=False)
+                elif self.sampler_type == "zeus":
+                    zeus.EnsembleSampler(**warmup_kwargs).run_mcmc(pos, 2, progress=False)
 
             for c in test_cores:
 
@@ -1695,6 +1700,10 @@ class ExoSystem:
 
         nprev = len(self.samples)
 
+        state = self.samples[-1]
+
+        log_like({z: state[0][self.parnames[z]] for z in self.parnames}) #initializes things and seems to suppress red-blue warnings
+
         burnin = 0
         if isinstance(self.nburn, float):
             burnin = int(self.nburn*nprev/(1-self.nburn))
@@ -1715,8 +1724,6 @@ class ExoSystem:
                 self.sampler.pool = pool
 
             print('\nRunning MCMC sampling.')
-
-            state = self.samples[-1]
 
             if not check_converge:
 
